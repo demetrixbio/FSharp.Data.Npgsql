@@ -1,0 +1,4 @@
+[submodule "npgsql"]
+	path = npgsql
+	url = https://github.com/Brar/npgsql
+	branch = DeriveParametersForNonFunctionQueries

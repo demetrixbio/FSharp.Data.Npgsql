@@ -1,0 +1,65 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
+    <Name>FSharp.Data.Npgsql</Name>
+    <DefineConstants>NO_GENERATIVE</DefineConstants>
+    <!--<AllowCrossTargeting>true</AllowCrossTargeting>-->
+    <!--<DebugType Condition="'$(TargetFramework)' == 'net461'">full</DebugType>-->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <Description>NpgsqlCommand is F# type provider to support statically typed access to input parameters and result set of sql statement in idiomatic F# way.</Description>
+    <Copyright>Copyright 2017 Dmitry Morozov</Copyright>
+    <PackageTags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeAllDlls</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+  <PropertyGroup>
+    <NoWarn>101</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>1182</WarningsAsErrors>
+    <Version>0.1.9-alpha</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="src\Scripts\NpgsqlGetStarted.fsx" />
+    <None Include="src\Scripts\NpgsqlTypeMapping.fsx" />
+    <None Include="src\Scripts\TestProviders.fsx" />
+    <Compile Include="src\ProvidedTypes.fsi" />
+    <Compile Include="src\ProvidedTypes.fsi" />
+    <Compile Include="src\ProvidedTypes.fs" />
+    <Compile Include="src\Configuration.fs" />
+    <Compile Include="src\InformationSchema.fs" />
+    <None Include="src\DbCommand.fs" />
+    <Compile Include="src\Quotations.fs" />
+    <Compile Include="src\AdoNetExtensions.fs" />
+    <Compile Include="src\DataTable.fs" />
+    <Compile Include="src\ISqlCommand.fs" />
+    <Compile Include="src\QuotationsFactory.fs" />
+    <Compile Include="src\DesignTime.fs" />
+    <Compile Include="src\NpgsqlCommandProvider.fs" />
+    <Compile Include="src\NpgsqlProvider.fs" />
+    <Compile Include="src\FileContentProvider.fs" />
+    <Compile Include="src\TypeProviderAssembly.fs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Content Include="netstandard.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="System.Reflection.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="System.Runtime.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="3.3.0-ci-00438" />
+    <!--<PackageReference Include="System.Configuration.ConfigurationManager" Version="4.4.0" />-->
+  </ItemGroup>
+  <Target Name="IncludeAllDlls">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)\*.dll" Exclude="$(OutputPath)\$(AssemblyName).dll" />
+    </ItemGroup>
+  </Target>
+</Project>
