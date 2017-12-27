@@ -9,6 +9,7 @@
 
 open FSharp.Data
 open System.Data
+open System
 
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=Leningrad1;Database=lims"
@@ -28,6 +29,11 @@ do
 do 
     let t = new Db.onto.Tables.``namespace``()
     [ for c in t.Columns -> c.ColumnName, c.DataType, c.DateTimeMode ] |> printfn "Columns: %A"
+    //for c in t.Columns do
+    //    if c.DataType = typeof<DateTime>
+    //    then 
+    //        c.DateTimeMode <- DataSetDateTime.Local
+
     t.AddRow("biological_process 3",  true, "http://purl.obolibrary.org/obo/go/go-basic.obo", id_user = 1, description = Some "test")
     let r = t.Rows.[0]
     r.ItemArray |> printfn "Values before update: %A"
@@ -93,7 +99,7 @@ open System
 do
     let t = new Db.part.Tables.gsl_source_doc()
 
-    let row = t.NewRow(title="[copy]", content="",  updated=DateTime.Now, favorite = true, locked=false, parents=[| 1|], id_user=1 )
+    let row = t.NewRow(title="[copy]", content="", created = DateTime.Now, updated=DateTime.Now, favorite = true, locked=false, parents=[| 1|], id_user=1 )
     t.Rows.Add(row)
 
     t.AddRow(title="[copy]", content="",  updated=DateTime.Now, created = DateTime.Now, favorite = true, locked=false, parents=[| 1|], id_user=1 )
@@ -125,9 +131,9 @@ do
 do
     use cmd = 
         Db.CreateCommand<"
-            INSERT INTO part.gsl_source_doc (id_user, title, content, favorite, parents) 
-            VALUES (@id_user, @title, @content, @favorite, @parents) 
-            RETURNING id
+        INSERT INTO part.gsl_source_doc (id_user, title, content, favorite, parents, locked, created, updated) 
+        VALUES (@id_user, @title, @content, @favorite,@parents, true, @created, current_timestamp) 
+        RETURNING id
         ", SingleRow = true>(connectionString)
-    cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |]) |> printfn "Records inserted %A"
+    cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], created = DateTime.Now ) |> printfn "Records inserted %A"
 

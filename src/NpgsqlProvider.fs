@@ -254,10 +254,12 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
                 let invokeCode _ = 
 
                     let columnExprs = [
-                        for c in columns -> 
+                        for c in columns ->
                             let columnName = c.Name
                             let typeName = c.ClrType.FullName
                             let allowDBNull = c.Nullable || c.HasDefaultConstraint
+                            let localDateTimeMode = c.DataType.Name = "timestamptz" 
+
                             <@@ 
                                 let x = new DataColumn(columnName, Type.GetType( typeName, throwOnError = true))
                                 x.AllowDBNull <- %%Expr.Value(allowDBNull)
@@ -266,6 +268,10 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
                                     x.MaxLength <- %%Expr.Value(c.MaxLength)
                                 x.ReadOnly <- %%Expr.Value(c.ReadOnly)
                                 x.AutoIncrement <- %%Expr.Value(c.Identity)
+
+                                if localDateTimeMode
+                                then 
+                                    x.DateTimeMode <- DataSetDateTime.Local
 
                                 x
                             @@>

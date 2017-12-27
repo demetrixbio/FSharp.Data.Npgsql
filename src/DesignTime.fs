@@ -307,33 +307,29 @@ type DesignTime private() =
         [
             for p in cmd.Parameters do
                 assert (p.Direction = ParameterDirection.Input)
-                    
+                let dataTypeName = p.PostgresType.FullName
                 yield { 
                     Name = p.ParameterName
                     NpgsqlDbType = 
-                        if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum)
-                        then NpgsqlDbType.Unknown 
-                        else p.NpgsqlDbType
-                        //match p.NpgsqlDbType with 
-                        //| NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
-                        //| x -> x
+                        //if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum) then NpgsqlDbType.Unknown else p.NpgsqlDbType
+                        match p.NpgsqlDbType with 
+                        | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
+                        | as_is -> as_is
                     ClrType = 
                         if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Array)
                         then
-                            //let arrayType: PostgresArrayType = downcast p.PostgresType 
-                            //InformationSchema.postresTypeToClrType.[arrayType.Element.Name].MakeArrayType()
-                            let elemType =  p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array)
-                            InformationSchema.npgsqlDbTypeToClrType.[elemType].MakeArrayType()
+                            let elemTypeName = dataTypeName.Split('.').[1].TrimStart('_')
+                            InformationSchema.postresTypeToClrType.[elemTypeName].MakeArrayType()
+                            //let elemType =  p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array)
+                            //InformationSchema.npgsqlDbTypeToClrType.[elemType].MakeArrayType()
                         else
-                            InformationSchema.dbTypeToClrType.[p.DbType]
+                            InformationSchema.npgsqlDbTypeToClrType.[p.NpgsqlDbType]
                     Direction = p.Direction
                     MaxLength = p.Size
                     Precision = p.Precision
                     Scale = p.Scale
                     Optional = nullableParameters 
-                    PostgresType = 
-                        { new PostgresTypes.PostgresType("", "<unknown>", 0u) with member __.ToString()  = base.ToString() }
-                        //p.PostgresType
+                    DataTypeName = dataTypeName
                 }
         ]
 
@@ -345,9 +341,9 @@ type DesignTime private() =
                 let parameterName = p.Name
 
                 let t = 
-                    match p.PostgresType with
-                    | :? PostgresEnumType as x -> customType.[x.FullName] :> Type
-                    | _ -> p.ClrType
+                    if not p.IsUserDefinedType
+                    then p.ClrType
+                    else customType.[ p.DataTypeName ] :> Type
 
                 if p.Optional 
                 then 

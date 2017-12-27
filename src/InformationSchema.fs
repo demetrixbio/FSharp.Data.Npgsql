@@ -63,11 +63,6 @@ let typesMapping =
     //array types	Array (of child element type)		
     ]
 
-let dbTypeToClrType = 
-    typesMapping 
-    |> List.choose (fun (_, clr, _, maybeDbType) -> maybeDbType |> Option.map (fun t -> t, clr)) 
-    |> dict
-
 let postresTypeToClrType = 
     typesMapping 
     |> List.map (fun (postgres, clr, _, _) -> postgres, clr) 
@@ -77,22 +72,6 @@ let npgsqlDbTypeToClrType =
     typesMapping 
     |> List.choose (fun (_, clr, maybeNpgsqlDbType, _) -> maybeNpgsqlDbType |> Option.map (fun t -> t, clr)) 
     |> dict
-
-//let dataTypeToClrType = function
-//    | "char" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Char]
-//    | "bigint" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Bigint]
-//    | "boolean" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Boolean]
-//    | "character varying" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Varchar]
-//    | "double precision" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Double]
-//    | "integer" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Integer]
-//    | "interval" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Interval]
-//    | "real" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Real]
-//    | "smallint" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Smallint]
-//    | "text" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Text]
-//    | "timestamp with time zone" -> npgsqlDbTypeToClrType.[NpgsqlDbType.TimestampTz]
-//    | "timestamp without time zone" -> npgsqlDbTypeToClrType.[NpgsqlDbType.Timestamp]
-//    | "USER-DEFINED" -> typeof<obj>
-//    | unsupported -> failwithf "Unsupported data type %s." unsupported
 
 type DataType = {
     Name: string
@@ -159,8 +138,10 @@ type Parameter = {
     Precision: byte
     Scale : byte
     Optional: bool
-    PostgresType: PostgresTypes.PostgresType
+    DataTypeName: string 
 }   with
+
+    member this.IsUserDefinedType = not (this.DataTypeName.StartsWith( "pg_catalog."))
     member this.IsFixedLength = this.ClrType.IsValueType
     member this.Size = this.MaxLength
         //match this.TypeInfo.DbType with

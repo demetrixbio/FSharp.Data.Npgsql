@@ -56,13 +56,13 @@ type NpgsqlConnection with
         let getEnums() =  
             
             let enumTypes = 
-                [ for c in cols -> c.PostgresType ]
-                |> List.append [ for p in parameters -> p.PostgresType ]
-                |> List.choose (fun p -> 
-                    if typeof<PostgresTypes.PostgresEnumType> = p.GetType()
-                    then Some( p.FullName)
+                cols 
+                |> List.choose (fun c -> 
+                    if typeof<PostgresTypes.PostgresEnumType> = c.PostgresType.GetType()
+                    then Some( c.PostgresType.FullName)
                     else None
                 )
+                |> List.append [ for p in parameters do if p.IsUserDefinedType then yield p.DataTypeName ]
                 |> List.distinct
 
             if enumTypes.IsEmpty
