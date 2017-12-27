@@ -311,14 +311,19 @@ type DesignTime private() =
                 yield { 
                     Name = p.ParameterName
                     NpgsqlDbType = 
-                        match p.NpgsqlDbType with 
-                        | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
-                        | x -> x
+                        if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum)
+                        then NpgsqlDbType.Unknown 
+                        else p.NpgsqlDbType
+                        //match p.NpgsqlDbType with 
+                        //| NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
+                        //| x -> x
                     ClrType = 
                         if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Array)
                         then
-                            let arrayType: PostgresArrayType = downcast p.PostgresType 
-                            InformationSchema.postresTypeToClrType.[arrayType.Element.Name].MakeArrayType()
+                            //let arrayType: PostgresArrayType = downcast p.PostgresType 
+                            //InformationSchema.postresTypeToClrType.[arrayType.Element.Name].MakeArrayType()
+                            let elemType =  p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array)
+                            InformationSchema.npgsqlDbTypeToClrType.[elemType].MakeArrayType()
                         else
                             InformationSchema.dbTypeToClrType.[p.DbType]
                     Direction = p.Direction
@@ -326,7 +331,9 @@ type DesignTime private() =
                     Precision = p.Precision
                     Scale = p.Scale
                     Optional = nullableParameters 
-                    PostgresType = p.PostgresType
+                    PostgresType = 
+                        { new PostgresTypes.PostgresType("", "<unknown>", 0u) with member __.ToString()  = base.ToString() }
+                        //p.PostgresType
                 }
         ]
 

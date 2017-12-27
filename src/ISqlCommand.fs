@@ -74,6 +74,10 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         then 
             behaviour <- behaviour ||| CommandBehavior.SingleRow 
 
+        if cfg.ResultType = ResultType.DataTable 
+        then 
+            behaviour <- behaviour ||| CommandBehavior.KeyInfo 
+
         behaviour
 
     let execute, asyncExecute = 
@@ -172,6 +176,13 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
     static member internal ExecuteDataTable(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
         use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) 
         let result = new FSharp.Data.DataTable<DataRow>(cmd)
+        for c in cursor.GetColumnSchema() do
+            let x = result.Columns.Add( c.ColumnName, c.DataType)
+            x.AllowDBNull <- c.AllowDBNull.GetValueOrDefault(true)
+            if c.DataTypeName = "timestamptz" && c.DataType = typeof<DateTime>
+            then 
+                x.DateTimeMode <- Data.DataSetDateTime.Local
+
         result.Load(cursor)
         result
 

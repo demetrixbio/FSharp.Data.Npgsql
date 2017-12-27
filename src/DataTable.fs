@@ -37,7 +37,7 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?connectionS
 
     //member __.NewRow(): 'T = downcast base.NewRow()
 
-    member this.Update(?connection, ?transaction, ?batchSize, ?continueUpdateOnError) = 
+    member this.Update(?connection, ?transaction, ?batchSize, ?continueUpdateOnError, ?conflictOption) = 
         
         connection |> Option.iter selectCommand.set_Connection
         transaction |> Option.iter selectCommand.set_Transaction 
@@ -50,7 +50,8 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?connectionS
 
         use dataAdapter = new NpgsqlDataAdapter(selectCommand)
 
-        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter) 
+        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter)
+        commandBuilder.ConflictOption <- defaultArg conflictOption ConflictOption.OverwriteChanges
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
 

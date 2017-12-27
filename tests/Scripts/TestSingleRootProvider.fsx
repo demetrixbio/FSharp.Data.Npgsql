@@ -8,6 +8,7 @@
 #r "System.ValueTuple.dll"
 
 open FSharp.Data
+open System.Data
 
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=Leningrad1;Database=lims"
@@ -23,14 +24,32 @@ do
     let dir: arc_direction = row. ``type``
     t.Update() |> ignore
 
+
 do 
     let t = new Db.onto.Tables.``namespace``()
-    t.AddRow("biological_process 3",  true, "http://purl.obolibrary.org/obo/go/go-basic.obo", id_user = 1)
-    t.Rows.[0].ItemArray |> printfn "Values before update: %A"
-    t.Update() |> printfn "Records affected %i"
-    t.Rows.[0].ItemArray |> printfn "Values after update: %A"
-    t.Rows.[0].description <- Some "sqwsqwswq"
-    t.Update() |> printfn "Records affected %i"
+    [ for c in t.Columns -> c.ColumnName, c.DataType, c.DateTimeMode ] |> printfn "Columns: %A"
+    t.AddRow("biological_process 3",  true, "http://purl.obolibrary.org/obo/go/go-basic.obo", id_user = 1, description = Some "test")
+    let r = t.Rows.[0]
+    r.ItemArray |> printfn "Values before update: %A"
+    t.Update(conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
+    r.ItemArray |> printfn "Values after update: %A"
+    r.description <- r.description |>  Option.map (fun x -> x + "tail")
+    t.Update(conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
+
+do 
+    let t = new Db.onto.Tables.``namespace``()
+    do
+        //use cmd = new Db.CreateCommand<"select * from onto.namespace where id = @id", ResultType.DataTable>(connectionString)
+        use cmd = new NpgsqlCommand<"select * from onto.namespace where id = @id", connectionString, ResultType.DataReader>(connectionString)
+        t.Load(cmd.Execute(20))
+    [ for c in t.Columns -> c.ColumnName, c.DataType, c.DateTimeMode ] |> printfn "Columns: %A"
+
+    if (t.Rows.Count > 0)
+    then 
+        let r = t.Rows.[0]
+        r.name <- r.name + "_test"
+        t.Update(conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
+
 
 do
     let cmd = Db.CreateCommand<"select 42 as X, current_date", SingleRow = true>(connectionString)
@@ -49,7 +68,7 @@ do
 
 do
     let cmd = Db.CreateCommand<"select * from onto.namespace where id = @id", ResultType.DataTable>(connectionString)
-    let t = cmd.Execute(id = 4)
+    let t = cmd.Execute(id = 20)
     t.Rows.[0].name <- t.Rows.[0].name + "_test"
     t.Update() |> printfn "Rows affected: %i"
 
