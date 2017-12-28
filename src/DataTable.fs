@@ -55,13 +55,13 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?connectionS
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
 
-            enumTypeColumns |> Option.iter (fun enumColumns -> 
-                let ps: NpgsqlParameterCollection = downcast args.Command.Parameters 
-                for p in ps do 
-                    if Array.contains p.SourceColumn enumColumns
-                    then 
-                        p.NpgsqlDbType <- NpgsqlTypes.NpgsqlDbType.Unknown
-            )
+            //enumTypeColumns |> Option.iter (fun enumColumns -> 
+            //    let ps: NpgsqlParameterCollection = downcast args.Command.Parameters 
+            //    for p in ps do 
+            //        if Array.contains p.SourceColumn enumColumns
+            //        then 
+            //            p.NpgsqlDbType <- NpgsqlTypes.NpgsqlDbType.Unknown
+            //)
                     
             if  args.Errors = null 
                 && args.StatementType = Data.StatementType.Insert 

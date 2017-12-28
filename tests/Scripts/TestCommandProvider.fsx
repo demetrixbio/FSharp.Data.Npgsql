@@ -107,6 +107,6 @@ do
         VALUES (@id_user, @title, @content, @favorite,@parents, true, @created, @updated) 
         RETURNING id
     ", connectionString, SingleRow = true>(connectionString)
-    cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], DateTimeOffset.Now, DateTimeOffset.Now ) |> printfn "Records inserted %A"
+    cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], DateTime.Now, DateTime.Now ) |> printfn "Records inserted %A"
     
 
