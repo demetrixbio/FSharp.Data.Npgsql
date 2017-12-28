@@ -54,8 +54,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="3.3.0-ci-00438" />
-    <!--<PackageReference Include="System.Configuration.ConfigurationManager" Version="4.4.0" />-->
+    <ProjectReference Include="npgsql\src\Npgsql\Npgsql.csproj" />
   </ItemGroup>
   <Target Name="IncludeAllDlls">
     <ItemGroup>
