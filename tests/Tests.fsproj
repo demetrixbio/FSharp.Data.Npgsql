@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp2.0</TargetFrameworks>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
   
   <Import Project="fsc.props" />
   
   <ItemGroup>
-    <Compile Include="Tests.fs" />
+    <Compile Include="NpgsqlCmd.Tests.fs" />
     <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netstandard2.0' OR '$(TargetFramework)' == 'netcoreapp2.0' " />
   </ItemGroup>
 

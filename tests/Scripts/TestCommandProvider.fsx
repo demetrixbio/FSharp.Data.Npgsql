@@ -13,7 +13,7 @@ open System.Data
 open Npgsql.Logging
 
 [<Literal>]
-let connectionString = "Host=localhost;Username=postgres;Password=Leningrad1;Database=lims"
+let connectionString = "Host=localhost;Username=postgres;Password=postgres"
 
 //NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
 //NpgsqlLogManager.IsParameterLoggingEnabled <- true
