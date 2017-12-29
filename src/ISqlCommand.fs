@@ -40,7 +40,7 @@ type DesignTimeConfig = {
     ExpectedColumns: (string * string)[]
 }
 
-type internal Connection = Choice<string, NpgsqlConnection, NpgsqlTransaction>
+type internal Connection = Choice<string, NpgsqlTransaction>
 
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connection, commandTimeout) = 
@@ -48,13 +48,10 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)
     let manageConnection = 
         match connection with
-        | Choice1Of3 connectionString -> 
+        | Choice1Of2 connectionString -> 
             cmd.Connection <- new NpgsqlConnection(connectionString)
             true
-        | Choice2Of3 instance -> 
-            cmd.Connection <- instance
-            false
-        | Choice3Of3 tran -> 
+        | Choice2Of2 tran -> 
             cmd.Transaction <- tran 
             cmd.Connection <- tran.Connection
             false

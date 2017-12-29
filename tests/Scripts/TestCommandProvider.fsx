@@ -34,9 +34,7 @@ do
         t.Update(conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
     
 do 
-    use conn = new NpgsqlConnection(connectionString)
-    conn.Open()
-    let cmd = new NpgsqlCommand<"select NULL", connectionString, SingleRow = true>(conn)
+    let cmd = new NpgsqlCommand<"select NULL", connectionString, SingleRow = true>(connectionString)
     cmd.Execute() |> printfn "%A"
 
 type Get42 = NpgsqlCommand<"select 42 as X, current_date", connectionString>
@@ -74,7 +72,7 @@ do
     cmd.Execute() |> printfn "resultset:\n%A"
 
 do 
-    let cmd = new NpgsqlCommand<"SELECT coalesce(@x, 'Empty') AS x", connectionString, NullableParameters = true>(connectionString)
+    let cmd = new NpgsqlCommand<"SELECT coalesce(@x, 'Empty') AS x", connectionString, AllParametersOptional = true>(connectionString)
     cmd.Execute(Some "haha") |> printfn "resultset:\n%A"
 
 type TryEnums = NpgsqlCommand<"
@@ -100,13 +98,31 @@ do
     use cmd = UpdateWithEnum.Create(connectionString)
     cmd.Execute(12, 12, true, UpdateWithEnum.``part.sbol_location_type``.cut) |> printfn "Records inserted %i"
 
-open System
+[<Literal>]
+let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
+
 do
     use cmd = new NpgsqlCommand<"
         INSERT INTO part.gsl_source_doc (id_user, title, content, favorite, parents, locked, created, updated) 
         VALUES (@id_user, @title, @content, @favorite,@parents, true, @created, @updated) 
         RETURNING id
-    ", connectionString, SingleRow = true>(connectionString)
+    ", lims, SingleRow = true>(lims)
     cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], DateTime.Now, DateTime.Now ) |> printfn "Records inserted %A"
     
+[<Literal>]
+let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
+//do
+//    use cmd = new NpgsqlCommand<"
+//            SELECT * FROM rental WHERE rental_id = @rental_id
+//        ", dvdrental, ResultType.DataTable>(dvdrental)    
+//    let t = cmd.Execute(rental_id = 2)
+//    assert(1 = t.Rows.Count)
+//    let r = t.Rows.[0]  
+//    let return_date = r.return_date
+//    try
+//        let new_return_date = Some DateTime.Now.Date
+//        r.return_date <- new_return_date
+//        t.Update()
+//    finally
+//        ()

@@ -11,7 +11,7 @@ open Npgsql
 open System.Collections.Concurrent
 open FSharp.Data.InformationSchema
 
-let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, nullableParameters) = 
+let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, allParametersOptional) = 
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then 
@@ -23,7 +23,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     let conn = new NpgsqlConnection(connectionString)
     use __ = conn.UseLocally()
 
-    let parameters = DesignTime.ExtractParameters(conn, sqlStatement, nullableParameters)
+    let parameters = DesignTime.ExtractParameters(conn, sqlStatement, allParametersOptional)
 
     let customTypes = ref( dict [])
 
@@ -106,7 +106,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("Connection", typeof<string>) 
             ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
-            ProvidedStaticParameter("NullableParameters", typeof<bool>, false) 
+            ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ],             
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(

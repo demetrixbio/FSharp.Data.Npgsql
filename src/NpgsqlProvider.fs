@@ -15,6 +15,7 @@ open Npgsql.TypeMapping
 open NpgsqlTypes
 
 open InformationSchema
+open FSharp.Data
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
@@ -202,46 +203,7 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
                 
 
             //type data row
-            let dataRowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
-            do 
-                for c in columns do
-                    let property = 
-                        let name, dataType = c.Name, c.ClrType
-                        if c.Nullable 
-                        then
-                            //let propertType = typedefof<_ option>.MakeGenericType dataType
-                            let property = 
-                                ProvidedProperty(
-                                    name, 
-                                    c.GetProvidedType(), 
-                                    getterCode = QuotationsFactory.GetBody("GetNullableValueFromDataRow", dataType, name),
-                                    ?setterCode = 
-                                        if not c.ReadOnly 
-                                        then QuotationsFactory.GetBody("SetNullableValueInDataRow", dataType, name) |> Some
-                                        else None
-                                )
-                                
-                            property
-                        else
-                            let property = 
-                                ProvidedProperty(
-                                    name, 
-                                    c.GetProvidedType(),
-                                    getterCode = (fun args -> <@@ (%%args.[0] : DataRow).[name] @@>),
-                                    ?setterCode = 
-                                        if not c.ReadOnly
-                                        then Some( fun args -> <@@ (%%args.[0] : DataRow).[name] <- %%Expr.Coerce(args.[1], typeof<obj>) @@>)  
-                                        else None
-                                )
-                                
-                                
-                            property
-
-                    if c.Description <> "" 
-                    then property.AddXmlDoc c.Description
-
-                    dataRowType.AddMember property
-
+            let dataRowType = DesignTime.GetDataRowType(columns)
             //type data table
             let dataTableType = DesignTime.GetDataTableType(tableName, dataRowType, columns)
             tagProvidedType dataTableType

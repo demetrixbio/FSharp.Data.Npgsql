@@ -152,30 +152,30 @@ type DesignTime private() =
         let name = column.Name
         if column.Nullable then
             let getter = QuotationsFactory.GetBody("GetNullableValueFromDataRow", column.ClrType, name)
-            let setter = QuotationsFactory.GetBody("SetNullableValueInDataRow", column.ClrType, name)
+            let setter = if column.ReadOnly then None else Some( QuotationsFactory.GetBody("SetNullableValueInDataRow", column.ClrType, name))
             getter, setter
         else
             let getter = QuotationsFactory.GetBody("GetNonNullableValueFromDataRow", column.ClrType, name)
-            let setter = QuotationsFactory.GetBody("SetNonNullableValueInDataRow", column.ClrType, name)
+            let setter = if column.ReadOnly then None else Some( QuotationsFactory.GetBody("SetNonNullableValueInDataRow", column.ClrType, name))
             getter, setter
 
     static member internal GetDataRowType (columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
 
-        columns |> List.mapi(fun i col ->
+        columns 
+        |> List.mapi(fun i col ->
 
             if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
 
-            let propertyType = col.ClrType
+            let propertyType = col.GetProvidedType()
 
             let getter, setter = DesignTime.GetDataRowPropertyGetterAndSetterCode col
 
-            ProvidedProperty(
-                col.Name, 
-                propertyType, 
-                getterCode = getter, 
-                ?setterCode = if not col.ReadOnly then Some setter else None
-            )
+            let p = ProvidedProperty(col.Name, propertyType, getter, ?setterCode = setter)
+
+            if col.Description <> "" then p.AddXmlDoc col.Description
+
+            p
         )
         |> rowType.AddMembers
 
@@ -300,7 +300,7 @@ type DesignTime private() =
                 }               
             }
 
-    static member internal ExtractParameters(connection, commandText: string, nullableParameters) =  
+    static member internal ExtractParameters(connection, commandText: string, allParametersOptional) =  
         let cmd = new NpgsqlCommand(commandText, connection)
         NpgsqlCommandBuilder.DeriveParameters(cmd)
 
@@ -328,7 +328,7 @@ type DesignTime private() =
                     MaxLength = p.Size
                     Precision = p.Precision
                     Scale = p.Scale
-                    Optional = nullableParameters 
+                    Optional = allParametersOptional 
                     DataTypeName = dataTypeName
                 }
         ]
@@ -370,8 +370,7 @@ type DesignTime private() =
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
-            let body1 (args: _ list) = 
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice1Of3 %%args.Head @@> :: args.Tail)
+            let body1 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice1Of2 %%args.Head @@> :: args.Tail)
 
             yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
             
@@ -381,21 +380,11 @@ type DesignTime private() =
            
             let parameters2 = 
                     [ 
-                        ProvidedParameter("connection", typeof<NpgsqlConnection>, optionalValue = designTimeConnectionString)           
-                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null) 
+                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>) 
                         ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
                     ]
 
-            let body2 (args: _ list) =
-                let connArg = 
-                    <@@ 
-                        if box (%%args.[1]: NpgsqlTransaction) <> null 
-                        then Connection.Choice3Of3 %%args.[1]
-                        elif box (%%args.[0]: NpgsqlConnection) <> null 
-                        then Connection.Choice2Of3 %%args.Head 
-                        else Connection.Choice1Of3( designTimeConnectionString)
-                    @@>
-                Expr.NewObject(ctorImpl, [ designTimeConfig ; connArg; args.[2] ])
+            let body2 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice2Of2 %%args.Head @@> :: args.Tail )
                     
             yield upcast ProvidedConstructor(parameters2, invokeCode = body2)
             if factoryMethodName.IsSome

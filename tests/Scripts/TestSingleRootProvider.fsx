@@ -12,7 +12,17 @@ open System.Data
 open System
 
 [<Literal>]
-let connectionString = "Host=localhost;Username=postgres;Password=Leningrad1;Database=lims"
+let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
+
+type DvdRental = Npgsql<dvdrental>
+
+//do  
+//    let rental = DvdRental.``public``.Tables.rental()
+//    let r = rental.Rows.[0]
+//    r.
+
+[<Literal>]
+let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
 type Db = Npgsql<connectionString>
 
@@ -136,4 +146,6 @@ do
         RETURNING id
         ", SingleRow = true>(connectionString)
     cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], created = DateTime.Now ) |> printfn "Records inserted %A"
+
+
 

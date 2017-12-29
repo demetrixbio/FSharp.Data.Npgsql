@@ -38,8 +38,8 @@ let typesMapping =
     //cidr	NpgsqlInet		string
         "inet", typeof<NpgsqlInet>, Some NpgsqlDbType.Inet, None
     //macaddr	PhysicalAddress		string
-    //tsquery	NpgsqlTsQuery		
-    //tsvector	NpgsqlTsVector		
+        "tsquery",  typeof<NpgsqlTsQuery>, Some NpgsqlDbType.TsQuery, None
+        "tsvector", typeof<NpgsqlTsVector>, Some NpgsqlDbType.TsVector, None
 
         "date", typeof<DateTime>, Some NpgsqlDbType.Date, Some DbType.Date
         "interval", typeof<TimeSpan>, Some NpgsqlDbType.Interval, None
@@ -48,7 +48,7 @@ let typesMapping =
         "time", typeof<TimeSpan>, Some NpgsqlDbType.Time, Some DbType.Time
         "timetz", typeof<DateTimeOffset>, Some NpgsqlDbType.TimeTz, Some DbType.DateTimeOffset
 
-    //bytea	byte[]		
+        "bytea", typeof<byte[]>, Some NpgsqlDbType.Bytea, Some DbType.Binary
         "oid", typeof<UInt32>, Some NpgsqlDbType.Oid, Some DbType.UInt32
         "xid", typeof<UInt32>, Some NpgsqlDbType.Oid, Some DbType.UInt32
     //cid	uint		
