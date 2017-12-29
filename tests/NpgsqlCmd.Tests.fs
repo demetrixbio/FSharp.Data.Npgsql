@@ -144,6 +144,30 @@ let dateTableWithUpdateAndTx() =
     ) 
 
 [<Fact>]
+let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
+    
+    let rental_id = 2
+    
+    use conn = new NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tran = conn.BeginTransaction()
+
+    use cmd = new NpgsqlCommand<"
+        SELECT * FROM rental WHERE rental_id = @rental_id
+    ", dvdRental, ResultType.DataTable>(tran)    
+  
+    let t = cmd.Execute(rental_id)
+    Assert.Equal(1, t.Rows.Count)
+    let r = t.Rows.[0]
+    r.return_date <- Some DateTime.Now.Date
+    Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
+
+    Assert.Equal( 
+        r.return_date, 
+        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne 
+    ) 
+
+[<Fact>]
 let deleteWithTx() =
     let rental_id = 2
 
@@ -187,3 +211,7 @@ let selectEnumWithArray() =
     ", dvdRental, SingleRow = true>(dvdRental)
 
     Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
+
+
+//ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
+
