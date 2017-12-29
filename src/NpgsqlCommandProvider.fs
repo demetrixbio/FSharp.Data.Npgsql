@@ -46,7 +46,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     do
         if resultType = ResultType.Records then
             returnType.PerRow 
-            |> Option.filter (fun x -> x.Provided <> x.ErasedTo)
+            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1 )
             |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
 
         elif resultType = ResultType.DataTable then

@@ -7,13 +7,13 @@ open Npgsql
 open FSharp.Data
 
 [<Literal>]
-let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
+let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
 [<Fact>]
 let selectLiterals() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", connectionString>(connectionString)
+    ", dvdRental>(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
@@ -23,7 +23,7 @@ let selectLiterals() =
 let selectSingleRow() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", connectionString, SingleRow = true>(connectionString)
+    ", dvdRental, SingleRow = true>(dvdRental)
 
     Assert.Equal(
         Some( Some 42, Some DateTime.Today), 
@@ -34,7 +34,7 @@ let selectSingleRow() =
 let selectTuple() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", connectionString, ResultType.Tuples>(connectionString)
+    ", dvdRental, ResultType.Tuples>(dvdRental)
 
     Assert.Equal<_ list>(
         [ Some 42, Some DateTime.Today ],
@@ -43,14 +43,14 @@ let selectTuple() =
 
 [<Fact>]
 let selectSingleNull() =
-    use cmd = new NpgsqlCommand<"SELECT NULL", connectionString, SingleRow = true>(connectionString)
+    use cmd = new NpgsqlCommand<"SELECT NULL", dvdRental, SingleRow = true>(dvdRental)
     Assert.Equal(Some None, cmd.Execute())
 
 [<Fact>]
 let selectSingleColumn() =
     use cmd = new NpgsqlCommand<"
         SELECT * FROM generate_series(0, 10)
-    ", connectionString>(connectionString)
+    ", dvdRental>(dvdRental)
 
     Assert.Equal<_ seq>(
         { 0 .. 10 }, 
@@ -61,7 +61,7 @@ let selectSingleColumn() =
 let paramInFilter() =
     use cmd = new NpgsqlCommand<"
         SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
-    ", connectionString>(connectionString)
+    ", dvdRental>(dvdRental)
 
     Assert.Equal<_ seq>(
         { 0 .. 2 .. 10 }, 
@@ -72,7 +72,7 @@ let paramInFilter() =
 let paramInLimit() =
     use cmd = new NpgsqlCommand<"
         SELECT * FROM generate_series(0, 10) LIMIT @limit
-    ", connectionString>(connectionString)
+    ", dvdRental>(dvdRental)
 
     let limit = 5
     Assert.Equal<_ seq>(
@@ -80,7 +80,7 @@ let paramInLimit() =
         cmd.Execute(int64 limit) |> Seq.choose id
     )
 
-type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", connectionString>
+type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", dvdRental>
 
 [<Fact>]
 let dateTableWithUpdate() =
@@ -89,7 +89,7 @@ let dateTableWithUpdate() =
 
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
-    ", connectionString, ResultType.DataTable>(connectionString)    
+    ", dvdRental, ResultType.DataTable>(dvdRental)    
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
@@ -101,7 +101,7 @@ let dateTableWithUpdate() =
         rowsAffected := t.Update()
         Assert.Equal(1, !rowsAffected)
 
-        use cmd = GetRentalById.Create(connectionString)
+        use cmd = GetRentalById.Create(dvdRental)
         Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
@@ -115,13 +115,13 @@ let dateTableWithUpdateAndTx() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(connectionString)
+    use conn = new NpgsqlConnection(dvdRental)
     conn.Open()
     use tran = conn.BeginTransaction()
 
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
-    ", connectionString, ResultType.DataTable>(tran)    
+    ", dvdRental, ResultType.DataTable>(tran)    
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
@@ -140,27 +140,50 @@ let dateTableWithUpdateAndTx() =
 
     Assert.Equal(
         return_date, 
-        GetRentalById.Create(connectionString).Execute( rental_id) |> Seq.exactlyOne
+        GetRentalById.Create(dvdRental).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
 [<Fact>]
 let deleteWithTx() =
     let rental_id = 2
 
-    use cmd = new GetRentalById(connectionString)
+    use cmd = new GetRentalById(dvdRental)
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
-        use conn = new NpgsqlConnection(connectionString)
+        use conn = new NpgsqlConnection(dvdRental)
         conn.Open()
         use tran = conn.BeginTransaction()
 
         use del = new NpgsqlCommand<"
             DELETE FROM rental WHERE rental_id = @rental_id
-        ", connectionString>(tran)  
+        ", dvdRental>(tran)  
         Assert.Equal(1, del.Execute(rental_id))
         Assert.Empty( GetRentalById.Create(tran).Execute( rental_id)) 
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
     
+type GetAllRatings = NpgsqlCommand<"
+    SELECT * 
+    FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
+    WHERE X <> @exclude;  
+", dvdRental>
+
+type Rating = GetAllRatings.``public.mpaa_rating``
+
+[<Fact>]
+let selectEnum() =
+    use cmd = new GetAllRatings(dvdRental)
+    Assert.Equal<_ list>(
+        [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
+        [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
+    ) 
+
+[<Fact>]
+let selectEnumWithArray() =
+    use cmd = new NpgsqlCommand<"
+        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
+    ", dvdRental, SingleRow = true>(dvdRental)
+
+    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 

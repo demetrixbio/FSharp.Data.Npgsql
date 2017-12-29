@@ -1,7 +1,8 @@
-﻿#I "../../packages"
+﻿//#I "../../packages"
+#I @"..\bin\Debug\"
 #r "System.Transactions"
 //#r @"Npgsql.3.2.5/lib/net451/Npgsql.dll"
-#r @"..\..\..\npgsql\src\Npgsql\bin\Debug\net451\Npgsql.dll"
+//#r @"..\..\..\npgsql\src\Npgsql\bin\Debug\net451\Npgsql.dll"
 #r @"C:\Users\dmorozov\.nuget\packages\system.threading.tasks.extensions\4.3.0\lib\portable-net45+win8+wp8+wpa81\System.Threading.Tasks.Extensions.dll"
 //#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.6\lib\net451\Npgsql.dll"
 
@@ -92,3 +93,4 @@ do
     printfn "%A, %A, %A" p.NpgsqlDbType p.Value ((p.Value :?> DateTime).Kind)
     let result = cmd.ExecuteScalar() |>  unbox<DateTime>
     printfn "Result: %A, %A" result result.Kind
+

@@ -110,13 +110,13 @@ do
     cmd.Execute(1,  "test title", "test content", true, [| 1; 2 |], DateTime.Now, DateTime.Now ) |> printfn "Records inserted %A"
     
 [<Literal>]
-let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
+let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
 //do
 //    use cmd = new NpgsqlCommand<"
 //            SELECT * FROM rental WHERE rental_id = @rental_id
-//        ", dvdrental, ResultType.DataTable>(dvdrental)    
-//    let t = cmd.Execute(rental_id = 2)
+//        ", dvdRental, ResultType.DataTable>(dvdRental)    
+//    let t = cmd.Execute(rental_id = 2)    
 //    assert(1 = t.Rows.Count)
 //    let r = t.Rows.[0]  
 //    let return_date = r.return_date
@@ -126,3 +126,11 @@ let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvd
 //        t.Update()
 //    finally
 //        ()
+
+//type GetAllRatings = NpgsqlCommand<"SELECT x::MPAA_RATING FROM (VALUES ('G'), ('PG'), ('PG-13'), ('R'), ('NC-17')) AS t(x)", dvdRental>
+
+type GetAllRatingsExceptTwo = NpgsqlCommand<"
+      SELECT enum_range(NULL::public.mpaa_rating)
+      INTERSECT
+      SELECT @exclude::public.mpaa_rating[]
+", dvdRental>

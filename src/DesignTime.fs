@@ -318,10 +318,16 @@ type DesignTime private() =
                     ClrType = 
                         if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Array)
                         then
-                            let elemTypeName = dataTypeName.Split('.').[1].TrimStart('_')
-                            InformationSchema.postresTypeToClrType.[elemTypeName].MakeArrayType()
-                            //let elemType =  p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array)
-                            //InformationSchema.npgsqlDbTypeToClrType.[elemType].MakeArrayType()
+                            let elemTypeName = dataTypeName.Split('.').[1]
+                            let isEnumElement = 
+                                p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array) = NpgsqlDbType.Text 
+                                && elemTypeName.StartsWith("_")
+
+                            if isEnumElement
+                            then 
+                                typeof<string[]> 
+                            else 
+                                InformationSchema.postresTypeToClrType.[elemTypeName.TrimStart('_')].MakeArrayType()
                         else
                             InformationSchema.npgsqlDbTypeToClrType.[p.NpgsqlDbType]
                     Direction = p.Direction
