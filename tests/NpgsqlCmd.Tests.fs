@@ -80,14 +80,17 @@ let paramInLimit() =
         cmd.Execute(int64 limit) |> Seq.choose id
     )
 
-type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", connectionString, SingleRow = true>
+type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", connectionString>
 
 [<Fact>]
 let dateTableWithUpdate() =
+
+    let rental_id = 2
+
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
     ", connectionString, ResultType.DataTable>(connectionString)    
-    let t = cmd.Execute(rental_id = 2)
+    let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
     let return_date = r.return_date
@@ -99,7 +102,7 @@ let dateTableWithUpdate() =
         Assert.Equal(1, !rowsAffected)
 
         use cmd = GetRentalById.Create(connectionString)
-        Assert.Equal(Some( new_return_date), cmd.Execute(2)) 
+        Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
         if !rowsAffected = 1
@@ -109,7 +112,9 @@ let dateTableWithUpdate() =
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
-        
+    
+    let rental_id = 2
+    
     use conn = new NpgsqlConnection(connectionString)
     conn.Open()
     use tran = conn.BeginTransaction()
@@ -117,7 +122,7 @@ let dateTableWithUpdateAndTx() =
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
     ", connectionString, ResultType.DataTable>(tran)    
-    let t = cmd.Execute(rental_id = 2)
+    let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
     let return_date = r.return_date
@@ -126,8 +131,36 @@ let dateTableWithUpdateAndTx() =
     r.return_date <- new_return_date
     Assert.Equal(1, t.Update(transaction = tran))
 
-    Assert.Equal(Some( new_return_date), GetRentalById.Create(tran).Execute(2)) 
+    Assert.Equal( 
+        new_return_date, 
+        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne
+    ) 
 
     tran.Rollback()
 
-    Assert.Equal(Some( return_date), GetRentalById.Create(connectionString).Execute(2)) 
+    Assert.Equal(
+        return_date, 
+        GetRentalById.Create(connectionString).Execute( rental_id) |> Seq.exactlyOne
+    ) 
+
+[<Fact>]
+let deleteWithTx() =
+    let rental_id = 2
+
+    use cmd = new GetRentalById(connectionString)
+    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
+
+    do 
+        use conn = new NpgsqlConnection(connectionString)
+        conn.Open()
+        use tran = conn.BeginTransaction()
+
+        use del = new NpgsqlCommand<"
+            DELETE FROM rental WHERE rental_id = @rental_id
+        ", connectionString>(tran)  
+        Assert.Equal(1, del.Execute(rental_id))
+        Assert.Empty( GetRentalById.Create(tran).Execute( rental_id)) 
+
+
+    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
+    
