@@ -3,114 +3,118 @@ module NpgsqlConnectionTests
 open System
 open Xunit
 
-open Npgsql
-open FSharp.Data
-
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
-//let DvdRental = 
+open FSharp.Data
+type DvdRental = NpgsqlConnection<dvdRental>
 
-//[<Fact>]
-//let selectLiterals() =
-//    use cmd = new NpgsqlCommand<"        
-//        SELECT 42 AS Answer, current_date as today
-//    ", dvdRental>(dvdRental)
+open Npgsql
 
-//    let x = cmd.Execute() |> Seq.exactlyOne
-//    Assert.Equal(Some 42, x.answer)
-//    Assert.Equal(Some DateTime.Today, x.today)
+[<Fact>]
+let selectLiterals() =
+    use cmd = 
+        DvdRental.CreateCommand<"        
+            SELECT 42 AS Answer, current_date as today
+        ">(dvdRental)
 
-//[<Fact>]
-//let selectSingleRow() =
-//    use cmd = new NpgsqlCommand<"        
-//        SELECT 42 AS Answer, current_date as today
-//    ", dvdRental, SingleRow = true>(dvdRental)
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some DateTime.Today, x.today)
 
-//    Assert.Equal(
-//        Some( Some 42, Some DateTime.Today), 
-//        cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
-//    )
+[<Fact>]
+let selectSingleRow() =
+    use cmd = DvdRental.CreateCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", SingleRow = true>(dvdRental)
 
-//[<Fact>]
-//let selectTuple() =
-//    use cmd = new NpgsqlCommand<"        
-//        SELECT 42 AS Answer, current_date as today
-//    ", dvdRental, ResultType.Tuples>(dvdRental)
+    Assert.Equal(
+        Some( Some 42, Some DateTime.Today), 
+        cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
+    )
 
-//    Assert.Equal<_ list>(
-//        [ Some 42, Some DateTime.Today ],
-//        cmd.Execute() |>  Seq.toList
-//    )
+[<Fact>]
+let selectTuple() =
+    use cmd = DvdRental.CreateCommand<"    
+        SELECT 42 AS Answer, current_date as today
+    ", ResultType.Tuples>(dvdRental)
 
-//[<Fact>]
-//let selectSingleNull() =
-//    use cmd = new NpgsqlCommand<"SELECT NULL", dvdRental, SingleRow = true>(dvdRental)
-//    Assert.Equal(Some None, cmd.Execute())
+    Assert.Equal<_ list>(
+        [ Some 42, Some DateTime.Today ],
+        cmd.Execute() |>  Seq.toList
+    )
 
-//[<Fact>]
-//let selectSingleColumn() =
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM generate_series(0, 10)
-//    ", dvdRental>(dvdRental)
+[<Fact>]
+let selectSingleNull() =
+    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRental)
+    Assert.Equal(Some None, cmd.Execute())
 
-//    Assert.Equal<_ seq>(
-//        { 0 .. 10 }, 
-//        cmd.Execute() |> Seq.choose id 
-//    )
+[<Fact>]
+let selectSingleColumn() =
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRental)
 
-//[<Fact>]
-//let paramInFilter() =
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
-//    ", dvdRental>(dvdRental)
+    Assert.Equal<_ seq>(
+        { 0 .. 10 }, 
+        cmd.Execute() |> Seq.choose id 
+    )
 
-//    Assert.Equal<_ seq>(
-//        { 0 .. 2 .. 10 }, 
-//        cmd.Execute(div = 2) |> Seq.choose id 
-//    )
+[<Fact>]
+let paramInFilter() =
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
+        ">(dvdRental)
 
-//[<Fact>]
-//let paramInLimit() =
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM generate_series(0, 10) LIMIT @limit
-//    ", dvdRental>(dvdRental)
+    Assert.Equal<_ seq>(
+        { 0 .. 2 .. 10 }, 
+        cmd.Execute(div = 2) |> Seq.choose id 
+    )
 
-//    let limit = 5
-//    Assert.Equal<_ seq>(
-//        { 0 .. 10 } |> Seq.take limit , 
-//        cmd.Execute(int64 limit) |> Seq.choose id
-//    )
+[<Fact>]
+let paramInLimit() =
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * FROM generate_series(0, 10) LIMIT @limit
+        ">(dvdRental)
 
-//type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", dvdRental>
+    let limit = 5
+    Assert.Equal<_ seq>(
+        { 0 .. 10 } |> Seq.take limit , 
+        cmd.Execute(int64 limit) |> Seq.choose id
+    )
 
-//[<Fact>]
-//let dateTableWithUpdate() =
+[<Literal>]
+let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
 
-//    let rental_id = 2
+[<Fact>]
+let dateTableWithUpdate() =
 
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM rental WHERE rental_id = @rental_id
-//    ", dvdRental, ResultType.DataTable>(dvdRental)    
-//    let t = cmd.Execute(rental_id)
-//    Assert.Equal(1, t.Rows.Count)
-//    let r = t.Rows.[0]
-//    let return_date = r.return_date
-//    let rowsAffected = ref 0
-//    try
-//        let new_return_date = Some DateTime.Now.Date
-//        r.return_date <- new_return_date
-//        rowsAffected := t.Update()
-//        Assert.Equal(1, !rowsAffected)
+    let rental_id = 2
 
-//        use cmd = GetRentalById.Create(dvdRental)
-//        Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * FROM rental WHERE rental_id = @rental_id
+        ", ResultType.DataTable>(dvdRental) 
+        
+    let t = cmd.Execute(rental_id)
+    Assert.Equal(1, t.Rows.Count)
+    let r = t.Rows.[0]
+    let return_date = r.return_date
+    let rowsAffected = ref 0
+    try
+        let new_return_date = Some DateTime.Now.Date
+        r.return_date <- new_return_date
+        rowsAffected := t.Update()
+        Assert.Equal(1, !rowsAffected)
 
-//    finally
-//        if !rowsAffected = 1
-//        then 
-//            r.return_date <- return_date
-//            t.Update() |>  ignore      
+        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental)
+        Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
+
+    finally
+        if !rowsAffected = 1
+        then 
+            r.return_date <- return_date
+            t.Update() |>  ignore      
             
 //[<Fact>]
 //let dateTableWithUpdateAndTx() =

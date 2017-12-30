@@ -209,14 +209,6 @@ let selectEnum() =
 
 //ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
 
-//[<Fact>]
-//let selectEnumWithArray() =
-//    use cmd = new NpgsqlCommand<"
-//        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-//    ", dvdRental, SingleRow = true>(dvdRental)
-
-//    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
-
 type EchoRatingsArray = NpgsqlCommand<"
         SELECT @ratings::mpaa_rating[];
     ", dvdRental, SingleRow = true>
@@ -230,11 +222,7 @@ let selectEnumWithArray() =
         EchoRatingsArray.``public.mpaa_rating``.R 
     |]
 
-    let actual = cmd.Execute(ratings)
-    Assert.Equal( 
-        ratings, 
-        actual
-    )
+    Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
 
 [<Fact>]
 let allParametersOptional() =
