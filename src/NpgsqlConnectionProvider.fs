@@ -1,4 +1,4 @@
-﻿module internal FSharp.Data.NpgsqlProvider
+﻿module internal FSharp.Data.NpgsqlConnectionProvider
 
 open System
 open System.Data
@@ -196,6 +196,7 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
                             customTypes
                             |> Map.tryFind schema
                             |> Option.bind (List.tryFind (fun t -> t.Name = udt))
+                            |> Option.map (fun x -> upcast x)
                     }
                 ]
                 
@@ -443,7 +444,7 @@ let createRootType( assembly, nameSpace: string, typeName, connection) =
 
 let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
-    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "Npgsql", Some typeof<obj>, hideObjectMethods = true)
+    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
     do 
         providerType.DefineStaticParameters(

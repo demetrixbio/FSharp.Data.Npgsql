@@ -72,8 +72,7 @@
     <Compile Include="QuotationsFactory.fs" />
     <Compile Include="DesignTime.fs" />
     <Compile Include="NpgsqlCommandProvider.fs" />
-    <Compile Include="NpgsqlProvider.fs" />
-    <Compile Include="FileContentProvider.fs" />
+    <Compile Include="NpgsqlConnectionProvider.fs" />
     <Compile Include="TypeProviderAssembly.fs" />
   </ItemGroup>
   <ItemGroup>

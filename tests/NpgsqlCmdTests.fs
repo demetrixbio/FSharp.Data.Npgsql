@@ -1,13 +1,17 @@
-module Tests
+module NpgsqlCmdTests
 
 open System
 open Xunit
 
-open Npgsql
-open FSharp.Data
-
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
+
+let openConnection() = 
+    let conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    conn
+
+open FSharp.Data
 
 [<Fact>]
 let selectLiterals() =
@@ -115,7 +119,7 @@ let dateTableWithUpdateAndTx() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental)
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
     use tran = conn.BeginTransaction()
 
@@ -148,7 +152,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental)
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
     use tran = conn.BeginTransaction()
 
@@ -175,8 +179,7 @@ let deleteWithTx() =
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
-        use conn = new NpgsqlConnection(dvdRental)
-        conn.Open()
+        use conn = openConnection()
         use tran = conn.BeginTransaction()
 
         use del = new NpgsqlCommand<"
@@ -204,14 +207,41 @@ let selectEnum() =
         [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
     ) 
 
+//ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
+
+//[<Fact>]
+//let selectEnumWithArray() =
+//    use cmd = new NpgsqlCommand<"
+//        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
+//    ", dvdRental, SingleRow = true>(dvdRental)
+
+//    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
+
+type EchoRatingsArray = NpgsqlCommand<"
+        SELECT @ratings::mpaa_rating[];
+    ", dvdRental, SingleRow = true>
+
 [<Fact>]
 let selectEnumWithArray() =
-    use cmd = new NpgsqlCommand<"
-        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-    ", dvdRental, SingleRow = true>(dvdRental)
+    use cmd = new EchoRatingsArray(dvdRental)
 
-    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
+    let ratings = [| 
+        EchoRatingsArray.``public.mpaa_rating``.``PG-13`` 
+        EchoRatingsArray.``public.mpaa_rating``.R 
+    |]
 
+    let actual = cmd.Execute(ratings)
+    Assert.Equal( 
+        ratings, 
+        actual
+    )
 
-//ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
+[<Fact>]
+let allParametersOptional() =
+    let cmd = new NpgsqlCommand<"
+        SELECT coalesce(@x, 'Empty') AS x
+    ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
+    Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
+    Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
+
 

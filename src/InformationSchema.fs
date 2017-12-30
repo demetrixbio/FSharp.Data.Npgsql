@@ -73,13 +73,42 @@ let npgsqlDbTypeToClrType =
     |> List.choose (fun (_, clr, maybeNpgsqlDbType, _) -> maybeNpgsqlDbType |> Option.map (fun t -> t, clr)) 
     |> dict
 
+open Npgsql.PostgresTypes
+
+type PostgresType with    
+    member this.ToClrType() = 
+        match this with
+        | :? PostgresBaseType as x when postresTypeToClrType.ContainsKey(x.Name) -> 
+            postresTypeToClrType.[x.Name]
+        | :? PostgresEnumType ->
+            typeof<string>
+        | :? PostgresDomainType as x -> 
+            x.BaseType.ToClrType()
+        | :? PostgresTypes.PostgresArrayType as arr ->
+            arr.Element.ToClrType().MakeArrayType()
+        | _ -> 
+            typeof<obj>
+        
+
 type DataType = {
     Name: string
     Schema: string
     ClrType: Type
 }   with    
     member this.FullName = sprintf "%s.%s" this.Schema this.Name
-        
+    member this.IsUserDefinedType = this.Schema <> "pg_catalog"
+    member this.IsFixedLength = this.ClrType.IsValueType
+    member this.UdtTypeName = 
+        if this.ClrType.IsArray 
+        then sprintf "%s.%s" this.Schema (this.Name.TrimStart('_'))
+        else this.FullName
+
+    static member Create(x: PostgresTypes.PostgresType) = 
+        { 
+            Name = x.Name
+            Schema = x.Namespace
+            ClrType = x.ToClrType()
+        }
 
 type Column = {
     Name: string
@@ -90,7 +119,7 @@ type Column = {
     Identity: bool
     DefaultConstraint: string
     Description: string
-    UDT: ProvidedTypeDefinition option
+    UDT: Type option
 }   with
 
     member this.ClrType = this.DataType.ClrType
@@ -107,7 +136,8 @@ type Column = {
         let nullable = defaultArg forceNullability this.Nullable
         match this.UDT with
         | Some t -> 
-            if nullable then ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ t ]) else upcast t
+            let t = if this.DataType.ClrType.IsArray then t.MakeArrayType() else t
+            if nullable then ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ t ]) else t
         | None ->   
             if nullable
             then typedefof<_ option>.MakeGenericType this.ClrType
@@ -122,27 +152,17 @@ type Column = {
             this.ReadOnly
             this.Identity
 
-type TypeInfo = {
-    DbType: DbType
-    ClrType: Type
-}   with
-    member this.IsValueType = this.ClrType.IsValueType
-    member this.IsFixedLength = this.IsValueType
-
 type Parameter = {
     Name: string
     NpgsqlDbType: NpgsqlTypes.NpgsqlDbType
-    ClrType: Type
     Direction: ParameterDirection 
     MaxLength: int
     Precision: byte
     Scale : byte
     Optional: bool
-    DataTypeName: string 
+    DataType: DataType
 }   with
-
-    member this.IsUserDefinedType = not (this.DataTypeName.StartsWith( "pg_catalog."))
-    member this.IsFixedLength = this.ClrType.IsValueType
+   
     member this.Size = this.MaxLength
         //match this.TypeInfo.DbType with
         //| DbType.NChar | SqlDbType.NText | SqlDbType.NVarChar -> this.MaxLength / 2

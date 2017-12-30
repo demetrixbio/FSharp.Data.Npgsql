@@ -62,7 +62,12 @@ type NpgsqlConnection with
                     then Some( c.PostgresType.FullName)
                     else None
                 )
-                |> List.append [ for p in parameters do if p.IsUserDefinedType then yield p.DataTypeName ]
+                |> List.append [ 
+                    for p in parameters do 
+                        if p.DataType.IsUserDefinedType 
+                        then 
+                            yield p.DataType.UdtTypeName 
+                ]
                 |> List.distinct
 
             if enumTypes.IsEmpty
@@ -92,21 +97,22 @@ type NpgsqlConnection with
         cols
         |> List.map ( fun c -> 
             let nullable = not c.AllowDBNull.HasValue || c.AllowDBNull.Value
+            let dataType = DataType.Create(c.PostgresType)
+
             { 
                 Name = c.ColumnName
-                DataType = 
-                    {
-                        Name = c.PostgresType.Name
-                        Schema = c.PostgresType.Namespace
-                        ClrType = c.DataType
-                    }
+                DataType = dataType
                 Nullable = nullable
                 MaxLength = c.ColumnSize.GetValueOrDefault()
                 ReadOnly = c.IsAutoIncrement.GetValueOrDefault() || c.IsReadOnly.GetValueOrDefault()
                 Identity = c.IsIdentity.GetValueOrDefault()
                 DefaultConstraint = c.DefaultValue
                 Description = ""
-                UDT = match customTypes.Value.TryGetValue(c.DataTypeName) with true, x -> Some x | false, _ -> None 
+                UDT = 
+                    match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
+                    | true, x ->
+                        Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
+                    | false, _ -> None 
             } 
         )
        

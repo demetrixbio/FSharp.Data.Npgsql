@@ -38,8 +38,7 @@
     <Compile Include="src\QuotationsFactory.fs" />
     <Compile Include="src\DesignTime.fs" />
     <Compile Include="src\NpgsqlCommandProvider.fs" />
-    <Compile Include="src\NpgsqlProvider.fs" />
-    <Compile Include="src\FileContentProvider.fs" />
+    <Compile Include="src\NpgsqlConnectionProvider.fs" />
     <Compile Include="src\TypeProviderAssembly.fs" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

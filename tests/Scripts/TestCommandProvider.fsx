@@ -112,25 +112,18 @@ do
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
-//do
-//    use cmd = new NpgsqlCommand<"
-//            SELECT * FROM rental WHERE rental_id = @rental_id
-//        ", dvdRental, ResultType.DataTable>(dvdRental)    
-//    let t = cmd.Execute(rental_id = 2)    
-//    assert(1 = t.Rows.Count)
-//    let r = t.Rows.[0]  
-//    let return_date = r.return_date
-//    try
-//        let new_return_date = Some DateTime.Now.Date
-//        r.return_date <- new_return_date
-//        t.Update()
-//    finally
-//        ()
 
-//type GetAllRatings = NpgsqlCommand<"SELECT x::MPAA_RATING FROM (VALUES ('G'), ('PG'), ('PG-13'), ('R'), ('NC-17')) AS t(x)", dvdRental>
+type EchoRatingsArray = NpgsqlCommand<"
+        SELECT @ratings::mpaa_rating[];
+    ", dvdRental, SingleRow = true>
 
-type GetAllRatingsExceptTwo = NpgsqlCommand<"
-      SELECT enum_range(NULL::public.mpaa_rating)
-      INTERSECT
-      SELECT @exclude::public.mpaa_rating[]
-", dvdRental>
+do
+    use cmd = new EchoRatingsArray(dvdRental)
+
+    let ratings = [| 
+        EchoRatingsArray.``public.mpaa_rating``.``PG-13`` 
+        EchoRatingsArray.``public.mpaa_rating``.R 
+    |]
+
+    cmd.Execute(ratings) |> printfn "%A"
+    

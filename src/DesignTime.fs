@@ -45,13 +45,13 @@ type DesignTime private() =
                         then 
                             typeof<QuotationsFactory>
                                 .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
-                                .MakeGenericMethod(param.ClrType)
+                                .MakeGenericMethod(param.DataType.ClrType)
                                 .Invoke(null, [| box expr|])
                                 |> unbox
                         else
                             expr
                     else
-                        let t = param.ClrType
+                        let t = param.DataType.ClrType
 
                         if t.IsArray
                         then Expr.Value(Array.CreateInstance(t.GetElementType(), param.Size))
@@ -79,7 +79,7 @@ type DesignTime private() =
                                 let mi = 
                                     typeof<DesignTime>
                                         .GetMethod("SetRef")
-                                        .MakeGenericMethod( sqlParam.ClrType)
+                                        .MakeGenericMethod( sqlParam.DataType.ClrType)
                                 Expr.Call(mi, [ argExpr; Expr.Var arr; Expr.Value index ]) |> Some
                             else 
                                 None
@@ -307,7 +307,7 @@ type DesignTime private() =
         [
             for p in cmd.Parameters do
                 assert (p.Direction = ParameterDirection.Input)
-                let dataTypeName = p.PostgresType.FullName
+
                 yield { 
                     Name = p.ParameterName
                     NpgsqlDbType = 
@@ -315,27 +315,13 @@ type DesignTime private() =
                         match p.NpgsqlDbType with 
                         | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
                         | as_is -> as_is
-                    ClrType = 
-                        if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Array)
-                        then
-                            let elemTypeName = dataTypeName.Split('.').[1]
-                            let isEnumElement = 
-                                p.NpgsqlDbType &&& (~~~ NpgsqlDbType.Array) = NpgsqlDbType.Text 
-                                && elemTypeName.StartsWith("_")
-
-                            if isEnumElement
-                            then 
-                                typeof<string[]> 
-                            else 
-                                InformationSchema.postresTypeToClrType.[elemTypeName.TrimStart('_')].MakeArrayType()
-                        else
-                            InformationSchema.npgsqlDbTypeToClrType.[p.NpgsqlDbType]
+                    
                     Direction = p.Direction
                     MaxLength = p.Size
                     Precision = p.Precision
                     Scale = p.Scale
                     Optional = allParametersOptional 
-                    DataTypeName = dataTypeName
+                    DataType = DataType.Create(p.PostgresType)
                 }
         ]
 
@@ -347,9 +333,13 @@ type DesignTime private() =
                 let parameterName = p.Name
 
                 let t = 
-                    if not p.IsUserDefinedType
-                    then p.ClrType
-                    else customType.[ p.DataTypeName ] :> Type
+                    if p.DataType.IsUserDefinedType
+                    then
+                        let t = customType.[ p.DataType.UdtTypeName ] 
+                        if p.DataType.ClrType.IsArray 
+                        then t.MakeArrayType()
+                        else upcast t
+                    else p.DataType.ClrType
 
                 if p.Optional 
                 then 

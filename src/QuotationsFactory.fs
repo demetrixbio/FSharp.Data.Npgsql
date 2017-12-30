@@ -28,7 +28,7 @@ type QuotationsFactory private() =
 
         let name = p.Name
         let dbType = p.NpgsqlDbType
-        let isFixedLength = p.IsFixedLength
+        let isFixedLength = p.DataType.IsFixedLength
 
         <@@ 
             let x = NpgsqlParameter(name, dbType, Direction = %%Expr.Value p.Direction)
