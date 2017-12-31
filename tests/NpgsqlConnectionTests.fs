@@ -104,7 +104,7 @@ let dateTableWithUpdate() =
     try
         let new_return_date = Some DateTime.Now.Date
         r.return_date <- new_return_date
-        rowsAffected := t.Update()
+        rowsAffected := t.Update(dvdRental)
         Assert.Equal(1, !rowsAffected)
 
         use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental)
@@ -114,7 +114,7 @@ let dateTableWithUpdate() =
         if !rowsAffected = 1
         then 
             r.return_date <- return_date
-            t.Update() |>  ignore      
+            t.Update(dvdRental) |>  ignore      
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
@@ -173,7 +173,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     let r = t.Rows.[0]
     r.return_date <- r.return_date |> Option.map (fun d -> d.AddDays(1.))
     //Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
-    Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
+    Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
      
     use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, Tx = true>(tran)
     Assert.Equal( 
@@ -237,4 +237,40 @@ let allParametersOptional() =
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
     Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
 
+[<Fact>]
+let tableInsert() =
+    
+    let rental_id = 2
+    
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental)  
+    let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
+        
+    use conn = new NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tran = conn.BeginTransaction()
 
+    use t = new DvdRental.``public``.Tables.rental()
+    let r = 
+        t.NewRow(
+            staff_id = x.staff_id, 
+            customer_id = x.customer_id, 
+            inventory_id = x.inventory_id, 
+            rental_date = x.rental_date.AddDays(1.), 
+            return_date = x.return_date
+        )
+
+    t.Rows.Add(r)
+    Assert.Equal(1, t.Update(transaction = tran))
+    let y = 
+        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, Tx = true>(tran)
+        cmd.Execute(r.rental_id) |> Option.get
+
+    Assert.Equal(x.staff_id, y.staff_id)
+    Assert.Equal(x.customer_id, y.customer_id)
+    Assert.Equal(x.inventory_id, y.inventory_id)
+    Assert.Equal(x.rental_date.AddDays(1.), y.rental_date)
+    Assert.Equal(x.return_date, y.return_date)
+
+    tran.Rollback()
+
+    Assert.Equal(None, cmd.Execute(r.rental_id))

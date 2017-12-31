@@ -245,7 +245,7 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
 
                     <@@ 
                         let selectCommand = new NpgsqlCommand(twoPartTableName, CommandType = CommandType.TableDirect)
-                        let table = new DataTable<DataRow>(selectCommand, connectionString, %%enumTypeColumns)
+                        let table = new DataTable<DataRow>(selectCommand, %%enumTypeColumns)
                         table.TableName <- twoPartTableName
                         table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
                         table

@@ -14,7 +14,7 @@ open System
 [<Literal>]
 let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
-type DvdRental = Npgsql<dvdrental>
+type DvdRental = NpgsqlConnection<dvdrental>
 
 //do  
 //    let rental = DvdRental.``public``.Tables.rental()
@@ -24,7 +24,7 @@ type DvdRental = Npgsql<dvdrental>
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
-type Db = Npgsql<connectionString>
+type Db = NpgsqlConnection<connectionString>
 
 type arc_direction = Db.material.Types.arc_direction
 

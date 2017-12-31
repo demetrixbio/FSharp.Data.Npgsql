@@ -102,7 +102,7 @@ let dateTableWithUpdate() =
     try
         let new_return_date = Some DateTime.Now.Date
         r.return_date <- new_return_date
-        rowsAffected := t.Update()
+        rowsAffected := t.Update(dvdRental)
         Assert.Equal(1, !rowsAffected)
 
         use cmd = GetRentalReturnDateById.Create(dvdRental)
@@ -112,7 +112,7 @@ let dateTableWithUpdate() =
         if !rowsAffected = 1
         then 
             r.return_date <- return_date
-            t.Update() |>  ignore      
+            t.Update(dvdRental) |>  ignore      
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
@@ -133,7 +133,7 @@ let dateTableWithUpdateAndTx() =
 
     let new_return_date = Some DateTime.Now.Date
     r.return_date <- new_return_date
-    Assert.Equal(1, t.Update(connection = conn, transaction = tran))
+    Assert.Equal(1, t.Update(transaction = tran))
 
     Assert.Equal( 
         new_return_date, 
