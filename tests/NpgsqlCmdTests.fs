@@ -84,7 +84,7 @@ let paramInLimit() =
         cmd.Execute(int64 limit) |> Seq.choose id
     )
 
-type GetRentalById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", dvdRental>
+type GetRentalReturnDateById = NpgsqlCommand<"SELECT return_date FROM rental WHERE rental_id = @id", dvdRental>
 
 [<Fact>]
 let dateTableWithUpdate() =
@@ -105,7 +105,7 @@ let dateTableWithUpdate() =
         rowsAffected := t.Update()
         Assert.Equal(1, !rowsAffected)
 
-        use cmd = GetRentalById.Create(dvdRental)
+        use cmd = GetRentalReturnDateById.Create(dvdRental)
         Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
@@ -133,18 +133,19 @@ let dateTableWithUpdateAndTx() =
 
     let new_return_date = Some DateTime.Now.Date
     r.return_date <- new_return_date
-    Assert.Equal(1, t.Update(transaction = tran))
+    Assert.Equal(1, t.Update(connection = conn, transaction = tran))
 
     Assert.Equal( 
         new_return_date, 
-        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne
+        GetRentalReturnDateById.Create(tran).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
     tran.Rollback()
+    conn.Close()
 
     Assert.Equal(
         return_date, 
-        GetRentalById.Create(dvdRental).Execute( rental_id) |> Seq.exactlyOne
+        GetRentalReturnDateById.Create(dvdRental).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
 [<Fact>]
@@ -168,14 +169,14 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 
     Assert.Equal( 
         r.return_date, 
-        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne 
+        GetRentalReturnDateById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne 
     ) 
 
 [<Fact>]
 let deleteWithTx() =
     let rental_id = 2
 
-    use cmd = new GetRentalById(dvdRental)
+    use cmd = new GetRentalReturnDateById(dvdRental)
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
@@ -186,7 +187,7 @@ let deleteWithTx() =
             DELETE FROM rental WHERE rental_id = @rental_id
         ", dvdRental>(tran)  
         Assert.Equal(1, del.Execute(rental_id))
-        Assert.Empty( GetRentalById.Create(tran).Execute( rental_id)) 
+        Assert.Empty( GetRentalReturnDateById.Create(tran).Execute( rental_id)) 
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
@@ -221,7 +222,7 @@ let selectEnumWithArray() =
         EchoRatingsArray.``public.mpaa_rating``.``PG-13`` 
         EchoRatingsArray.``public.mpaa_rating``.R 
     |]
-
+        
     Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
 
 [<Fact>]

@@ -116,117 +116,125 @@ let dateTableWithUpdate() =
             r.return_date <- return_date
             t.Update() |>  ignore      
             
-//[<Fact>]
-//let dateTableWithUpdateAndTx() =
+[<Fact>]
+let dateTableWithUpdateAndTx() =
     
-//    let rental_id = 2
+    let rental_id = 2
     
-//    use conn = new NpgsqlConnection(dvdRental)
-//    conn.Open()
-//    use tran = conn.BeginTransaction()
+    use conn = new NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tran = conn.BeginTransaction()
 
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM rental WHERE rental_id = @rental_id
-//    ", dvdRental, ResultType.DataTable>(tran)    
-//    let t = cmd.Execute(rental_id)
-//    Assert.Equal(1, t.Rows.Count)
-//    let r = t.Rows.[0]
-//    let return_date = r.return_date
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * FROM rental WHERE rental_id = @rental_id
+        ", ResultType.DataTable, Tx = true>(tran)    
+    let t = cmd.Execute(rental_id)
+    Assert.Equal(1, t.Rows.Count)
+    let r = t.Rows.[0]
+    let return_date = r.return_date
 
-//    let new_return_date = Some DateTime.Now.Date
-//    r.return_date <- new_return_date
-//    Assert.Equal(1, t.Update(transaction = tran))
+    let new_return_date = Some DateTime.Now.Date
+    r.return_date <- new_return_date
+    Assert.Equal(1, t.Update(transaction = tran))
 
-//    Assert.Equal( 
-//        new_return_date, 
-//        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne
-//    ) 
+    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, Tx = true>(tran)
+    Assert.Equal( 
+        new_return_date, 
+        getRentalByIdCmd.Execute( rental_id) |>  Seq.exactlyOne
+    ) 
 
-//    tran.Rollback()
+    tran.Rollback()
 
-//    Assert.Equal(
-//        return_date, 
-//        GetRentalById.Create(dvdRental).Execute( rental_id) |> Seq.exactlyOne
-//    ) 
+    Assert.Equal(
+        return_date, 
+        getRentalByIdCmd.Execute( rental_id) |> Seq.exactlyOne
+    ) 
 
-//[<Fact>]
-//let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
+[<Fact>]
+let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     
-//    let rental_id = 2
+    let rental_id = 2
     
-//    use conn = new NpgsqlConnection(dvdRental)
-//    conn.Open()
-//    use tran = conn.BeginTransaction()
+    use conn = new NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tran = conn.BeginTransaction()
 
-//    use cmd = new NpgsqlCommand<"
-//        SELECT * FROM rental WHERE rental_id = @rental_id
-//    ", dvdRental, ResultType.DataTable>(tran)    
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * FROM rental WHERE rental_id = @rental_id
+        ", ResultType.DataTable, Tx = true>(tran)    
   
-//    let t = cmd.Execute(rental_id)
-//    Assert.Equal(1, t.Rows.Count)
-//    let r = t.Rows.[0]
-//    r.return_date <- Some DateTime.Now.Date
-//    Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
+    let t = cmd.Execute(rental_id)
 
-//    Assert.Equal( 
-//        r.return_date, 
-//        GetRentalById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne 
-//    ) 
+    [ for c in t.Columns ->  c.ColumnName, c.DataType, c.DateTimeMode  ] |> printfn "\nColumns:\n%A"
 
-//[<Fact>]
-//let deleteWithTx() =
-//    let rental_id = 2
+    Assert.Equal(1, t.Rows.Count)
+    let r = t.Rows.[0]
+    r.return_date <- r.return_date |> Option.map (fun d -> d.AddDays(1.))
+    //Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
+    Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
+     
+    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, Tx = true>(tran)
+    Assert.Equal( 
+        r.return_date, 
+        getRentalByIdCmd.Execute( rental_id) |>  Seq.exactlyOne 
+    ) 
 
-//    use cmd = new GetRentalById(dvdRental)
-//    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
+[<Fact>]
+let deleteWithTx() =
+    let rental_id = 2
 
-//    do 
-//        use conn = new NpgsqlConnection(dvdRental)
-//        conn.Open()
-//        use tran = conn.BeginTransaction()
+    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental)
+    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
-//        use del = new NpgsqlCommand<"
-//            DELETE FROM rental WHERE rental_id = @rental_id
-//        ", dvdRental>(tran)  
-//        Assert.Equal(1, del.Execute(rental_id))
-//        Assert.Empty( GetRentalById.Create(tran).Execute( rental_id)) 
+    do 
+        use conn = new NpgsqlConnection(dvdRental)
+        conn.Open()
+        use tran = conn.BeginTransaction()
+
+        use del = 
+            DvdRental.CreateCommand<"
+                DELETE FROM rental WHERE rental_id = @rental_id
+            ", Tx = true>(tran)  
+        Assert.Equal(1, del.Execute(rental_id))
+        Assert.Empty( DvdRental.CreateCommand<getRentalById, Tx = true>(tran).Execute( rental_id)) 
 
 
-//    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
+    Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
     
-//type GetAllRatings = NpgsqlCommand<"
-//    SELECT * 
-//    FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
-//    WHERE X <> @exclude;  
-//", dvdRental>
+type Rating = DvdRental.``public``.Types.mpaa_rating
 
-//type Rating = GetAllRatings.``public.mpaa_rating``
-
-//[<Fact>]
-//let selectEnum() =
-//    use cmd = new GetAllRatings(dvdRental)
-//    Assert.Equal<_ list>(
-//        [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
-//        [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
-//    ) 
+[<Fact>]
+let selectEnum() =
+    use cmd = 
+        DvdRental.CreateCommand<"
+            SELECT * 
+            FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
+            WHERE X <> @exclude;          
+        ">(dvdRental)
+    Assert.Equal<_ list>(
+        [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
+        [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
+    ) 
 
 ////ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
 
+[<Fact>]
+let selectEnumWithArray() =
+    use cmd = DvdRental.CreateCommand<"
+        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
+    ", SingleRow = true>(dvdRental)
 
-//[<Fact>]
-//let selectEnumWithArray() =
-//    use cmd = new NpgsqlCommand<"
-//        SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-//    ", dvdRental, SingleRow = true>(dvdRental)
+    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
 
-//    Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
-
-//[<Fact>]
-//let allParametersOptional() =
-//    let cmd = new NpgsqlCommand<"
-//        SELECT coalesce(@x, 'Empty') AS x
-//    ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
-//    Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
-//    Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
+[<Fact>]
+let allParametersOptional() =
+    let cmd = 
+        DvdRental.CreateCommand<"
+            SELECT coalesce(@x, 'Empty') AS x
+        ", AllParametersOptional = true, SingleRow = true>(dvdRental)
+    Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
+    Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
 
 

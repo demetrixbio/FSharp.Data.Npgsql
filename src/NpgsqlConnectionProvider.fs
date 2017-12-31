@@ -33,15 +33,17 @@ let addCreateCommandMethod
         ProvidedStaticParameter("CommandText", typeof<string>) 
         ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
         ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
-        ProvidedStaticParameter("NullableParameters", typeof<bool>, false) 
+        ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
+        ProvidedStaticParameter("Tx", typeof<bool>, false) 
     ]
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename = args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx = 
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
             
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
@@ -120,7 +122,7 @@ let addCreateCommandMethod
                     factoryMethodName = methodName
                 )
             assert (ctorsAndFactories.Length = 4)
-            let impl: ProvidedMethod = downcast ctorsAndFactories.[1] 
+            let impl: ProvidedMethod = downcast ctorsAndFactories.[if tx then 3 else 1] 
             rootType.AddMember impl
             impl
 
