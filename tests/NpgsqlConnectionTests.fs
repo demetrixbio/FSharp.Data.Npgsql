@@ -248,7 +248,6 @@ let tableInsert() =
     use conn = new NpgsqlConnection(dvdRental)
     conn.Open()
     use tran = conn.BeginTransaction()
-
     use t = new DvdRental.``public``.Tables.rental()
     let r = 
         t.NewRow(
