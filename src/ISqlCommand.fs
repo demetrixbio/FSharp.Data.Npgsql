@@ -28,7 +28,7 @@ type DesignTimeConfig = {
     Rank: ResultRank
     Row2ItemMapping: (obj[] -> obj)
     SeqItemTypeName: string
-    ExpectedColumns: (string * string)[]
+    ExpectedColumns: DataColumn[]
 }
 
 type internal Connection = Choice<string, NpgsqlTransaction>
@@ -150,18 +150,18 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 
 //Execute/AsyncExecute versions
 
-    static member internal VerifyOutputColumns(cursor: DbDataReader, expected) = 
-        let verificationRequested = Array.length expected > 0
+    static member internal VerifyOutputColumns(cursor: DbDataReader, expectedColumns: DataColumn[]) = 
+        let verificationRequested = Array.length expectedColumns > 0
         if verificationRequested
         then 
-            if  cursor.FieldCount < expected.Length
+            if  cursor.FieldCount < expectedColumns.Length
             then 
-                let message = sprintf "Expected at least %i columns in result set but received only %i." expected.Length cursor.FieldCount
+                let message = sprintf "Expected at least %i columns in result set but received only %i." expectedColumns.Length cursor.FieldCount
                 cursor.Close()
                 invalidOp message
 
-            for i = 0 to expected.Length - 1 do
-                let expectedName, expectedType = fst expected.[i], Type.GetType( snd expected.[i], throwOnError = true)
+            for i = 0 to expectedColumns.Length - 1 do
+                let expectedName, expectedType = expectedColumns.[i].ColumnName, expectedColumns.[i].DataType
                 let actualName, actualType = cursor.GetName( i), cursor.GetFieldType( i)
                 if actualName <> expectedName || actualType <> expectedType
                 then 
@@ -169,49 +169,43 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
                     cursor.Close()
                     invalidOp message
 
-    static member internal ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
+    static member internal ExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         let cursor = cmd.ExecuteReader( getReaderBehavior())
-        ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedDataReaderColumns)
+        ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedColumns)
         cursor
 
-    static member internal AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
+    static member internal AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
             let! cursor = cmd.ExecuteReaderAsync( getReaderBehavior(): CommandBehavior) |> Async.AwaitTask
-            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedDataReaderColumns)
+            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedColumns)
             return cursor
         }
     
-    static member internal ExecuteDataTable(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
-        use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) 
+    static member internal ExecuteDataTable(cmd, getReaderBehavior, parameters, expectedColumns) = 
+        use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) 
         let result = new FSharp.Data.DataTable<DataRow>(cmd)
-        for c in cursor.GetColumnSchema() do
-            let x = result.Columns.Add( c.ColumnName, c.DataType)
-            x.AllowDBNull <- c.AllowDBNull.GetValueOrDefault(true)
-            if c.DataTypeName = "timestamptz" && c.DataType = typeof<DateTime>
-            then 
-                x.DateTimeMode <- Data.DataSetDateTime.Local
-
+        result.Columns.AddRange(expectedColumns)
         result.Load(cursor)
         result
 
-    static member internal AsyncExecuteDataTable(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
+    static member internal AsyncExecuteDataTable(cmd, getReaderBehavior, parameters, expectedColumns) = 
         async {
-            use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) 
+            use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) 
             let result = new FSharp.Data.DataTable<DataRow>(cmd)
             result.Load(reader)
             return result
         }
 
-    static member internal ExecuteSeq<'TItem> (rank, rowMapper) = fun(cmd: NpgsqlCommand, getReaderBehavior, parameters, expectedDataReaderColumns) -> 
+    static member internal ExecuteSeq<'TItem> (rank, rowMapper) = fun(cmd: NpgsqlCommand, getReaderBehavior, parameters, expectedColumns) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
         then 
             let xs = Seq.delay <| fun() -> 
                 ``ISqlCommand Implementation``
-                    .ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns)
+                    .ExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns)
                     .MapRowValues<'TItem>( rowMapper)
 
             if rank = ResultRank.SingleRow 
@@ -226,7 +220,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         else
             let resultset = 
                 ``ISqlCommand Implementation``
-                    .ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns)
+                    .ExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns)
                     .MapRowValues<'TItem>( rowMapper)
                     |> Seq.toList
 

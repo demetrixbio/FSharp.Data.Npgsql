@@ -156,7 +156,7 @@ type Column = {
         let columnName = this.Name
         let typeName = this.ClrType.FullName
         let allowDBNull = this.Nullable || this.HasDefaultConstraint
-        let localDateTimeMode = this.DataType.Name = "timestamptz" 
+        let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
 
         <@@ 
             let x = new DataColumn( columnName, Type.GetType( typeName, throwOnError = true))

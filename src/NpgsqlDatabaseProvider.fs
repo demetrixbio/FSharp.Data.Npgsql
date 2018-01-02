@@ -95,7 +95,7 @@ let addCreateCommandMethod
             let designTimeConfig = 
                 let expectedColumns = 
                     if verifyOutputAtRuntime 
-                    then [ for c in outputColumns -> Expr.NewTuple [ Expr.Value c.Name; Expr.Value c.ClrType.FullName ]]
+                    then [ for c in outputColumns -> c.ToDataColumnExpr() ]
                     else []
 
                 <@@ {
@@ -106,7 +106,7 @@ let addCreateCommandMethod
                     Rank = rank
                     Row2ItemMapping = %%returnType.Row2ItemMapping
                     SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%Expr.NewArray(typeof<string * string>, expectedColumns)
+                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, expectedColumns)
                 } @@>
 
 
