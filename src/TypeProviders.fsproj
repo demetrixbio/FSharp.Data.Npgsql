@@ -27,8 +27,11 @@
     <StartArguments>..\..\..\Tests.sln</StartArguments>
     <StartAction>Program</StartAction>
     <StartProgram>C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\IDE\devenv.exe</StartProgram>
-    <OtherFlags>--warnon:1182</OtherFlags>
+    <OtherFlags>
+    </OtherFlags>
     <NoWarn>101</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>1182</WarningsAsErrors>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>

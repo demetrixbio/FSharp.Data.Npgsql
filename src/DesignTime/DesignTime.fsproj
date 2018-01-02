@@ -3,7 +3,32 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
+    <DefineConstants>NO_GENERATIVE</DefineConstants>
+    <DefineConstants>IS_DESIGNTIME</DefineConstants>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <NoWarn>101</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>1182</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Runtime\DataTable.fs">
+      <Link>DataTable.fs</Link>
+    </Compile>
+    <Compile Include="..\Runtime\ISqlCommand.fs">
+      <Link>ISqlCommand.fs</Link>
+    </Compile>
+    <Compile Include="ProvidedTypes.fsi" />
+    <Compile Include="ProvidedTypes.fs" />
+    <Compile Include="InformationSchema.fs" />
+    <Compile Include="QuotationsFactory.fs" />
+    <Compile Include="NpgsqlCommandProvider.fs" />
+    <Compile Include="NpgsqlDatabaseProvider.fs" />
+    <Compile Include="TypeProviderAssembly.fs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\npgsql\src\Npgsql\Npgsql.csproj" />

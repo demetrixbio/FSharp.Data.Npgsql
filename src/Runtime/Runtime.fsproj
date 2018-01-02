@@ -1,12 +1,37 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<Project>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>1182</WarningsAsErrors>
+    <NoWarn>101</NoWarn>
+  </PropertyGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+
+  <ItemGroup>
+    <Compile Include="DesignTime.fs" />
+    <Compile Include="DataTable.fs" />
+    <Compile Include="ISqlCommand.fs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="3.2.6" />
   </ItemGroup>
+
+  <Target Name="BeforeBuild">
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
+  </Target>
+  
+  <Target Name="AfterBuild">
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\netstandard2.0\*.dll">
+      <Output TaskParameter="Include" ItemName="DesignTimeBinaries" />
+    </CreateItem>
+    <Copy SourceFiles="@(DesignTimeBinaries)" DestinationFolder="$(OutputPath)" />
+  </Target>
+
 
 </Project>
