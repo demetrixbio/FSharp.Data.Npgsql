@@ -13,14 +13,6 @@ type ISqlCommand =
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
 
-module Seq = 
-
-    let internal toOption source =  
-        match source |> Seq.truncate 2 |> Seq.toArray with
-        | [||] -> None
-        | [| x |] -> Some x
-        | _ -> invalidArg "source" "The input sequence contains more than one element."
-
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 [<RequireQualifiedAccess>]
 type ResultRank = 
@@ -76,6 +68,13 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
             behaviour <- behaviour ||| CommandBehavior.KeyInfo 
 
         behaviour
+
+    static let seqToOption source =  
+        match source |> Seq.truncate 2 |> Seq.toArray with
+        | [||] -> None
+        | [| x |] -> Some x
+        | _ -> invalidArg "source" "The input sequence contains more than one element."
+
 
     let execute, asyncExecute = 
         match cfg.ResultType with
@@ -203,7 +202,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 
             if rank = ResultRank.SingleRow 
             then 
-                xs |> Seq.toOption |> box
+                xs |> seqToOption |> box
             elif rank = ResultRank.ScalarValue 
             then 
                 xs |> Seq.exactlyOne |> box
@@ -239,7 +238,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         then
             async {
                 let! xs = xs 
-                return xs |> Seq.toOption
+                return xs |> seqToOption
             }
             |> box
         elif rank = ResultRank.ScalarValue 
@@ -255,21 +254,33 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 
     static member internal ExecuteNonQuery manageConnection (cmd, _, parameters, _) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
-        use openedConnection = cmd.Connection.UseLocally(manageConnection )
-        let recordsAffected = cmd.ExecuteNonQuery() 
-        for i = 0 to parameters.Length - 1 do
-            let name, _ = parameters.[i]
-            let p = cmd.Parameters.[name]
-            if p.Direction.HasFlag( ParameterDirection.Output)
-            then 
-                parameters.[i] <- name, p.Value
-        recordsAffected
+        try
+            if manageConnection 
+            then cmd.Connection.Open()
+
+            let recordsAffected = cmd.ExecuteNonQuery() 
+            for i = 0 to parameters.Length - 1 do
+                let name, _ = parameters.[i]
+                let p = cmd.Parameters.[name]
+                if p.Direction.HasFlag( ParameterDirection.Output)
+                then 
+                    parameters.[i] <- name, p.Value
+            recordsAffected
+        finally
+            if manageConnection 
+            then cmd.Connection.Close()
 
     static member internal AsyncExecuteNonQuery manageConnection (cmd, _, parameters, _) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         async {         
-            use _ = cmd.Connection.UseLocally(manageConnection )
-            return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            try 
+                if manageConnection 
+                then 
+                    do! cmd.Connection.OpenAsync() |> Async.AwaitTask
+                return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
+            finally
+                if manageConnection 
+                then cmd.Connection.Close()
         }
 
 
