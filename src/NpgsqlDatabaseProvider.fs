@@ -1,4 +1,4 @@
-﻿module internal FSharp.Data.NpgsqlConnectionProvider
+﻿module internal FSharp.Data.NpgsqlDatabaseProvider
 
 open System
 open System.Data
@@ -446,7 +446,7 @@ let createRootType( assembly, nameSpace: string, typeName, connection) =
 
 let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
-    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
+    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlDatabase", Some typeof<obj>, hideObjectMethods = true)
 
     do 
         providerType.DefineStaticParameters(

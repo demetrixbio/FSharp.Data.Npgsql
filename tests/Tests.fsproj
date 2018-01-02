@@ -8,7 +8,7 @@
   
   <ItemGroup>
     <Compile Include="NpgsqlCmdTests.fs" />
-    <Compile Include="NpgsqlConnectionTests.fs" />
+    <Compile Include="NpgsqlDatabaseTests.fs" />
     <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netstandard2.0' OR '$(TargetFramework)' == 'netcoreapp2.0' " />
   </ItemGroup>
 
