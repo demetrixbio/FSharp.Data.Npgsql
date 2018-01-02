@@ -121,7 +121,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <param name='Connection'>String used to open a PostgreSQL database or the name of the connection string in the configuration file.</param>
 <param name='ResultType'>A value that defines structure of result: Records, Tuples, DataTable or DataReader.</param>
 <param name='SingleRow'>If set the query is expected to return a single row of the result set. See MSDN documentation for details on CommandBehavior.SingleRow.</param>
-<param name='NullableParameters'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
+<param name='AllParametersOptional'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
 """
 
     providerType

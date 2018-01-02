@@ -150,7 +150,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 
 //Execute/AsyncExecute versions
 
-    static member internal VerifyOutputColumns(cursor: DbDataReader, expectedColumns: DataColumn[]) = 
+    static member internal VerifyOutputColumns(cursor: NpgsqlDataReader, expectedColumns: DataColumn[]) = 
         let verificationRequested = Array.length expectedColumns > 0
         if verificationRequested
         then 
@@ -163,9 +163,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
             for i = 0 to expectedColumns.Length - 1 do
                 let expectedName, expectedType = expectedColumns.[i].ColumnName, expectedColumns.[i].DataType
                 let actualName, actualType = cursor.GetName( i), cursor.GetFieldType( i)
-                if actualName <> expectedName || actualType <> expectedType
+                let maybeEnum = 
+                    (expectedType = typeof<string> && actualType = typeof<obj>)
+                    || (expectedType = typeof<string[]> && actualType = typeof<Array>)
+                let typeless = expectedType = typeof<obj> && actualType = typeof<string>
+                if (expectedName <> "" && actualName <> expectedName) 
+                    || (actualType <> expectedType && not maybeEnum && not typeless)
                 then 
-                    let message = sprintf """Expected column [%s] of type "%A" at position %i (0-based indexing) but received column [%s] of type "%A".""" expectedName expectedType i actualName actualType
+                    let message = sprintf """Expected column "%s" of type "%A" at position %i (0-based indexing) but received column "%s" of type "%A".""" expectedName expectedType i actualName actualType
                     cursor.Close()
                     invalidOp message
 
@@ -179,7 +184,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
             let! cursor = cmd.ExecuteReaderAsync( getReaderBehavior(): CommandBehavior) |> Async.AwaitTask
-            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedColumns)
+            ``ISqlCommand Implementation``.VerifyOutputColumns(downcast cursor, expectedColumns)
             return cursor
         }
     
@@ -283,8 +288,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         async {         
             try 
                 if manageConnection 
-                then 
-                    do! cmd.Connection.OpenAsync() |> Async.AwaitTask
+                then do! cmd.Connection.OpenAsync() |> Async.AwaitTask
                 return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
             finally
                 if manageConnection 
