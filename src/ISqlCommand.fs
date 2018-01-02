@@ -150,7 +150,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 
 //Execute/AsyncExecute versions
 
-    static member internal VerifyResultsetColumns(cursor: DbDataReader, expected) = 
+    static member internal VerifyOutputColumns(cursor: DbDataReader, expected) = 
         let verificationRequested = Array.length expected > 0
         if verificationRequested
         then 
@@ -172,14 +172,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
     static member internal ExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         let cursor = cmd.ExecuteReader( getReaderBehavior())
-        ``ISqlCommand Implementation``.VerifyResultsetColumns(cursor, expectedDataReaderColumns)
+        ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedDataReaderColumns)
         cursor
 
     static member internal AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedDataReaderColumns) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
             let! cursor = cmd.ExecuteReaderAsync( getReaderBehavior(): CommandBehavior) |> Async.AwaitTask
-            ``ISqlCommand Implementation``.VerifyResultsetColumns(cursor, expectedDataReaderColumns)
+            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedDataReaderColumns)
             return cursor
         }
     

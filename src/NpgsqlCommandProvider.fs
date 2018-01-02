@@ -11,7 +11,7 @@ open Npgsql
 open System.Collections.Concurrent
 open FSharp.Data.InformationSchema
 
-let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, allParametersOptional) = 
+let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, allParametersOptional, verifyOutputAtRuntime) = 
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then 
@@ -52,10 +52,10 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     do  //ctors
         let designTimeConfig = 
             let expectedColumns = 
-                Expr.NewArray(
-                    typeof<string * string>, 
-                    [ for c in outputColumns -> Expr.NewTuple [ Expr.Value c.Name; Expr.Value c.ClrType.FullName ] ]
-                )
+                if verifyOutputAtRuntime 
+                then [ for c in outputColumns -> Expr.NewTuple [ Expr.Value c.Name; Expr.Value c.ClrType.FullName ]]
+                else []
+                
 
             <@@ {
                 SqlStatement = sqlStatement
@@ -65,7 +65,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
                 Rank = rank
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%expectedColumns
+                ExpectedColumns = %%Expr.NewArray(typeof<string * string>, expectedColumns)
             } @@>
 
         do
@@ -104,12 +104,13 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
+            ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
         ],             
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
                 typeName, 
                 fun _ -> 
-                    createRootType(assembly, nameSpace, typeName, args.[0] :?> _, args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _)
+                    createRootType(assembly, nameSpace, typeName, args.[0] :?> _, args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _)
             )
         ) 
     )

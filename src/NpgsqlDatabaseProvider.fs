@@ -7,12 +7,10 @@ open System.Reflection
 open System.Collections.Concurrent
 open System.Collections.Generic
 
-open Microsoft.FSharp.Quotations
+open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 
 open Npgsql
-open Npgsql.TypeMapping
-open NpgsqlTypes
 
 open InformationSchema
 open FSharp.Data
@@ -35,14 +33,15 @@ let addCreateCommandMethod
         ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
         ProvidedStaticParameter("Tx", typeof<bool>, false) 
+        ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
     ]
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx = 
-                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx, verifyOutputAtRuntime  = 
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
             
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
@@ -94,11 +93,10 @@ let addCreateCommandMethod
                 returnType.Single |> cmdProvidedType.AddMember
 
             let designTimeConfig = 
-                let expectedDataReaderColumns = 
-                    Expr.NewArray(
-                        typeof<string * string>, 
-                        [ for c in outputColumns -> Expr.NewTuple [ Expr.Value c.Name; Expr.Value c.ClrType.FullName ] ]
-                    )
+                let expectedColumns = 
+                    if verifyOutputAtRuntime 
+                    then [ for c in outputColumns -> Expr.NewTuple [ Expr.Value c.Name; Expr.Value c.ClrType.FullName ]]
+                    else []
 
                 <@@ {
                     SqlStatement = sqlStatement
@@ -108,7 +106,7 @@ let addCreateCommandMethod
                     Rank = rank
                     Row2ItemMapping = %%returnType.Row2ItemMapping
                     SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%expectedDataReaderColumns
+                    ExpectedColumns = %%Expr.NewArray(typeof<string * string>, expectedColumns)
                 } @@>
 
 
@@ -214,29 +212,7 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
             do //ctor
                 let invokeCode _ = 
 
-                    let columnExprs = [
-                        for c in columns ->
-                            let columnName = c.Name
-                            let typeName = c.ClrType.FullName
-                            let allowDBNull = c.Nullable || c.HasDefaultConstraint
-                            let localDateTimeMode = c.DataType.Name = "timestamptz" 
-
-                            <@@ 
-                                let x = new DataColumn(columnName, Type.GetType( typeName, throwOnError = true))
-                                x.AllowDBNull <- %%Expr.Value(allowDBNull)
-                                if x.DataType = typeof<string>
-                                then 
-                                    x.MaxLength <- %%Expr.Value(c.MaxLength)
-                                x.ReadOnly <- %%Expr.Value(c.ReadOnly)
-                                x.AutoIncrement <- %%Expr.Value(c.Identity)
-
-                                if localDateTimeMode
-                                then 
-                                    x.DateTimeMode <- DataSetDateTime.Local
-
-                                x
-                            @@>
-                    ]
+                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
 
                     let enumTypeColumns = 
                         Expr.NewArray( typeof<string>, columns |> List.choose(fun c -> c.UDT |> Option.map (fun _ -> Expr.Value c.Name)))

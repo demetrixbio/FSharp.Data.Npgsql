@@ -2,10 +2,15 @@
 
 open System.Data
 open System
+open System.Collections.Generic
+
+open FSharp.Quotations
+
 open NpgsqlTypes
 open Npgsql
+open Npgsql.PostgresTypes
+
 open ProviderImplementation.ProvidedTypes
-open System.Collections.Generic
 
 type internal NpgsqlDataReader with
 
@@ -80,9 +85,6 @@ let npgsqlDbTypeToClrType =
     |> List.choose (fun (_, clr, maybeNpgsqlDbType, _) -> maybeNpgsqlDbType |> Option.map (fun t -> t, clr)) 
     |> dict
 
-open Npgsql.PostgresTypes
-open System.Collections
-
 type PostgresType with    
     member this.ToClrType() = 
         match this with
@@ -97,7 +99,6 @@ type PostgresType with
         | _ -> 
             typeof<obj>
         
-
 type DataType = {
     Name: string
     Schema: string
@@ -150,6 +151,28 @@ type Column = {
             if nullable
             then typedefof<_ option>.MakeGenericType this.ClrType
             else this.ClrType
+
+    member this.ToDataColumnExpr() =
+        let columnName = this.Name
+        let typeName = this.ClrType.FullName
+        let allowDBNull = this.Nullable || this.HasDefaultConstraint
+        let localDateTimeMode = this.DataType.Name = "timestamptz" 
+
+        <@@ 
+            let x = new DataColumn( columnName, Type.GetType( typeName, throwOnError = true))
+            x.AllowDBNull <- allowDBNull
+            if x.DataType = typeof<string>
+            then 
+                x.MaxLength <- %%Expr.Value(this.MaxLength)
+            x.ReadOnly <- %%Expr.Value(this.ReadOnly)
+            x.AutoIncrement <- %%Expr.Value(this.Identity)
+
+            if localDateTimeMode
+            then 
+                x.DateTimeMode <- DataSetDateTime.Local
+
+            x
+        @@>
     
     override this.ToString() = 
         sprintf "%s\t%s\t%b\t%i\t%b\t%b" 
