@@ -11,21 +11,3 @@ type ResultType =
 ///<summary>raw DataReader</summary>
     | DataReader = 3
 
-//namespace FSharp.Data.DesignTime
-
-namespace FSharp.Data.Runtime
-//this is mess. Clean up later.
-type Configuration = {
-    ResultsetRuntimeVerification: bool
-}   
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-[<AutoOpen>]
-module Configuration = 
-    let private guard = obj()
-    let private current = ref { Configuration.ResultsetRuntimeVerification = false }
-
-    type Configuration with
-        static member Current 
-            with get() = lock guard <| fun() -> !current
-            and set value = lock guard <| fun() -> current := value

@@ -4,7 +4,6 @@ open System
 open System.Data
 open Npgsql
 open System.Reflection
-open FSharp.Data.Runtime
 open System.Data.Common
 
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
@@ -152,9 +151,10 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
 //Execute/AsyncExecute versions
 
     static member internal VerifyResultsetColumns(cursor: DbDataReader, expected) = 
-        if Configuration.Current.ResultsetRuntimeVerification
+        let verificationRequested = Array.length expected > 0
+        if verificationRequested
         then 
-            if cursor.FieldCount < Array.length expected
+            if  cursor.FieldCount < expected.Length
             then 
                 let message = sprintf "Expected at least %i columns in result set but received only %i." expected.Length cursor.FieldCount
                 cursor.Close()

@@ -78,8 +78,6 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?enumTypeCol
             member __.RemoveAt index = rows.RemoveAt(index)
     }
 
-    //member __.NewRow(): 'T = downcast base.NewRow()
-
     member this.Update(transaction, ?batchSize, ?continueUpdateOnError, ?conflictOption) = 
         update(transaction, transaction.Connection, batchSize, continueUpdateOnError, conflictOption)
 
