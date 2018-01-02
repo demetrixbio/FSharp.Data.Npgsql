@@ -29,7 +29,6 @@
     <Compile Include="src\ProvidedTypes.fsi" />
     <Compile Include="src\ProvidedTypes.fsi" />
     <Compile Include="src\ProvidedTypes.fs" />
-    <Compile Include="src\Configuration.fs" />
     <Compile Include="src\InformationSchema.fs" />
     <Compile Include="src\DataTable.fs" />
     <Compile Include="src\ISqlCommand.fs" />

@@ -62,7 +62,6 @@
     <None Include="Scripts\NpgsqlCustomEnums.fsx" />
     <Compile Include="ProvidedTypes.fsi" />
     <Compile Include="ProvidedTypes.fs" />
-    <Compile Include="Configuration.fs" />
     <Compile Include="InformationSchema.fs" />
     <Compile Include="DataTable.fs" />
     <Compile Include="ISqlCommand.fs" />
