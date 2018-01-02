@@ -7,7 +7,7 @@ open Npgsql
 
 [<Sealed>]
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
-type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?enumTypeColumns: string[]) as this = 
+type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand) as this = 
     inherit DataTable() 
 
     let update (tx, conn, batchSize, continueUpdateOnError, conflictOption)  = 
@@ -21,14 +21,6 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand, ?enumTypeCol
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
 
-            //enumTypeColumns |> Option.iter (fun enumColumns -> 
-            //    let ps: NpgsqlParameterCollection = downcast args.Command.Parameters 
-            //    for p in ps do 
-            //        if Array.contains p.SourceColumn enumColumns
-            //        then 
-            //            p.NpgsqlDbType <- NpgsqlTypes.NpgsqlDbType.Unknown
-            //)
-                    
             if  args.Errors = null 
                 && args.StatementType = Data.StatementType.Insert 
                 && defaultArg batchSize dataAdapter.UpdateBatchSize = 1

@@ -5,7 +5,7 @@ open System.Data
 open System.Reflection
 open Npgsql
 
-open Microsoft.FSharp.Quotations
+open FSharp.Quotations
 
 open ProviderImplementation.ProvidedTypes
 
@@ -287,13 +287,9 @@ type QuotationsFactory private() =
       
         let columnsType = ProvidedTypeDefinition("Columns", Some typeof<DataColumnCollection>)
 
-        let getterCode args =
-            <@@
-                let table : DataTable<DataRow> = %% List.head args
-                table.Columns
-            @@>
+        let columnsProperty = 
+            ProvidedProperty("Columns", columnsType, getterCode = fun args -> <@@ (%%args.Head: DataTable<DataRow>).Columns @@>)
 
-        let columnsProperty = ProvidedProperty("Columns", columnsType, getterCode)
         tableProvidedType.AddMember columnsType
 
         tableProvidedType.AddMember columnsProperty
@@ -301,33 +297,16 @@ type QuotationsFactory private() =
         for column in outputColumns do
             let propertyType = ProvidedTypeDefinition(column.Name, Some typeof<DataColumn>)
 
-            let getterCode args =
+            let property = 
                 let columnName = column.Name
-                <@@ 
-                    let columns: DataColumnCollection = %% List.head args
-                    columns.[columnName]
-                @@>
-
-            let property = ProvidedProperty(column.Name, propertyType, getterCode)
+                ProvidedProperty(
+                    column.Name, 
+                    propertyType, 
+                    getterCode = fun args -> <@@ (%%args.Head: DataColumnCollection).[columnName] @@>
+                )
             
             columnsType.AddMember property
             columnsType.AddMember propertyType
-
-
-        let tableProperty =
-            ProvidedProperty(
-                "Table"
-                , tableProvidedType
-                , getterCode = 
-                    fun args ->
-                        <@@
-                            let row : DataRow = %%args.[0]
-                            let table = row.Table
-                            table
-                        @@>
-            )
-
-        dataRowType.AddMember tableProperty
 
         tableProvidedType
 

@@ -214,12 +214,9 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
 
                     let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
 
-                    let enumTypeColumns = 
-                        Expr.NewArray( typeof<string>, columns |> List.choose(fun c -> c.UDT |> Option.map (fun _ -> Expr.Value c.Name)))
-
                     <@@ 
                         let selectCommand = new NpgsqlCommand(twoPartTableName, CommandType = CommandType.TableDirect)
-                        let table = new DataTable<DataRow>(selectCommand, %%enumTypeColumns)
+                        let table = new DataTable<DataRow>(selectCommand)
                         table.TableName <- twoPartTableName
                         table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
                         table
