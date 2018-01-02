@@ -45,30 +45,32 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand) as this =
 
         dataAdapter.Update(this)        
 
-    let rows = base.Rows
+    let typedRows = 
+        let rows = base.Rows 
+        {
+            new IList<'T> with
+                member __.GetEnumerator() = rows.GetEnumerator()
+                member __.GetEnumerator() : IEnumerator<'T> = (Seq.cast<'T> rows).GetEnumerator() 
 
-    member __.Rows : IList<'T> = {
-        new IList<'T> with
-            member __.GetEnumerator() = rows.GetEnumerator()
-            member __.GetEnumerator() : IEnumerator<'T> = (Seq.cast<'T> rows).GetEnumerator() 
+                member __.Count = rows.Count
+                member __.IsReadOnly = rows.IsReadOnly
+                member __.Item 
+                    with get index = downcast rows.[index]
+                    and set index row = 
+                        rows.RemoveAt(index)
+                        rows.InsertAt(row, index)
 
-            member __.Count = rows.Count
-            member __.IsReadOnly = rows.IsReadOnly
-            member __.Item 
-                with get index = downcast rows.[index]
-                and set index row = 
-                    rows.RemoveAt(index)
-                    rows.InsertAt(row, index)
+                member __.Add row = rows.Add row
+                member __.Clear() = rows.Clear()
+                member __.Contains row = rows.Contains row
+                member __.CopyTo(dest, index) = rows.CopyTo(dest, index)
+                member __.IndexOf row = rows.IndexOf row
+                member __.Insert(index, row) = rows.InsertAt(row, index)
+                member __.Remove row = rows.Remove(row); true
+                member __.RemoveAt index = rows.RemoveAt(index)
+        }
 
-            member __.Add row = rows.Add row
-            member __.Clear() = rows.Clear()
-            member __.Contains row = rows.Contains row
-            member __.CopyTo(dest, index) = rows.CopyTo(dest, index)
-            member __.IndexOf row = rows.IndexOf row
-            member __.Insert(index, row) = rows.InsertAt(row, index)
-            member __.Remove row = rows.Remove(row); true
-            member __.RemoveAt index = rows.RemoveAt(index)
-    }
+    member __.Rows : IList<'T> = typedRows
 
     member this.Update(transaction, ?batchSize, ?continueUpdateOnError, ?conflictOption) = 
         update(transaction, transaction.Connection, batchSize, continueUpdateOnError, conflictOption)
