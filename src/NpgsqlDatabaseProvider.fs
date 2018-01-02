@@ -21,8 +21,7 @@ let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
 let addCreateCommandMethod
     (
-        conn: NpgsqlConnection, 
-        designTimeConnectionString, 
+        connectionString, 
         rootType: ProvidedTypeDefinition, 
         commands: ProvidedTypeDefinition, 
         customTypes: IDictionary<string, ProvidedTypeDefinition>, 
@@ -49,13 +48,12 @@ let addCreateCommandMethod
             then 
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-            use __ = conn.UseLocally()
 
-            let parameters = DesignTime.ExtractParameters(conn, sqlStatement, allParametersOptional)
+            let parameters = InformationSchema.extractParameters(connectionString, sqlStatement, allParametersOptional)
 
             let outputColumns = 
                 if resultType <> ResultType.DataReader
-                then conn.GetOutputColumns(sqlStatement, CommandType.Text, parameters, ref customTypes)
+                then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
                 else []
 
             let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
@@ -118,7 +116,7 @@ let addCreateCommandMethod
                 DesignTime.GetCommandCtors(
                     cmdProvidedType, 
                     designTimeConfig, 
-                    designTimeConnectionString,
+                    connectionString,
                     factoryMethodName = methodName
                 )
             assert (ctorsAndFactories.Length = 4)
@@ -130,18 +128,18 @@ let addCreateCommandMethod
     ))
     rootType.AddMember m
 
-let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedType, customTypes: Map<_, ProvidedTypeDefinition list>) = 
+let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes: Map<_, ProvidedTypeDefinition list>) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tagProvidedType tables
     tables.AddMembersDelayed <| fun() ->
-        use __ = conn.UseLocally()
-
-        conn.GetTables(schema)
+        
+        InformationSchema.getTables(connectionString, schema)
         |> List.map (fun (tableName, baseTableName, baseSchemaName, description) -> 
 
             use builder = new NpgsqlCommandBuilder()
             let twoPartTableName = sprintf "%s.%s" (builder.QuoteIdentifier(schema)) (builder.QuoteIdentifier(tableName))
                 
+            use conn = openConnection(connectionString)
             let cmd = conn.CreateCommand()
             cmd.CommandText <- sprintf """
                 SELECT 
@@ -312,7 +310,7 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
                         Debug.Assert(values.Length = optionalParams.Length, "values.Length = optionalParams.Length")
 
                         for name, value, optional in Array.zip3 namesOfUpdateableColumns values optionalParams do 
-                            row.[name] <- if value = null && optional then box DbNull else value
+                            row.[name] <- if value = null && optional then DbNull else value
                         row
                     @@>
 
@@ -343,8 +341,8 @@ let getTableTypes(conn: NpgsqlConnection, schema, connectionString, tagProvidedT
 
     tables
 
-let getEnums(conn: NpgsqlConnection) = 
-    use __ = conn.UseLocally()
+let getEnums connectionString = 
+    use conn = InformationSchema.openConnection(connectionString)
     use cmd = conn.CreateCommand()
     cmd.CommandText <- "
         SELECT
@@ -375,8 +373,8 @@ let getEnums(conn: NpgsqlConnection) =
     )
     |> Map.ofList
     
-let getUserSchemas(conn: NpgsqlConnection) = 
-    use __ = conn.UseLocally()
+let getUserSchemas connectionString = 
+    use conn = InformationSchema.openConnection connectionString
     use cmd = new NpgsqlCommand("
         SELECT n.nspname  
         FROM pg_catalog.pg_namespace n                                       
@@ -389,24 +387,21 @@ let getUserSchemas(conn: NpgsqlConnection) =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, connection) =
-    if String.IsNullOrWhiteSpace connection then invalidArg "Connection" "Value is empty!" 
+let createRootType( assembly, nameSpace: string, typeName, connectionString) =
+    if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
-    let conn = new NpgsqlConnection(connection)
-    use __ = conn.UseLocally()
-
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
     let tagProvidedType(t: ProvidedTypeDefinition) =
-        let p = ProvidedProperty( "Connection", typeof<string>, getterCode = (fun _ -> <@@ connection @@>), isStatic = true)
+        let p = ProvidedProperty( "Connection", typeof<string>, getterCode = (fun _ -> <@@ connectionString @@>), isStatic = true)
         t.AddMember( p)
 
     let schemas = 
-        conn
+        connectionString
         |> getUserSchemas
         |> List.map (fun schema -> ProvidedTypeDefinition(schema, baseType = Some typeof<obj>, hideObjectMethods = true))
         
-    let enums = getEnums(conn) 
+    let enums = getEnums connectionString
 
     databaseRootType.AddMembers schemas
 
@@ -436,11 +431,11 @@ let createRootType( assembly, nameSpace: string, typeName, connection) =
         //    customTypes.Add(sprintf "%s.%s" s.Name t.Name, downcast t)
         
     for schemaType in schemas do
-        schemaType.AddMemberDelayed <| fun() -> getTableTypes(conn, schemaType.Name, connection, tagProvidedType, enums)
+        schemaType.AddMemberDelayed <| fun() -> getTableTypes(connectionString, schemaType.Name, tagProvidedType, enums)
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(conn, connection, databaseRootType, commands, customTypes, connection)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, connectionString)
 
     databaseRootType           
 

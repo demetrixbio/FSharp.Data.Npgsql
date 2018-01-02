@@ -13,6 +13,8 @@ open InformationSchema
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type QuotationsFactory private() = 
     
+    static let dbNull = Expr.Coerce( Expr.Value(DBNull.Value), typeof<obj>)
+
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
         let bodyFactory =   
@@ -41,7 +43,7 @@ type QuotationsFactory private() =
             x
         @@>
 
-    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Extensions.DbNull @@>    
+    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> DbNull @@>    
         
     static member internal MapArrayOptionItemToObj<'T>(arr, index) =
         <@

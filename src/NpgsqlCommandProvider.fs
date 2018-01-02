@@ -20,16 +20,13 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     if String.IsNullOrWhiteSpace( connectionString)
     then invalidArg "ConnectionStringOrName" "Value is empty!" 
 
-    let conn = new NpgsqlConnection(connectionString)
-    use __ = conn.UseLocally()
-
-    let parameters = DesignTime.ExtractParameters(conn, sqlStatement, allParametersOptional)
+    let parameters = InformationSchema.extractParameters(connectionString, sqlStatement, allParametersOptional)
 
     let customTypes = ref( dict [])
 
     let outputColumns = 
         if resultType <> ResultType.DataReader
-        then conn.GetOutputColumns(sqlStatement, CommandType.Text, parameters, customTypes)
+        then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, customTypes)
         else []
 
     let cmdProvidedType = ProvidedTypeDefinition(assembly, nameSpace, typeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)

@@ -5,6 +5,13 @@ open System
 open NpgsqlTypes
 open Npgsql
 open ProviderImplementation.ProvidedTypes
+open System.Collections.Generic
+
+type internal NpgsqlDataReader with
+
+    member this.GetValueOrDefault(name: string, defaultValue) =    
+        let i = this.GetOrdinal(name)
+        if this.IsDBNull( i) then defaultValue else this.GetFieldValue( i)
 
 let typesMapping = 
     [
@@ -74,6 +81,7 @@ let npgsqlDbTypeToClrType =
     |> dict
 
 open Npgsql.PostgresTypes
+open System.Collections
 
 type PostgresType with    
     member this.ToClrType() = 
@@ -168,3 +176,126 @@ type Parameter = {
         //| DbType.NChar | SqlDbType.NText | SqlDbType.NVarChar -> this.MaxLength / 2
         //| _ -> this.MaxLength
 
+let inline openConnection connectionString =  
+    let conn = new NpgsqlConnection(connectionString)
+    conn.Open()
+    conn
+
+let inline asyncOpenConnection connectionString =  
+    async {
+        let conn = new NpgsqlConnection(connectionString)
+        do! conn.OpenAsync() |> Async.AwaitTask
+        return conn
+    }
+
+let extractParameters(connectionString, commandText: string, allParametersOptional) =  
+    use conn = openConnection(connectionString)
+    use cmd = new NpgsqlCommand(commandText, conn)
+    NpgsqlCommandBuilder.DeriveParameters(cmd)
+
+    [
+        for p in cmd.Parameters do
+            assert (p.Direction = ParameterDirection.Input)
+
+            yield { 
+                Name = p.ParameterName
+                NpgsqlDbType = 
+                    //if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum) then NpgsqlDbType.Unknown else p.NpgsqlDbType
+                    match p.NpgsqlDbType with 
+                    | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
+                    | as_is -> as_is
+                    
+                Direction = p.Direction
+                MaxLength = p.Size
+                Precision = p.Precision
+                Scale = p.Scale
+                Optional = allParametersOptional 
+                DataType = DataType.Create(p.PostgresType)
+            }
+    ]
+
+let getOutputColumns(connectionString, commandText, commandType, parameters: Parameter list, customTypes: ref<IDictionary<string, ProvidedTypeDefinition>>): Column list = 
+    use conn = openConnection connectionString
+        
+    use cmd = new NpgsqlCommand(commandText, conn, CommandType = commandType)
+    for p in parameters do
+        cmd.Parameters.Add(p.Name, p.NpgsqlDbType).Value <- DBNull.Value
+        
+    let cols = 
+        use cursor = cmd.ExecuteReader(CommandBehavior.KeyInfo ||| CommandBehavior.SchemaOnly)
+        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+
+    let getEnums() =  
+            
+        let enumTypes = 
+            cols 
+            |> List.choose (fun c -> 
+                if typeof<PostgresTypes.PostgresEnumType> = c.PostgresType.GetType()
+                then Some( c.PostgresType.FullName)
+                else None
+            )
+            |> List.append [ 
+                for p in parameters do 
+                    if p.DataType.IsUserDefinedType 
+                    then 
+                        yield p.DataType.UdtTypeName 
+            ]
+            |> List.distinct
+
+        if enumTypes.IsEmpty
+        then dict []
+        else
+            use getEnums = conn.CreateCommand()
+            getEnums.CommandText <- 
+                enumTypes
+                |> List.map (fun x -> sprintf "enum_range(NULL::%s) AS \"%s\"" x x)
+                |> String.concat ","
+                |> sprintf "SELECT %s"
+
+            [
+                use cursor = getEnums.ExecuteReader()
+                cursor.Read() |> ignore
+                for i = 0 to cursor.FieldCount - 1 do 
+                    let t = new ProvidedTypeDefinition(cursor.GetName(i), Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+                    let values = cursor.GetValue(i) :?> string[]
+                    t.AddMembers [ for value in values -> ProvidedField.Literal(value, t, value) ]
+                    yield t.Name, t 
+            ]
+            |> dict
+
+    if customTypes.Value.Count = 0 
+    then customTypes := getEnums()
+
+    cols
+    |> List.map ( fun c -> 
+        let nullable = not c.AllowDBNull.HasValue || c.AllowDBNull.Value
+        let dataType = DataType.Create(c.PostgresType)
+
+        { 
+            Name = c.ColumnName
+            DataType = dataType
+            Nullable = nullable
+            MaxLength = c.ColumnSize.GetValueOrDefault()
+            ReadOnly = c.IsAutoIncrement.GetValueOrDefault() || c.IsReadOnly.GetValueOrDefault()
+            Identity = c.IsIdentity.GetValueOrDefault()
+            DefaultConstraint = c.DefaultValue
+            Description = ""
+            UDT = 
+                match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
+                | true, x ->
+                    Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
+                | false, _ -> None 
+        } 
+    )
+ 
+
+let getTables(connectionString, schema) = 
+    use conn = openConnection(connectionString)
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- sprintf "SELECT table_name FROM information_schema.tables WHERE table_schema = '%s' AND table_type = 'BASE TABLE'" schema
+    [ 
+        use cursor = cmd.ExecuteReader()
+        while cursor.Read() do
+            let tableName = unbox cursor.[0]
+            yield  tableName, tableName, schema, None
+    ]

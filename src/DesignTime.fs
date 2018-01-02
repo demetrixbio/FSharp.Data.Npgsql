@@ -300,31 +300,6 @@ type DesignTime private() =
                 }               
             }
 
-    static member internal ExtractParameters(connection, commandText: string, allParametersOptional) =  
-        let cmd = new NpgsqlCommand(commandText, connection)
-        NpgsqlCommandBuilder.DeriveParameters(cmd)
-
-        [
-            for p in cmd.Parameters do
-                assert (p.Direction = ParameterDirection.Input)
-
-                yield { 
-                    Name = p.ParameterName
-                    NpgsqlDbType = 
-                        //if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum) then NpgsqlDbType.Unknown else p.NpgsqlDbType
-                        match p.NpgsqlDbType with 
-                        | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
-                        | as_is -> as_is
-                    
-                    Direction = p.Direction
-                    MaxLength = p.Size
-                    Precision = p.Precision
-                    Scale = p.Scale
-                    Optional = allParametersOptional 
-                    DataType = DataType.Create(p.PostgresType)
-                }
-        ]
-
     static member internal GetExecuteArgs(sqlParameters: Parameter list, customType: IDictionary<_, ProvidedTypeDefinition>) = 
         [
             for p in sqlParameters do
