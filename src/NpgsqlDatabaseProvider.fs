@@ -234,7 +234,7 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
                         for c in columns do 
                             if not(c.Identity || c.ReadOnly)
                             then 
-                                let dataType = c.GetProvidedType(forceNullability = c.OptionalForInsert)
+                                let dataType = c.MakeProvidedType(forceNullability = c.OptionalForInsert)
                                 let parameter = 
                                     if c.OptionalForInsert
                                     then ProvidedParameter(c.Name, parameterType = dataType, optionalValue = null)

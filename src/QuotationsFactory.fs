@@ -217,7 +217,7 @@ type QuotationsFactory private() =
 
                 if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
                     
-                let propType = col.GetProvidedType()
+                let propType = col.MakeProvidedType()
 
                 let property = 
                     ProvidedProperty(
@@ -267,7 +267,7 @@ type QuotationsFactory private() =
 
             if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
 
-            let propertyType = col.GetProvidedType()
+            let propertyType = col.MakeProvidedType()
 
             let getter, setter = QuotationsFactory.GetDataRowPropertyGetterAndSetterCode col
 
@@ -353,7 +353,7 @@ type QuotationsFactory private() =
                 then
                     let column0 = outputColumns.Head
                     let erasedTo = column0.ClrTypeConsideringNullability
-                    let provided = column0.GetProvidedType()
+                    let provided = column0.MakeProvidedType()
                     let values = Var("values", typeof<obj[]>)
                     let indexGet = Expr.Call(Expr.Var values, typeof<Array>.GetMethod("GetValue", [| typeof<int> |]), [ Expr.Value 0 ])
                     provided, erasedTo, Expr.Lambda(values,  indexGet) 
@@ -368,8 +368,8 @@ type QuotationsFactory private() =
                 else 
                     let providedType = 
                         match outputColumns with
-                        | [ x ] -> x.GetProvidedType()
-                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.GetProvidedType() |]
+                        | [ x ] -> x.MakeProvidedType()
+                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType() |]
 
                     let erasedToTupleType = 
                         match outputColumns with

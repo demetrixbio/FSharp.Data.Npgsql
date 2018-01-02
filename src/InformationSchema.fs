@@ -141,7 +141,7 @@ type Column = {
     member this.HasDefaultConstraint = this.DefaultConstraint <> ""
     member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint
 
-    member this.GetProvidedType(?forceNullability: bool) = 
+    member this.MakeProvidedType(?forceNullability: bool) = 
         let nullable = defaultArg forceNullability this.Nullable
         match this.UDT with
         | Some t -> 
