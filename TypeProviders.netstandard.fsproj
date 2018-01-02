@@ -31,11 +31,9 @@
     <Compile Include="src\ProvidedTypes.fs" />
     <Compile Include="src\Configuration.fs" />
     <Compile Include="src\InformationSchema.fs" />
-    <Compile Include="src\Quotations.fs" />
     <Compile Include="src\DataTable.fs" />
     <Compile Include="src\ISqlCommand.fs" />
     <Compile Include="src\QuotationsFactory.fs" />
-    <Compile Include="src\DesignTime.fs" />
     <Compile Include="src\NpgsqlCommandProvider.fs" />
     <Compile Include="src\NpgsqlDatabaseProvider.fs" />
     <Compile Include="src\TypeProviderAssembly.fs" />

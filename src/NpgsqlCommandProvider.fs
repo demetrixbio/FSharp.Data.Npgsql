@@ -34,7 +34,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     cmdProvidedType.AddMembers [ for x in customTypes.Value.Values -> x ]
     
     let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
-    let returnType = DesignTime.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters = false)
+    let returnType = QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters = false)
 
     do  
         let p = ProvidedProperty("Connection", typeof<string>, getterCode = (fun _ -> <@@ connectionString @@>), isStatic = true)
@@ -69,7 +69,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
             } @@>
 
         do
-            DesignTime.GetCommandCtors(
+            QuotationsFactory.GetCommandCtors(
                 cmdProvidedType, 
                 designTimeConfig, 
                 connectionString, 
@@ -79,11 +79,11 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
 
     do  //AsyncExecute, Execute, and ToTraceString
 
-        let executeArgs = DesignTime.GetExecuteArgs(parameters, !customTypes)
+        let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, !customTypes)
 
         let hasOutputParameters = false
         let addRedirectToISqlCommandMethod outputType name = 
-            DesignTime.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+            QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
             |> cmdProvidedType.AddMember
 
         addRedirectToISqlCommandMethod returnType.Single "Execute" 

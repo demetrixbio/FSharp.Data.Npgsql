@@ -14,7 +14,7 @@ open System
 [<Literal>]
 let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
-type DvdRental = NpgsqlConnection<dvdrental>
+type DvdRental = NpgsqlDatabase<dvdrental>
 
 //do  
 //    let rental = DvdRental.``public``.Tables.rental()
@@ -24,7 +24,7 @@ type DvdRental = NpgsqlConnection<dvdrental>
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
-type Db = NpgsqlConnection<connectionString>
+type Db = NpgsqlDatabase<connectionString>
 
 type arc_direction = Db.material.Types.arc_direction
 
@@ -33,7 +33,7 @@ do
     t.AddRow(arc_direction.pt, 12, 12)
     let row = t.Rows.[0]
     let dir: arc_direction = row. ``type``
-    t.Update() |> ignore
+    t.Update(connectionString) |> ignore
 
 
 do 
@@ -47,10 +47,10 @@ do
     t.AddRow("biological_process 3",  true, "http://purl.obolibrary.org/obo/go/go-basic.obo", id_user = 1, description = Some "test")
     let r = t.Rows.[0]
     r.ItemArray |> printfn "Values before update: %A"
-    t.Update(conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
+    t.Update(connectionString, conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
     r.ItemArray |> printfn "Values after update: %A"
     r.description <- r.description |>  Option.map (fun x -> x + "tail")
-    t.Update(conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
+    t.Update(connectionString, conflictOption = ConflictOption.CompareAllSearchableValues) |> printfn "Records affected %i"
 
 do 
     let t = new Db.onto.Tables.``namespace``()
@@ -64,7 +64,7 @@ do
     then 
         let r = t.Rows.[0]
         r.name <- r.name + "_test"
-        t.Update(conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
+        t.Update(connectionString, conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
 
 
 do
@@ -86,7 +86,7 @@ do
     let cmd = Db.CreateCommand<"select * from onto.namespace where id = @id", ResultType.DataTable>(connectionString)
     let t = cmd.Execute(id = 20)
     t.Rows.[0].name <- t.Rows.[0].name + "_test"
-    t.Update() |> printfn "Rows affected: %i"
+    t.Update(connectionString) |> printfn "Rows affected: %i"
 
 do
     use cmd = Db.CreateCommand<"select id, name from onto.namespace", ResultType.Tuples >(connectionString)
@@ -101,7 +101,7 @@ type location_type = Db.part.Types.sbol_location_type
 
 let location = new Db.part.Tables.location()
 location.AddRow(coord1 = 17, is_fwd = true, ``type`` = location_type.cut, coord2 = Some 42)
-printfn "Records affected %i" <| location.Update()
+printfn "Records affected %i" <| location.Update(connectionString)
 printfn "New id: %i" location.Rows.[0].id 
 
 

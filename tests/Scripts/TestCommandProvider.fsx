@@ -31,7 +31,7 @@ do
     then 
         let r = t.Rows.[0]
         r.name <- r.name + "_test"
-        t.Update(conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
+        t.Update(connectionString, conflictOption = System.Data.ConflictOption.CompareAllSearchableValues ) |> printfn "Rows affected: %i"
     
 do 
     let cmd = new NpgsqlCommand<"select NULL", connectionString, SingleRow = true>(connectionString)

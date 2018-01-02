@@ -64,11 +64,9 @@
     <Compile Include="ProvidedTypes.fs" />
     <Compile Include="Configuration.fs" />
     <Compile Include="InformationSchema.fs" />
-    <Compile Include="Quotations.fs" />
     <Compile Include="DataTable.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="QuotationsFactory.fs" />
-    <Compile Include="DesignTime.fs" />
     <Compile Include="NpgsqlCommandProvider.fs" />
     <Compile Include="NpgsqlDatabaseProvider.fs" />
     <Compile Include="TypeProviderAssembly.fs" />

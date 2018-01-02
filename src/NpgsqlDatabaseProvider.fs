@@ -59,7 +59,7 @@ let addCreateCommandMethod
             let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
             let returnType = 
                 let hasOutputParameters = false
-                DesignTime.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters)
+                QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters)
 
             let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
             let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
@@ -69,11 +69,11 @@ let addCreateCommandMethod
 
             do  //AsyncExecute, Execute, and ToTraceString
 
-                let executeArgs = DesignTime.GetExecuteArgs(parameters, customTypes)
+                let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
 
                 let addRedirectToISqlCommandMethod outputType name = 
                     let hasOutputParameters = false
-                    DesignTime.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+                    QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
                     |> cmdProvidedType.AddMember
 
                 addRedirectToISqlCommandMethod returnType.Single "Execute" 
@@ -113,7 +113,7 @@ let addCreateCommandMethod
 
 
             let ctorsAndFactories = 
-                DesignTime.GetCommandCtors(
+                QuotationsFactory.GetCommandCtors(
                     cmdProvidedType, 
                     designTimeConfig, 
                     connectionString,
@@ -202,9 +202,9 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
                 
 
             //type data row
-            let dataRowType = DesignTime.GetDataRowType(columns)
+            let dataRowType = QuotationsFactory.GetDataRowType(columns)
             //type data table
-            let dataTableType = DesignTime.GetDataTableType(tableName, dataRowType, columns)
+            let dataTableType = QuotationsFactory.GetDataTableType(tableName, dataRowType, columns)
             tagProvidedType dataTableType
             dataTableType.AddMember dataRowType
         
