@@ -31,9 +31,7 @@
     <Compile Include="src\ProvidedTypes.fs" />
     <Compile Include="src\Configuration.fs" />
     <Compile Include="src\InformationSchema.fs" />
-    <None Include="src\DbCommand.fs" />
     <Compile Include="src\Quotations.fs" />
-    <Compile Include="src\AdoNetExtensions.fs" />
     <Compile Include="src\DataTable.fs" />
     <Compile Include="src\ISqlCommand.fs" />
     <Compile Include="src\QuotationsFactory.fs" />

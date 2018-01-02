@@ -34,6 +34,21 @@ type DesignTimeConfig = {
 
 type internal Connection = Choice<string, NpgsqlTransaction>
 
+[<AutoOpen>]
+[<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
+module Extensions =
+    type internal DbDataReader with
+        member this.MapRowValues<'TItem>( rowMapping) = 
+            seq {
+                use _ = this
+                let values = Array.zeroCreate this.FieldCount
+                while this.Read() do
+                    this.GetValues(values) |> ignore
+                    yield values |> rowMapping |> unbox<'TItem>
+            }
+
+    let DbNull = box DBNull.Value
+
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connection, commandTimeout) = 
 
@@ -74,7 +89,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         | [||] -> None
         | [| x |] -> Some x
         | _ -> invalidArg "source" "The input sequence contains more than one element."
-
 
     let execute, asyncExecute = 
         match cfg.ResultType with

@@ -65,7 +65,6 @@
     <Compile Include="Configuration.fs" />
     <Compile Include="InformationSchema.fs" />
     <Compile Include="Quotations.fs" />
-    <Compile Include="AdoNetExtensions.fs" />
     <Compile Include="DataTable.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="QuotationsFactory.fs" />
