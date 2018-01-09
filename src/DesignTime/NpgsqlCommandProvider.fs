@@ -61,7 +61,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
                 SqlStatement = sqlStatement
                 IsStoredProcedure = false
                 Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
-                ResultType = int resultType
+                ResultType = resultType
                 Rank = rank
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
@@ -93,7 +93,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
 
     cmdProvidedType
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultType) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlCommand", Some typeof<obj>, hideObjectMethods = true)
 
@@ -101,7 +101,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
         parameters = [ 
             ProvidedStaticParameter("CommandText", typeof<string>) 
             ProvidedStaticParameter("Connection", typeof<string>) 
-            ProvidedStaticParameter("ResultType", ResultType.typeHandle, ResultType.Records) 
+            ProvidedStaticParameter("ResultType", resultType, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 

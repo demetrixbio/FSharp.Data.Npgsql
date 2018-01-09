@@ -23,12 +23,12 @@ let addCreateCommandMethod
         rootType: ProvidedTypeDefinition, 
         commands: ProvidedTypeDefinition, 
         customTypes: IDictionary<string, ProvidedTypeDefinition>, 
-        tag
+        resultType
     ) = 
         
     let staticParams = [
         ProvidedStaticParameter("CommandText", typeof<string>) 
-        ProvidedStaticParameter("ResultType", ResultType.typeHandle, ResultType.Records) 
+        ProvidedStaticParameter("ResultType", resultType, ResultType.Records) 
         ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
         ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
@@ -62,9 +62,6 @@ let addCreateCommandMethod
 
             let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
             let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
-
-            do  
-                cmdProvidedType.AddMember( ProvidedProperty( "Connection", typeof<string>, isStatic = true, getterCode = fun _ -> <@@ tag @@>))
 
             do  //AsyncExecute, Execute, and ToTraceString
 
@@ -126,9 +123,8 @@ let addCreateCommandMethod
     ))
     rootType.AddMember m
 
-let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes: Map<_, ProvidedTypeDefinition list>) = 
+let getTableTypes(connectionString: string, schema, customTypes: Map<_, ProvidedTypeDefinition list>) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
-    tagProvidedType tables
     tables.AddMembersDelayed <| fun() ->
         
         InformationSchema.getTables(connectionString, schema)
@@ -203,7 +199,6 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
             let dataRowType = QuotationsFactory.GetDataRowType(columns)
             //type data table
             let dataTableType = QuotationsFactory.GetDataTableType(tableName, dataRowType, columns)
-            tagProvidedType dataTableType
             dataTableType.AddMember dataRowType
         
             do
@@ -360,14 +355,10 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, connectionString) =
+let createRootType( assembly, nameSpace: string, typeName, connectionString, resultType) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
-
-    let tagProvidedType(t: ProvidedTypeDefinition) =
-        let p = ProvidedProperty( "Connection", typeof<string>, getterCode = (fun _ -> <@@ connectionString @@>), isStatic = true)
-        t.AddMember( p)
 
     let schemas = 
         connectionString
@@ -404,15 +395,15 @@ let createRootType( assembly, nameSpace: string, typeName, connectionString) =
         //    customTypes.Add(sprintf "%s.%s" s.Name t.Name, downcast t)
         
     for schemaType in schemas do
-        schemaType.AddMemberDelayed <| fun() -> getTableTypes(connectionString, schemaType.Name, tagProvidedType, enums)
+        schemaType.AddMemberDelayed <| fun() -> getTableTypes(connectionString, schemaType.Name, enums)
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, connectionString)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, resultType)
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultType) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlDatabase", Some typeof<obj>, hideObjectMethods = true)
 
@@ -423,7 +414,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
-                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0])
+                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0], resultType)
                 )
             ) 
         )

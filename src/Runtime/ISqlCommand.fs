@@ -6,6 +6,17 @@ open Npgsql
 open System.Data.Common
 open System.Reflection
 
+///<summary>Enum describing output type</summary>
+type ResultType =
+///<summary>Sequence of custom records with properties matching column names and types</summary>
+    | Records = 0
+///<summary>Sequence of tuples matching column types with the same order</summary>
+    | Tuples = 1
+///<summary>Typed DataTable <see cref='T:FSharp.Data.DataTable`1'/></summary>
+    | DataTable = 2
+///<summary>raw DataReader</summary>
+    | DataReader = 3
+
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type ISqlCommand = 
     
@@ -24,7 +35,7 @@ type DesignTimeConfig = {
     SqlStatement: string
     IsStoredProcedure: bool 
     Parameters: NpgsqlParameter[]
-    ResultType: int
+    ResultType: ResultType
     Rank: ResultRank
     Row2ItemMapping: (obj[] -> obj)
     SeqItemTypeName: string
@@ -77,7 +88,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         then 
             behaviour <- behaviour ||| CommandBehavior.SingleRow 
 
-        if cfg.ResultType = int ResultType.DataTable 
+        if cfg.ResultType = ResultType.DataTable 
         then 
             behaviour <- behaviour ||| CommandBehavior.KeyInfo 
 
@@ -90,16 +101,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
         | _ -> invalidArg "source" "The input sequence contains more than one element."
 
     let execute, asyncExecute = 
-        if cfg.ResultType = int ResultType.DataReader
-        then 
+        match cfg.ResultType with
+        | ResultType.DataReader -> 
             ``ISqlCommand Implementation``.ExecuteReader >> box, 
             ``ISqlCommand Implementation``.AsyncExecuteReader >> box
-        elif cfg.ResultType = int ResultType.DataTable 
-        then 
+        | ResultType.DataTable ->
             ``ISqlCommand Implementation``.ExecuteDataTable >> box, 
             ``ISqlCommand Implementation``.AsyncExecuteDataTable >> box
-        elif cfg.ResultType = int ResultType.Records || cfg.ResultType = int ResultType.Tuples 
-        then
+        | ResultType.Records | ResultType.Tuples ->
             match box cfg.Row2ItemMapping, cfg.SeqItemTypeName with
             | null, null ->
                 ``ISqlCommand Implementation``.ExecuteNonQuery manageConnection >> box, 
@@ -120,8 +129,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
                         
                 executeHandle.Invoke(null, [| cfg.Rank; cfg.Row2ItemMapping |]) |> unbox >> box, 
                 asyncExecuteHandle.Invoke(null, [| cfg.Rank; cfg.Row2ItemMapping |]) |> unbox >> box
-            else
-                failwithf "Unexpected ResultType %A" cfg.ResultType
+
+        | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
     member this.CommandTimeout = cmd.CommandTimeout
 

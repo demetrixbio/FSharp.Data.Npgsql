@@ -13,11 +13,6 @@ do()
 type NpgsqlProviders(config) as this = 
     inherit TypeProviderForNamespaces(config, [("FSharp.Data.Npgsql.DesignTime", "FSharp.Data.Npgsql")])
     
-    do
-        let runtime = Assembly.LoadFrom( config.RuntimeAssembly)
-        let resultType = runtime.GetType("FSharp.Data.ResultType")
-        ResultType.typeHandle <- resultType
-
     [<Literal>]
     let nameSpace = "FSharp.Data"
 
@@ -33,10 +28,14 @@ type NpgsqlProviders(config) as this =
         let assembly = Assembly.GetExecutingAssembly()
         do assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assembly.GetName().Name) 
 
+        let resultType = 
+            let runtime = Assembly.LoadFrom( config.RuntimeAssembly)
+            runtime.GetType("FSharp.Data.ResultType")
+
         this.AddNamespace(
             nameSpace, [ 
-                NpgsqlCommandProvider.getProviderType( assembly, nameSpace, cache)
-                NpgsqlDatabaseProvider.getProviderType( assembly, nameSpace, cache)
+                NpgsqlCommandProvider.getProviderType( assembly, nameSpace, cache, resultType)
+                NpgsqlDatabaseProvider.getProviderType( assembly, nameSpace, cache, resultType)
             ]
         )
 
