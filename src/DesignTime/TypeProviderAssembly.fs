@@ -11,8 +11,13 @@ do()
 [<TypeProvider>]
 [<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type NpgsqlProviders(config) as this = 
-    inherit TypeProviderForNamespaces(config)
+    inherit TypeProviderForNamespaces(config, [("FSharp.Data.Npgsql.DesignTime", "FSharp.Data.Npgsql")])
     
+    do
+        let runtime = Assembly.LoadFrom( config.RuntimeAssembly)
+        let resultType = runtime.GetType("FSharp.Data.ResultType")
+        ResultType.typeHandle <- resultType
+
     [<Literal>]
     let nameSpace = "FSharp.Data"
 
@@ -25,7 +30,8 @@ type NpgsqlProviders(config) as this =
                 NpgsqlDatabaseProvider.methodsCache.Clear()
             with _ -> ()
     do 
-        let assembly = Assembly.LoadFrom( config.RuntimeAssembly)
+        let assembly = Assembly.GetExecutingAssembly()
+        do assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assembly.GetName().Name) 
 
         this.AddNamespace(
             nameSpace, [ 

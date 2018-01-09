@@ -36,6 +36,8 @@ type internal ReturnType = {
 type QuotationsFactory private() = 
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
+    //[<Literal>]
+    //static let defaultCommandTimeout = 30
     
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
@@ -65,8 +67,6 @@ type QuotationsFactory private() =
             x
         @@>
 
-    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> DbNull @@>    
-        
     static member internal MapArrayOptionItemToObj<'T>(arr, index) =
         <@
             let values : obj[] = %%arr
@@ -119,18 +119,11 @@ type QuotationsFactory private() =
             (%%exprArgs.[0] : DataRow).[name] <- match (%%exprArgs.[1] : option<'T>) with None -> DbNull | Some value -> box value
         @> 
 
-    static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
-        fun values -> 
-            nullsToOptions values
-            mapper values
-
     static member internal GetNonNullableValueFromDataRow<'T>(exprArgs : Expr list, name: string) =
         <@ (%%exprArgs.[0] : DataRow).[name] @>
 
     static member internal SetNonNullableValueInDataRow<'T>(exprArgs : Expr list, name : string) =
         <@ (%%exprArgs.[0] : DataRow).[name] <- %%Expr.Coerce(exprArgs.[1], typeof<obj>) @>
-
-
 
     static member internal AddGeneratedMethod
         (sqlParameters: Parameter list, hasOutputParameters, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
@@ -143,7 +136,7 @@ type QuotationsFactory private() =
                     then 
                         if param.Optional 
                         then 
-                            typeof<QuotationsFactory>
+                            typeof<``ISqlCommand Implementation``>
                                 .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
                                 .MakeGenericMethod(param.DataType.ClrType)
                                 .Invoke(null, [| box expr|])
@@ -177,7 +170,7 @@ type QuotationsFactory private() =
                             if sqlParam.Direction.HasFlag( ParameterDirection.Output)
                             then 
                                 let mi = 
-                                    typeof<QuotationsFactory>
+                                    typeof<``ISqlCommand Implementation``>
                                         .GetMethod("SetRef")
                                         .MakeGenericMethod( sqlParam.DataType.ClrType)
                                 Expr.Call(mi, [ argExpr; Expr.Var arr; Expr.Value index ]) |> Some
@@ -199,9 +192,6 @@ type QuotationsFactory private() =
                 @@>
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
-
-    static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = 
-        r <- arr.[i] |> snd |> unbox
 
     static member internal GetRecordType(columns: Column list) =
         columns 
@@ -360,7 +350,7 @@ type QuotationsFactory private() =
                     providedType, erasedToTupleType, mapping
             
             let nullsToOptions = QuotationsFactory.MapArrayNullableItems(outputColumns, "MapArrayObjItemToOption") 
-            let combineWithNullsToOptions = typeof<QuotationsFactory>.GetMethod("GetMapperWithNullsToOptions") 
+            let combineWithNullsToOptions = typeof<``ISqlCommand Implementation``>.GetMethod("GetMapperWithNullsToOptions") 
             
             { 
                 Single = 

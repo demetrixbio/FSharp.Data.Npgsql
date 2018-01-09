@@ -28,7 +28,7 @@ let addCreateCommandMethod
         
     let staticParams = [
         ProvidedStaticParameter("CommandText", typeof<string>) 
-        ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
+        ProvidedStaticParameter("ResultType", ResultType.typeHandle, ResultType.Records) 
         ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
         ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
@@ -102,7 +102,7 @@ let addCreateCommandMethod
                     SqlStatement = sqlStatement
                     IsStoredProcedure = false
                     Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
-                    ResultType = resultType
+                    ResultType = %%Expr.Value(resultType)
                     Rank = rank
                     Row2ItemMapping = %%returnType.Row2ItemMapping
                     SeqItemTypeName = %%returnType.SeqItemTypeName
@@ -262,7 +262,7 @@ let getTableTypes(connectionString: string, schema, tagProvidedType, customTypes
                         ||> List.map2 (fun valueExpr c ->
                             if c.OptionalForInsert
                             then 
-                                typeof<QuotationsFactory>
+                                typeof<``ISqlCommand Implementation``>
                                     .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
                                     .MakeGenericMethod(c.ClrType)
                                     .Invoke(null, [| box valueExpr |])

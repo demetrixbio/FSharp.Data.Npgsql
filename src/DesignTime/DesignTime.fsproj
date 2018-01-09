@@ -4,7 +4,6 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
     <DefineConstants>NO_GENERATIVE</DefineConstants>
-    <DefineConstants>IS_DESIGNTIME</DefineConstants>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
@@ -15,6 +14,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="ResultType.fs" />
     <Compile Include="..\Runtime\DataTable.fs">
       <Link>DataTable.fs</Link>
     </Compile>
