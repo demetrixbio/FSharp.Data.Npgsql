@@ -32,8 +32,7 @@ type internal ReturnType = {
         | Some x -> Expr.Value( x.ErasedTo.AssemblyQualifiedName)
         | None -> <@@ null: string @@>
 
-[<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
-type QuotationsFactory private() = 
+type internal QuotationsFactory private() = 
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
     //[<Literal>]

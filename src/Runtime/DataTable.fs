@@ -5,8 +5,12 @@ open System.Data
 open System.Collections.Generic
 open Npgsql
 
+module internal CompilerMessage = 
+    [<Literal>]
+    let infrastructure = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
+
 [<Sealed>]
-[<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
+[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
 type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand) as this = 
     inherit DataTable() 
 
