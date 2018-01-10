@@ -9,7 +9,6 @@ open System.Collections.Concurrent
 do()
 
 [<TypeProvider>]
-[<CompilerMessageAttribute("This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code.", 101, IsHidden = true)>]
 type NpgsqlProviders(config) as this = 
     inherit TypeProviderForNamespaces(config, [("FSharp.Data.Npgsql.DesignTime", "FSharp.Data.Npgsql")])
     
