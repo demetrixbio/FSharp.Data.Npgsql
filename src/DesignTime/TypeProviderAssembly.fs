@@ -22,7 +22,7 @@ type NpgsqlProviders(config) as this =
         this.Disposing.Add <| fun _ ->
             try 
                 cache.Clear()
-                NpgsqlDatabaseProvider.methodsCache.Clear()
+                NpgsqlConnectionProvider.methodsCache.Clear()
             with _ -> ()
     do 
         let assembly = Assembly.GetExecutingAssembly()
@@ -35,7 +35,7 @@ type NpgsqlProviders(config) as this =
         this.AddNamespace(
             nameSpace, [ 
                 NpgsqlCommandProvider.getProviderType( assembly, nameSpace, cache, resultType)
-                NpgsqlDatabaseProvider.getProviderType( assembly, nameSpace, cache, resultType)
+                NpgsqlConnectionProvider.getProviderType( assembly, nameSpace, cache, resultType)
             ]
         )
 

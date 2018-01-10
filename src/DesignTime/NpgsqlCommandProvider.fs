@@ -36,10 +36,6 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
     let returnType = QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters = false)
 
-    do  
-        let p = ProvidedProperty("Connection", typeof<string>, getterCode = (fun _ -> <@@ connectionString @@>), isStatic = true)
-        cmdProvidedType.AddMember(p)
-
     do
         if resultType = ResultType.Records then
             returnType.PerRow 
