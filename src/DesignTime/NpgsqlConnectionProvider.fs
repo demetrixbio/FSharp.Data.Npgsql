@@ -17,18 +17,11 @@ open FSharp.Data
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod
-    (
-        connectionString, 
-        rootType: ProvidedTypeDefinition, 
-        commands: ProvidedTypeDefinition, 
-        customTypes: IDictionary<string, ProvidedTypeDefinition>, 
-        resultType
-    ) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes) = 
         
     let staticParams = [
         ProvidedStaticParameter("CommandText", typeof<string>) 
-        ProvidedStaticParameter("ResultType", resultType, ResultType.Records) 
+        ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
         ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
         ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
@@ -355,7 +348,7 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, connectionString, resultType) =
+let createRootType( assembly, nameSpace: string, typeName, connectionString) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
@@ -399,11 +392,11 @@ let createRootType( assembly, nameSpace: string, typeName, connectionString, res
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, resultType)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes)
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultType) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -414,7 +407,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
-                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0], resultType)
+                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0])
                 )
             ) 
         )

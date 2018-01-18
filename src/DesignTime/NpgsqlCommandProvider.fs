@@ -89,7 +89,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
 
     cmdProvidedType
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultType) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlCommand", Some typeof<obj>, hideObjectMethods = true)
 
@@ -97,7 +97,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
         parameters = [ 
             ProvidedStaticParameter("CommandText", typeof<string>) 
             ProvidedStaticParameter("Connection", typeof<string>) 
-            ProvidedStaticParameter("ResultType", resultType, ResultType.Records) 
+            ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 

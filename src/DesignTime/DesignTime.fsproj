@@ -21,8 +21,8 @@
     <Compile Include="..\Runtime\ISqlCommand.fs">
       <Link>ISqlCommand.fs</Link>
     </Compile>
-    <Compile Include="ProvidedTypes.fsi" />
-    <Compile Include="ProvidedTypes.fs" />
+    <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi" />
+    <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs" />
     <Compile Include="InformationSchema.fs" />
     <Compile Include="QuotationsFactory.fs" />
     <Compile Include="NpgsqlCommandProvider.fs" />
@@ -31,7 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\npgsql\src\Npgsql\Npgsql.csproj" />
+    <ProjectReference Include="..\npgsql\src\Npgsql\Npgsql.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,3 +2,6 @@
 	path = src/npgsql
 	url = https://github.com/Brar/npgsql.git
 	branch = FixDeriveOddParameterTypes
+[submodule "src/FSharp.TypeProviders.SDK"]
+	path = src/FSharp.TypeProviders.SDK
+	url = https://github.com/fsprojects/FSharp.TypeProviders.SDK.git
