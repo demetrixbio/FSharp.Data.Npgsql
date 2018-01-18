@@ -1,4 +1,4 @@
-[submodule "npgsql"]
-	path = npgsql
+[submodule "src/npgsql"]
+	path = src/npgsql
 	url = https://github.com/Brar/npgsql.git
 	branch = FixDeriveOddParameterTypes
