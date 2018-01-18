@@ -7,7 +7,7 @@ open Xunit
 let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
 open FSharp.Data
-type DvdRental = NpgsqlDatabase<dvdRental>
+type DvdRental = NpgsqlConnection<dvdRental>
 
 open Npgsql
 
