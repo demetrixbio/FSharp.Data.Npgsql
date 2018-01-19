@@ -1,16 +1,13 @@
-﻿#I "../../src/bin/Debug/"
-
-#r "System.Transactions"
+﻿#I "../../src/Runtime/bin/Release/net461"
 #r "FSharp.Data.Npgsql.dll"
 #r "Npgsql.dll"
-#r "System.Threading.Tasks.Extensions"
-#r "System.ValueTuple.dll"
 
-open Npgsql
+//#r "System.Transactions"
+//#r "System.Threading.Tasks.Extensions"
+//#r "System.ValueTuple.dll"
+
 open FSharp.Data
 open System
-open System.Data
-open Npgsql.Logging
 
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=postgres"
@@ -42,7 +39,7 @@ type Get42 = NpgsqlCommand<"select 42 as X, current_date", connectionString>
 do 
     let cmd = new Get42(connectionString)
     let xs = [ for x in cmd.Execute() -> x.x, x.date ] 
-    xs |> printfn "resultset:\n%A"
+    xs |> printfn "resultset:/n%A"
 
 do 
     let cmd = new NpgsqlCommand<"        
@@ -52,7 +49,7 @@ do
         ", connectionString>(connectionString)
 
     let xs = [ for x in cmd.Execute(tableType = "VIEW") -> x.name, x.table_type, x.c, x.jjj ] 
-    xs |> printfn "resultset:\n%A"
+    xs |> printfn "resultset:/n%A"
 
 do 
     let cmd = new NpgsqlCommand<"
@@ -65,15 +62,15 @@ do
         select id, name from onto.namespace
     ", connectionString, ResultType.Tuples >(connectionString)
 
-    cmd.Execute() |> Seq.toList |> printfn "resultset:\n%A"
+    cmd.Execute() |> Seq.toList |> printfn "resultset:/n%A"
 
 do 
     let cmd = new NpgsqlCommand<"select count(*) as c from onto.namespace", connectionString, SingleRow = true>(connectionString)
-    cmd.Execute() |> printfn "resultset:\n%A"
+    cmd.Execute() |> printfn "resultset:/n%A"
 
 do 
     let cmd = new NpgsqlCommand<"SELECT coalesce(@x, 'Empty') AS x", connectionString, AllParametersOptional = true>(connectionString)
-    cmd.Execute(Some "haha") |> printfn "resultset:\n%A"
+    cmd.Execute(Some "haha") |> printfn "resultset:/n%A"
 
 type TryEnums = NpgsqlCommand<"
     SELECT 
@@ -87,7 +84,7 @@ do
     cmd.Execute() 
     |> Seq.map (fun x -> string x.col1.Value, string x.col2.Value) 
     |> Seq.toList
-    |> printfn "resultset:\n%A"
+    |> printfn "resultset:/n%A"
 
 type UpdateWithEnum = NpgsqlCommand<"
     INSERT INTO part.location (coord1, coord2, is_fwd, type) 

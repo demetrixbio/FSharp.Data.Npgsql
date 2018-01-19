@@ -5,15 +5,10 @@
     <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+  <PropertyGroup>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
     <NoWarn>101</NoWarn>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-    <NoWarn>101</NoWarn>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <WarningsAsErrors>1182</WarningsAsErrors>
   </PropertyGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
@@ -29,15 +24,14 @@
   </ItemGroup>
 
   <Target Name="BeforeBuild">
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
   </Target>
-  
+
   <Target Name="AfterBuild">
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\netstandard2.0\*.dll">
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\$(TargetFramework)\*.dll">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries" />
     </CreateItem>
     <Copy SourceFiles="@(DesignTimeBinaries)" DestinationFolder="$(OutputPath)" />
   </Target>
-
 
 </Project>

@@ -1,20 +1,18 @@
-﻿//#I "../bin/Debug/net461"
-#I "../../src/bin/Debug/"
-
-#r "System.Transactions"
+﻿#I "../../src/Runtime/bin/Release/net461"
 #r "FSharp.Data.Npgsql.dll"
 #r "Npgsql.dll"
-#r "System.Threading.Tasks.Extensions"
-#r "System.ValueTuple.dll"
+
+//#r "System.Transactions"
+//#r "System.Threading.Tasks.Extensions"
+//#r "System.ValueTuple.dll"
 
 open FSharp.Data
 open System.Data
-open System
 
 [<Literal>]
 let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
 
-type DvdRental = NpgsqlDatabase<dvdrental>
+type DvdRental = NpgsqlConnection<dvdrental>
 
 //do  
 //    let rental = DvdRental.``public``.Tables.rental()
@@ -24,7 +22,7 @@ type DvdRental = NpgsqlDatabase<dvdrental>
 [<Literal>]
 let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
-type Db = NpgsqlDatabase<connectionString>
+type Db = NpgsqlConnection<connectionString>
 
 type arc_direction = Db.material.Types.arc_direction
 
@@ -115,7 +113,7 @@ do
     t.AddRow(title="[copy]", content="",  updated=DateTime.Now, created = DateTime.Now, favorite = true, locked=false, parents=[| 1|], id_user=1 )
     let row = t.Rows.[t.Rows.Count - 1]
 
-    let inserted = t.Update() 
+    let inserted = t.Update(connectionString) 
     printfn "Records inserted %i" inserted
 
 do
