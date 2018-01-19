@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>
-    <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
+    <TargetFramework>net461</TargetFramework>
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
     <DefineConstants>NO_GENERATIVE</DefineConstants>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!--<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>-->
+    <!--<DebugType Condition="'$(TargetFramework)' == 'net461'">full</DebugType>-->
   </PropertyGroup>
 
   <PropertyGroup>
@@ -30,18 +30,6 @@
     <Compile Include="TypeProviderAssembly.fs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <Content Include="netstandard.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="System.Reflection.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="System.Runtime.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>  
-  
   <ItemGroup>
     <ProjectReference Include="..\npgsql\src\Npgsql\Npgsql.csproj" />
   </ItemGroup>

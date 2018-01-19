@@ -1,10 +1,7 @@
-﻿#I "../../src/Runtime/bin/Release/net461"
+﻿#I "../../src/Runtime/bin/Debug/netstandard2.0"
 #r "FSharp.Data.Npgsql.dll"
 #r "Npgsql.dll"
-
-//#r "System.Transactions"
-//#r "System.Threading.Tasks.Extensions"
-//#r "System.ValueTuple.dll"
+#r "netstandard.dll"
 
 open FSharp.Data
 open System.Data

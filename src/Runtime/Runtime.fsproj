@@ -1,8 +1,9 @@
 ﻿<Project>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
-    <TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>
-    <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <!--<TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>-->
+    <!--<TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>-->
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
   </PropertyGroup>
   <PropertyGroup>
@@ -20,15 +21,33 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="3.2.6" />
+    <Content Include="Scripts\NpgsqlCustomEnums.fsx" />
+    <Content Include="Scripts\NpgsqlGetStarted.fsx" />
+    <Content Include="Scripts\NpgsqlTypeMapping.fsx" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
+    <Content Include="netstandard.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="System.Reflection.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="System.Runtime.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="3.2.6" />
+  </ItemGroup>
+  
   <Target Name="BeforeBuild">
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
   </Target>
 
   <Target Name="AfterBuild">
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\$(TargetFramework)\*.dll">
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries" />
     </CreateItem>
     <Copy SourceFiles="@(DesignTimeBinaries)" DestinationFolder="$(OutputPath)" />
