@@ -4,7 +4,7 @@ open System
 open Xunit
 
 [<Literal>]
-let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental"
+let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
 
 open FSharp.Data
 type DvdRental = NpgsqlConnection<dvdRental>
