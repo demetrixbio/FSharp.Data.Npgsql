@@ -13,6 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Dockerfile" />
+    <None Include="restore_dvdrental.sh" />
     <None Include="Scripts\TestCommandProvider.fsx" />
     <None Include="Scripts\TestSingleRootProvider.fsx" />
   </ItemGroup>

@@ -116,6 +116,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
     ))
     rootType.AddMember m
 
+//https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
+
 let getTableTypes(connectionString: string, schema, customTypes: Map<_, ProvidedTypeDefinition list>) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tables.AddMembersDelayed <| fun() ->
