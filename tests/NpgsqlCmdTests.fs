@@ -21,7 +21,7 @@ let selectLiterals() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
-    Assert.Equal(Some DateTime.Today, x.today)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
 [<Fact>]
 let selectSingleRow() =
@@ -30,7 +30,7 @@ let selectSingleRow() =
     ", dvdRental, SingleRow = true>(dvdRental)
 
     Assert.Equal(
-        Some( Some 42, Some DateTime.Today), 
+        Some( Some 42, Some DateTime.UtcNow.Date), 
         cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
     )
 
@@ -41,7 +41,7 @@ let selectTuple() =
     ", dvdRental, ResultType.Tuples>(dvdRental)
 
     Assert.Equal<_ list>(
-        [ Some 42, Some DateTime.Today ],
+        [ Some 42, Some DateTime.UtcNow.Date ],
         cmd.Execute() |>  Seq.toList
     )
 

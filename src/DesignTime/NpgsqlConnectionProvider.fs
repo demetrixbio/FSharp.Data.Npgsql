@@ -167,12 +167,12 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                                 ClrType = 
                                     match unbox row.["data_type"] with 
                                     | "ARRAY" -> 
-                                        let elemType = InformationSchema.postresTypeToClrType.[udt.TrimStart('_')]               
+                                        let elemType = InformationSchema.typesMapping.[udt.TrimStart('_')] |> fst              
                                         elemType.MakeArrayType()
                                     | "USER-DEFINED" -> 
                                         typeof<obj>
                                     | _ -> 
-                                        InformationSchema.postresTypeToClrType.[udt]
+                                        InformationSchema.typesMapping.[udt] |> fst
                             }
 
                         Nullable = unbox row.["is_nullable"] = "YES"

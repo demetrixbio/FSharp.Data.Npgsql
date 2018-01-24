@@ -2,6 +2,7 @@
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <!--<TargetFramework>netstandard2.0</TargetFramework>-->
     <!--<TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>-->
     <!--<TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>-->
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
@@ -42,12 +43,12 @@
     <PackageReference Include="Npgsql" Version="3.2.6" />
   </ItemGroup>
   
-  <Target Name="BeforeBuild">
+  <!--<Target Name="BeforeBuild">
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
-  </Target>
+  </Target>-->
 
   <Target Name="AfterBuild">
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll">
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll;..\DesignTime\bin\$(Configuration)\net461\*.pdb">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries" />
     </CreateItem>
     <Copy SourceFiles="@(DesignTimeBinaries)" DestinationFolder="$(OutputPath)" />

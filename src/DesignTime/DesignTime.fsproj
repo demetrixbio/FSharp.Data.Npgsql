@@ -5,13 +5,17 @@
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
     <DefineConstants>NO_GENERATIVE</DefineConstants>
     <!--<CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>-->
-    <!--<DebugType Condition="'$(TargetFramework)' == 'net461'">full</DebugType>-->
+    <DebugType Condition="'$(TargetFramework)' == 'net461'">full</DebugType>
   </PropertyGroup>
 
   <PropertyGroup>
     <NoWarn>101</NoWarn>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>bin\Debug\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>

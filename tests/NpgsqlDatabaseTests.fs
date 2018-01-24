@@ -20,7 +20,7 @@ let selectLiterals() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
-    Assert.Equal(Some DateTime.Today, x.today)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
 [<Fact>]
 let selectSingleRow() =
@@ -29,7 +29,7 @@ let selectSingleRow() =
     ", SingleRow = true>(dvdRental)
 
     Assert.Equal(
-        Some( Some 42, Some DateTime.Today), 
+        Some( Some 42, Some DateTime.UtcNow.Date), 
         cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
     )
 
@@ -40,7 +40,7 @@ let selectTuple() =
     ", ResultType.Tuples>(dvdRental)
 
     Assert.Equal<_ list>(
-        [ Some 42, Some DateTime.Today ],
+        [ Some 42, Some DateTime.UtcNow.Date ],
         cmd.Execute() |>  Seq.toList
     )
 
@@ -273,3 +273,14 @@ let tableInsert() =
     tran.Rollback()
 
     Assert.Equal(None, cmd.Execute(r.rental_id))
+
+[<Fact>]
+let selectEnumWithArray2() =
+    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRental)
+
+    let ratings = [| 
+        DvdRental.``public``.Types.mpaa_rating.``PG-13``
+        DvdRental.``public``.Types.mpaa_rating.R
+    |]
+        
+    Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))

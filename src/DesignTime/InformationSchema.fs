@@ -19,77 +19,67 @@ type internal NpgsqlDataReader with
         if this.IsDBNull( i) then defaultValue else this.GetFieldValue( i)
 
 let typesMapping = 
-    [
-        "bool", typeof<bool>, Some NpgsqlDbType.Boolean, Some DbType.Boolean
-        "int2", typeof<int16>, Some NpgsqlDbType.Smallint, Some DbType.Int16
-        "int4", typeof<int32>, Some NpgsqlDbType.Integer, Some DbType.Int32
-        "int8", typeof<int64>, Some NpgsqlDbType.Bigint, Some DbType.Int64
-        "float4", typeof<single>, Some NpgsqlDbType.Real, Some DbType.Single
-        "float8", typeof<double>, Some NpgsqlDbType.Double, Some DbType.Double
-        "numeric", typeof<decimal>, Some NpgsqlDbType.Numeric, Some DbType.Decimal
-        "money", typeof<decimal>, Some NpgsqlDbType.Money, Some DbType.Currency
-        "text", typeof<string>, Some NpgsqlDbType.Text, Some DbType.String
-        "varchar", typeof<string>, Some NpgsqlDbType.Varchar, None
-        "bpchar", typeof<string>, None, None
-        "citext", typeof<string>, Some NpgsqlDbType.Citext, None
-        "jsonb", typeof<string>, Some NpgsqlDbType.Jsonb, None
-        "json", typeof<string>, Some NpgsqlDbType.Json, None
-        "xml", typeof<string>, Some NpgsqlDbType.Xml, None
-        "point", typeof<NpgsqlPoint>, Some NpgsqlDbType.Point, None
-        "lseg", typeof<NpgsqlLSeg>, Some NpgsqlDbType.LSeg, None
-    //path	NpgsqlPath		
-    //polygon	NpgsqlPolygon		
-    //line	NpgsqlLine		string
-    //circle	NpgsqlCircle		string
-    //box	NpgsqlBox		string
-        //bit(1)	bool		BitArray
-    //bit(n)	BitArray		
-    //varbit	BitArray		
-    //hstore	IDictionary		string
-        "uuid", typeof<Guid>, Some NpgsqlDbType.Uuid, None
-    //cidr	NpgsqlInet		string
-        "inet", typeof<NpgsqlInet>, Some NpgsqlDbType.Inet, None
-    //macaddr	PhysicalAddress		string
-        "tsquery",  typeof<NpgsqlTsQuery>, Some NpgsqlDbType.TsQuery, None
-        "tsvector", typeof<NpgsqlTsVector>, Some NpgsqlDbType.TsVector, None
+    Map.ofList [
+        "bool", (typeof<bool>, NpgsqlDbType.Boolean)
+        "int2", (typeof<int16>, NpgsqlDbType.Smallint)
+        "int4", (typeof<int32>, NpgsqlDbType.Integer)
+        "int8", (typeof<int64>, NpgsqlDbType.Bigint)
+        "float4", (typeof<single>, NpgsqlDbType.Real)
+        "float8", (typeof<double>, NpgsqlDbType.Double)
+        "numeric", (typeof<decimal>, NpgsqlDbType.Numeric)
+        "money", (typeof<decimal>, NpgsqlDbType.Money)
+        "text", (typeof<string>, NpgsqlDbType.Text)
+        "varchar", (typeof<string>, NpgsqlDbType.Varchar)
+        "bpchar", (typeof<string>, NpgsqlDbType.Unknown)
+        "citext", (typeof<string>, NpgsqlDbType.Citext)
+        "jsonb", (typeof<string>, NpgsqlDbType.Jsonb)
+        "json", (typeof<string>, NpgsqlDbType.Json)
+        "xml", (typeof<string>, NpgsqlDbType.Xml)
+        "point", (typeof<NpgsqlPoint>, NpgsqlDbType.Point)
+        "lseg", (typeof<NpgsqlLSeg>, NpgsqlDbType.LSeg)
+        //path	NpgsqlPath		
+        //polygon	NpgsqlPolygon		
+        //line	NpgsqlLine		string
+        //circle	NpgsqlCircle		string
+        //box	NpgsqlBox		string
+            //bit(1)	bool		BitArray
+        //bit(n)	BitArray		
+        //varbit	BitArray		
+        //hstore	IDictionary		string
+        "uuid", (typeof<Guid>, NpgsqlDbType.Uuid)
+        //cidr	NpgsqlInet		string
+        "inet", (typeof<NpgsqlInet>, NpgsqlDbType.Inet)
+        //macaddr	PhysicalAddress		string
+        "tsquery", (typeof<NpgsqlTsQuery>, NpgsqlDbType.TsQuery)
+        "tsvector", (typeof<NpgsqlTsVector>, NpgsqlDbType.TsVector)
 
-        "date", typeof<DateTime>, Some NpgsqlDbType.Date, Some DbType.Date
-        "interval", typeof<TimeSpan>, Some NpgsqlDbType.Interval, None
-        "timestamp", typeof<DateTime>, Some NpgsqlDbType.Timestamp, Some DbType.DateTime
-        "timestamptz", typeof<DateTime>, Some NpgsqlDbType.TimestampTz, Some DbType.DateTime
-        "time", typeof<TimeSpan>, Some NpgsqlDbType.Time, Some DbType.Time
-        "timetz", typeof<DateTimeOffset>, Some NpgsqlDbType.TimeTz, Some DbType.DateTimeOffset
+        "date", (typeof<DateTime>, NpgsqlDbType.Date)
+        "interval", (typeof<TimeSpan>, NpgsqlDbType.Interval)
+        "timestamp", (typeof<DateTime>, NpgsqlDbType.Timestamp)
+        "timestamptz", (typeof<DateTime>, NpgsqlDbType.TimestampTz)
+        "time", (typeof<TimeSpan>, NpgsqlDbType.Time)
+        "timetz", (typeof<DateTimeOffset>, NpgsqlDbType.TimeTz)
 
-        "bytea", typeof<byte[]>, Some NpgsqlDbType.Bytea, Some DbType.Binary
-        "oid", typeof<UInt32>, Some NpgsqlDbType.Oid, Some DbType.UInt32
-        "xid", typeof<UInt32>, Some NpgsqlDbType.Oid, Some DbType.UInt32
-    //cid	uint		
-    //oidvector	uint[]		
-        "name", typeof<string>, Some NpgsqlDbType.Name, Some DbType.String
-        "char", typeof<string>, Some NpgsqlDbType.Char, Some DbType.String
-    //geometry (PostGIS)	PostgisGeometry		
-    //record	object[]		
-    //composite types	T		
-    //range subtypes	NpgsqlRange		
-    //enum types	TEnum		
-    //array types	Array (of child element type)		
+        "bytea", (typeof<byte[]>, NpgsqlDbType.Bytea)
+        "oid", (typeof<UInt32>, NpgsqlDbType.Oid)
+        "xid", (typeof<UInt32>, NpgsqlDbType.Oid)
+        //cid	uint		
+        //oidvector	uint[]		
+        "name", (typeof<string>, NpgsqlDbType.Name)
+        "char", (typeof<string>, NpgsqlDbType.Char)
+        //geometry (PostGIS)	PostgisGeometry		
+        //record	object[]		
+        //composite types	T		
+        //range subtypes	NpgsqlRange		
+        //enum types	TEnum		
+        //array types	Array (of child element type)		
     ]
-
-let postresTypeToClrType = 
-    typesMapping 
-    |> List.map (fun (postgres, clr, _, _) -> postgres, clr) 
-    |> dict
-
-let npgsqlDbTypeToClrType = 
-    typesMapping 
-    |> List.choose (fun (_, clr, maybeNpgsqlDbType, _) -> maybeNpgsqlDbType |> Option.map (fun t -> t, clr)) 
-    |> dict
 
 type PostgresType with    
     member this.ToClrType() = 
         match this with
-        | :? PostgresBaseType as x when postresTypeToClrType.ContainsKey(x.Name) -> 
-            postresTypeToClrType.[x.Name]
+        | :? PostgresBaseType as x when typesMapping.ContainsKey(x.Name) -> 
+            typesMapping |> Map.find x.Name |> fst
         | :? PostgresEnumType ->
             typeof<string>
         | :? PostgresDomainType as x -> 
@@ -211,7 +201,7 @@ let inline asyncOpenConnection connectionString =
         return conn
     }
 
-let extractParameters(connectionString, commandText: string, allParametersOptional) =  
+let extractParameters(connectionString, commandText, allParametersOptional) =  
     use conn = openConnection(connectionString)
     use cmd = new NpgsqlCommand(commandText, conn)
     NpgsqlCommandBuilder.DeriveParameters(cmd)
@@ -223,11 +213,11 @@ let extractParameters(connectionString, commandText: string, allParametersOption
             yield { 
                 Name = p.ParameterName
                 NpgsqlDbType = 
-                    //if p.NpgsqlDbType.HasFlag( NpgsqlDbType.Enum) then NpgsqlDbType.Unknown else p.NpgsqlDbType
-                    match p.NpgsqlDbType with 
-                    | NpgsqlDbType.Text when p.PostgresType.GetType() = typeof<PostgresEnumType> -> NpgsqlDbType.Unknown 
-                    | as_is -> as_is
-                    
+                    match p.PostgresType with
+                    | :? PostgresArrayType as x when not( typesMapping.ContainsKey(x.Element.Name)) -> 
+                        //probably array of custom type (enum or composite)
+                        NpgsqlDbType.Array ||| NpgsqlDbType.Text
+                    | _ -> p.NpgsqlDbType
                 Direction = p.Direction
                 MaxLength = p.Size
                 Precision = p.Precision
