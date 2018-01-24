@@ -26,6 +26,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
         ProvidedStaticParameter("TypeName", typeof<string>, "") 
         ProvidedStaticParameter("Tx", typeof<bool>, false) 
+        ProvidedStaticParameter("Scripting", typeof<bool>, false) 
         ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
     ]
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
@@ -33,8 +34,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx, verifyOutputAtRuntime  = 
-                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx, scripting, verifyOutputAtRuntime  = 
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
             
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
@@ -104,7 +105,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 QuotationsFactory.GetCommandCtors(
                     cmdProvidedType, 
                     designTimeConfig, 
-                    connectionString,
+                    ?connectionString  = (if scripting then Some connectionString else None), 
                     factoryMethodName = methodName
                 )
             assert (ctorsAndFactories.Length = 4)

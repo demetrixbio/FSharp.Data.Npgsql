@@ -9,9 +9,8 @@ open ProviderImplementation.ProvidedTypes
 
 open Npgsql
 open System.Collections.Concurrent
-open FSharp.Data.InformationSchema
 
-let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, allParametersOptional, verifyOutputAtRuntime) = 
+let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, scripting: bool, allParametersOptional, verifyOutputAtRuntime) = 
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then 
@@ -68,7 +67,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
             QuotationsFactory.GetCommandCtors(
                 cmdProvidedType, 
                 designTimeConfig, 
-                connectionString, 
+                ?connectionString  = (if scripting then Some connectionString else None), 
                 factoryMethodName = "Create"
             )
             |> cmdProvidedType.AddMembers
@@ -99,6 +98,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("Connection", typeof<string>) 
             ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
+            ProvidedStaticParameter("Scripting", typeof<bool>, false) 
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
         ],             
@@ -106,7 +106,18 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             cache.GetOrAdd(
                 typeName, 
                 fun _ -> 
-                    createRootType(assembly, nameSpace, typeName, args.[0] :?> _, args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _)
+                    createRootType(
+                        assembly, 
+                        nameSpace, 
+                        typeName, 
+                        args.[0] :?> _, 
+                        args.[1] :?> _, 
+                        args.[2] :?> _, 
+                        args.[3] :?> _, 
+                        args.[4] :?> _, 
+                        args.[5] :?> _, 
+                        args.[6] :?> _
+                    )
             )
         ) 
     )

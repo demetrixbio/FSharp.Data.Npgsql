@@ -214,7 +214,7 @@ let extractParameters(connectionString, commandText, allParametersOptional) =
                 Name = p.ParameterName
                 NpgsqlDbType = 
                     match p.PostgresType with
-                    | :? PostgresArrayType as x when not( typesMapping.ContainsKey(x.Element.Name)) -> 
+                    | :? PostgresArrayType as x when x.Element.GetType() = typeof<PostgresEnumType> -> 
                         //probably array of custom type (enum or composite)
                         NpgsqlDbType.Array ||| NpgsqlDbType.Text
                     | _ -> p.NpgsqlDbType

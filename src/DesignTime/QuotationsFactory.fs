@@ -400,12 +400,12 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
-    static member internal GetCommandCtors(cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, designTimeConnectionString: string, ?factoryMethodName) = 
+    static member internal GetCommandCtors(cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, ?connectionString: string, ?factoryMethodName) = 
         [
             let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructor [| typeof<DesignTimeConfig>; typeof<Connection>; typeof<int> |]
 
             let parameters1 = [ 
-                ProvidedParameter("connectionString", typeof<string>) 
+                ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (Option.map box connectionString)) 
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
