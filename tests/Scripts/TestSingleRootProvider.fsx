@@ -7,7 +7,7 @@ open System.Data
 open Npgsql
 
 [<Literal>]
-let dvdrental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
+let dvdrental = "Host=localhost;Username=dvdrental;Password=postgres;Port=32768"
 
 type DvdRental = FSharp.Data.NpgsqlConnection<dvdrental>
 
