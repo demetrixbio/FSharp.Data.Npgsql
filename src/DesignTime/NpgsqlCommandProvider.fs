@@ -10,7 +10,7 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open System.Collections.Concurrent
 
-let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, scripting: bool, allParametersOptional, verifyOutputAtRuntime) = 
+let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime) = 
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then 
@@ -33,7 +33,15 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     cmdProvidedType.AddMembers [ for x in customTypes.Value.Values -> x ]
     
     let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
-    let returnType = QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, sqlStatement, hasOutputParameters = false)
+    let returnType = 
+        QuotationsFactory.GetOutputTypes(
+            outputColumns, 
+            resultType, 
+            rank, 
+            sqlStatement, 
+            hasOutputParameters = false, 
+            ?connectionString = (if fsx then Some connectionString else None)
+        )
 
     do
         if resultType = ResultType.Records then
@@ -67,7 +75,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
             QuotationsFactory.GetCommandCtors(
                 cmdProvidedType, 
                 designTimeConfig, 
-                ?connectionString  = (if scripting then Some connectionString else None), 
+                ?connectionString  = (if fsx then Some connectionString else None), 
                 factoryMethodName = "Create"
             )
             |> cmdProvidedType.AddMembers
@@ -98,7 +106,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("Connection", typeof<string>) 
             ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
-            ProvidedStaticParameter("Scripting", typeof<bool>, false) 
+            ProvidedStaticParameter("Fsx", typeof<bool>, false) 
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
         ],             
@@ -129,6 +137,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <param name='ResultType'>A value that defines structure of result: Records, Tuples, DataTable or DataReader.</param>
 <param name='SingleRow'>If set the query is expected to return a single row of the result set. See MSDN documentation for details on CommandBehavior.SingleRow.</param>
 <param name='AllParametersOptional'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
+<param name='Fsx'>Re-use design time connection for the type provider instantiation from *.fsx files.</param>
+<param name='VerifyOutputAtRuntime'>Verify output columns names and types at run-time.</param>
 """
-
     providerType

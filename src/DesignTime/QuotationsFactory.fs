@@ -293,7 +293,15 @@ type internal QuotationsFactory private() =
 
         rowType
 
-    static member internal GetDataTableType(typeName, dataRowType: ProvidedTypeDefinition, outputColumns: Column list, selectCommand: Expr<NpgsqlCommand>) =
+    static member internal GetDataTableType
+        (
+            typeName, 
+            dataRowType: ProvidedTypeDefinition, 
+            outputColumns: Column list, 
+            selectCommand: Expr<NpgsqlCommand>, 
+            ?connectionString: string
+        ) =
+
         let tableType = ProvidedTypeDefinition(typeName, Some typeof<DataTable>)
       
         do //Columns
@@ -328,7 +336,7 @@ type internal QuotationsFactory private() =
 
                     ProvidedMethod(
                         "Update", 
-                        ProvidedParameter("connectionString", typeof<string> ) :: commonParams, 
+                        ProvidedParameter("connectionString", typeof<string>, ?optionalValue = Option.map box connectionString) :: commonParams, 
                         typeof<int>,
                         fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
                             <@@ 
@@ -415,7 +423,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes (outputColumns, resultType, rank, commandText, hasOutputParameters) =    
+    static member internal GetOutputTypes (outputColumns, resultType, rank, commandText, hasOutputParameters, ?connectionString) =    
          
         if resultType = ResultType.DataReader 
         then 
@@ -426,7 +434,15 @@ type internal QuotationsFactory private() =
         elif resultType = ResultType.DataTable 
         then
             let dataRowType = QuotationsFactory.GetDataRowType(outputColumns)
-            let dataTableType = QuotationsFactory.GetDataTableType("Table", dataRowType, outputColumns, <@ new NpgsqlCommand(commandText) @>)
+            let dataTableType = 
+                QuotationsFactory.GetDataTableType(
+                    "Table", 
+                    dataRowType, 
+                    outputColumns, 
+                    <@ new NpgsqlCommand(commandText) @>, 
+                    ?connectionString = connectionString
+                )
+
             dataTableType.AddMember dataRowType
 
             { Single = dataTableType; PerRow = None }
