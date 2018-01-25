@@ -96,6 +96,7 @@ let dateTableWithUpdate() =
     ", dvdRental, ResultType.DataTable>(dvdRental)    
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
+
     let r = t.Rows.[0]
     let return_date = r.return_date
     let rowsAffected = ref 0
