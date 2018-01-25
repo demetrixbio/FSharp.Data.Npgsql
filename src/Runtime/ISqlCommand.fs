@@ -17,6 +17,10 @@ type ResultType =
 ///<summary>raw DataReader</summary>
     | DataReader = 3
 
+module internal CompilerMessage = 
+    [<Literal>]
+    let infrastructure = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
+
 [<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
 type ISqlCommand = 
     
@@ -211,7 +215,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
     
     static member internal ExecuteDataTable(cmd, getReaderBehavior, parameters, expectedColumns) = 
         use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) 
-        let result = new FSharp.Data.DataTable<DataRow>(cmd)
+        let result = new DataTable()
         result.Columns.AddRange(expectedColumns)
         result.Load(cursor)
         result
@@ -219,7 +223,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
     static member internal AsyncExecuteDataTable(cmd, getReaderBehavior, parameters, expectedColumns) = 
         async {
             use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, getReaderBehavior, parameters, expectedColumns) 
-            let result = new FSharp.Data.DataTable<DataRow>(cmd)
+            let result = new DataTable()
             result.Load(reader)
             return result
         }
@@ -316,5 +320,33 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connectio
                 then cmd.Connection.Close()
         }
 
+    static member UpdateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
 
+        use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
+
+        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter)
+        commandBuilder.ConflictOption <- conflictOption 
+
+        use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
+
+            if  args.Errors = null 
+                && args.StatementType = Data.StatementType.Insert 
+                && dataAdapter.UpdateBatchSize = 1
+            then 
+                let columnsToRefresh = ResizeArray()
+                for c in table.Columns do
+                    if c.AutoIncrement  
+                        || (c.AllowDBNull && args.Row.IsNull c.Ordinal)
+                    then 
+                        columnsToRefresh.Add( commandBuilder.QuoteIdentifier c.ColumnName)
+
+                if columnsToRefresh.Count > 0
+                then                        
+                    let returningClause = columnsToRefresh |> String.concat "," |> sprintf " RETURNING %s"
+                    let cmd = args.Command
+                    cmd.CommandText <- cmd.CommandText + returningClause
+                    cmd.UpdatedRowSource <- UpdateRowSource.FirstReturnedRecord
+        )
+
+        dataAdapter.Update(table)   
 

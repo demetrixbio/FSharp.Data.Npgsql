@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <Compile Include="DesignTime.fs" />
-    <Compile Include="DataTable.fs" />
     <Compile Include="ISqlCommand.fs" />
   </ItemGroup>
 

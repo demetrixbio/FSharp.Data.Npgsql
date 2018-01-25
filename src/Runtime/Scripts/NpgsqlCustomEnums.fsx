@@ -11,8 +11,9 @@ open NpgsqlTypes
 
 do
     use conn = new NpgsqlConnection("Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768")
-    conn.Open()
+    //conn.Open()
     let cmd = conn.CreateCommand()
+    ()
     //cmd.CommandText <- "SELECT @ratings::mpaa_rating[];"
     //cmd.Parameters.Add("ratings", NpgsqlDbType.Text ||| NpgsqlDbType.Array ).Value <- [| "PG-13"; "R" |]
     cmd.CommandText <- "SELECT @ratings::mpaa_rating;"

@@ -52,7 +52,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
             let returnType = 
                 let hasOutputParameters = false
-                QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters)
+                QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, sqlStatement, hasOutputParameters)
 
             let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
             let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
@@ -194,7 +194,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
             //type data row
             let dataRowType = QuotationsFactory.GetDataRowType(columns)
             //type data table
-            let dataTableType = QuotationsFactory.GetDataTableType(tableName, dataRowType, columns)
+            let dataTableType = QuotationsFactory.GetDataTableType(tableName, dataRowType, columns, <@ new NpgsqlCommand(tableName, CommandType = CommandType.TableDirect) @>)
             dataTableType.AddMember dataRowType
         
             do
@@ -207,7 +207,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
 
                     <@@ 
                         let selectCommand = new NpgsqlCommand(twoPartTableName, CommandType = CommandType.TableDirect)
-                        let table = new DataTable<DataRow>(selectCommand)
+                        let table = new DataTable(twoPartTableName)
                         table.TableName <- twoPartTableName
                         table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
                         table
@@ -263,7 +263,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                         )
 
                     <@@ 
-                        let table: DataTable<DataRow> = %%args.[0]
+                        let table: DataTable = %%args.[0]
                         let row = table.NewRow()
 
                         let values: obj[] = %%Expr.NewArray(typeof<obj>, [ for x in argsValuesConverted -> Expr.Coerce(x, typeof<obj>) ])
@@ -291,7 +291,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                             invokeCode = fun args ->
                                 let newRow = invokeCode args
                                 <@@
-                                    let table: DataTable<DataRow> = %%args.[0]
+                                    let table: DataTable = %%args.[0]
                                     let row: DataRow = %%newRow
                                     table.Rows.Add row
                                 @@>

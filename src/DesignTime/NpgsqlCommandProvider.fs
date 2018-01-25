@@ -33,7 +33,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
     cmdProvidedType.AddMembers [ for x in customTypes.Value.Values -> x ]
     
     let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
-    let returnType = QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, hasOutputParameters = false)
+    let returnType = QuotationsFactory.GetOutputTypes(outputColumns, resultType, rank, sqlStatement, hasOutputParameters = false)
 
     do
         if resultType = ResultType.Records then
