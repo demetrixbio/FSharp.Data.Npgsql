@@ -17,7 +17,7 @@ open FSharp.Data
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution) = 
         
     let staticParams = [
         ProvidedStaticParameter("CommandText", typeof<string>) 
@@ -57,6 +57,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     rank, 
                     sqlStatement, 
                     hasOutputParameters = false, 
+                    allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
                     ?connectionString = (if fsx then Some connectionString else None)
                 )
 
@@ -111,6 +112,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 QuotationsFactory.GetCommandCtors(
                     cmdProvidedType, 
                     designTimeConfig, 
+                    allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
                     ?connectionString  = (if fsx then Some connectionString else None), 
                     factoryMethodName = methodName
                 )
@@ -125,7 +127,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
 //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
 
-let getTableTypes(connectionString: string, schema, customTypes: Map<_, ProvidedTypeDefinition list>, fsx) = 
+let getTableTypes(connectionString: string, schema, customTypes: Map<_, ProvidedTypeDefinition list>, fsx, isHostedExecution) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tables.AddMembersDelayed <| fun() ->
         
@@ -206,6 +208,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     dataRowType, 
                     columns, 
                     <@ new NpgsqlCommand(tableName, CommandType = CommandType.TableDirect) @>, 
+                    isHostedExecution && fsx,
                     ?connectionString = if fsx then Some connectionString else None
                 )
 
@@ -365,7 +368,7 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, connectionString, fsx) =
+let createRootType( assembly, nameSpace: string, typeName, connectionString, fsx, isHostedExecution) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
@@ -405,15 +408,16 @@ let createRootType( assembly, nameSpace: string, typeName, connectionString, fsx
         //    customTypes.Add(sprintf "%s.%s" s.Name t.Name, downcast t)
         
     for schemaType in schemas do
-        schemaType.AddMemberDelayed <| fun() -> getTableTypes(connectionString, schemaType.Name, enums, fsx)
+        schemaType.AddMemberDelayed <| fun() -> 
+            getTableTypes(connectionString, schemaType.Name, enums, fsx, isHostedExecution)
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution)
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, isHostedExecution) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -425,7 +429,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
-                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0], unbox args.[1])
+                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], isHostedExecution)
                 )
             ) 
         )
@@ -433,7 +437,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
         providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
 <param name='Connection'>String used to open a Postgresql database or the name of the connection string in the configuration file in the form of “name=&lt;connection string name&gt;”.</param>
-<param name='Fsx'>Re-use design time connection for the type provider instantiation from *.fsx files.</param>
+<param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 """
     providerType
 

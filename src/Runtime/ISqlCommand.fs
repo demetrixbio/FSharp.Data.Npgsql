@@ -17,24 +17,26 @@ type ResultType =
 ///<summary>raw DataReader</summary>
     | DataReader = 3
 
-module internal CompilerMessage = 
+module internal ErrorMessage = 
     [<Literal>]
     let infrastructure = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
+    [<Literal>]
+    let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
 
-[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
+[<CompilerMessageAttribute(ErrorMessage.infrastructure, 101, IsHidden = true)>]
 type ISqlCommand = 
     
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
 
-[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
+[<CompilerMessageAttribute(ErrorMessage.infrastructure, 101, IsHidden = true)>]
 [<RequireQualifiedAccess>]
 type ResultRank = 
     | Sequence = 0
     | SingleRow = 1
     | ScalarValue = 2
 
-[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
+[<CompilerMessageAttribute(ErrorMessage.infrastructure, 101, IsHidden = true)>]
 type DesignTimeConfig = {
     SqlStatement: string
     IsStoredProcedure: bool 
@@ -49,7 +51,7 @@ type DesignTimeConfig = {
 type internal Connection = Choice<string, NpgsqlTransaction>
 
 [<AutoOpen>]
-[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
+[<CompilerMessageAttribute(ErrorMessage.infrastructure, 101, IsHidden = true)>]
 module Extensions =
     type internal DbDataReader with
         member this.MapRowValues<'TItem>( rowMapping) = 
@@ -63,7 +65,7 @@ module Extensions =
 
     let DbNull = box DBNull.Value
 
-[<CompilerMessageAttribute(CompilerMessage.infrastructure, 101, IsHidden = true)>]
+[<CompilerMessageAttribute(ErrorMessage.infrastructure, 101, IsHidden = true)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connection, commandTimeout) = 
 
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)

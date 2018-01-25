@@ -58,8 +58,8 @@ module internal Quotations =
 type internal QuotationsFactory private() = 
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
-    //[<Literal>]
-    //static let defaultCommandTimeout = 30
+
+    [<Literal>] static let reuseDesignTimeConnectionString = "reuse design-time connection string"
     
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
@@ -299,6 +299,7 @@ type internal QuotationsFactory private() =
             dataRowType: ProvidedTypeDefinition, 
             outputColumns: Column list, 
             selectCommand: Expr<NpgsqlCommand>, 
+            allowDesignTimeConnectionStringReUse: bool,
             ?connectionString: string
         ) =
 
@@ -332,16 +333,28 @@ type internal QuotationsFactory private() =
                     ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
                     ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
                 ]
+
+                let designTimeConnectionString = defaultArg connectionString ""
+
                 tableType.AddMembers [
 
                     ProvidedMethod(
                         "Update", 
-                        ProvidedParameter("connectionString", typeof<string>, ?optionalValue = Option.map box connectionString) :: commonParams, 
+                        ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))) :: commonParams, 
                         typeof<int>,
                         fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
                             <@@ 
                                 let selectCommand = %selectCommand
-                                selectCommand.Connection <- new NpgsqlConnection(%%connectionString)
+                                let runTimeConnectionString = 
+                                    if %%connectionString = reuseDesignTimeConnectionString
+                                    then 
+                                        if allowDesignTimeConnectionStringReUse 
+                                        then designTimeConnectionString
+                                        else failwith ErrorMessage.prohibitDesignTimeConnStrReUse
+                                    else
+                                        %%connectionString
+
+                                selectCommand.Connection <- new NpgsqlConnection(runTimeConnectionString)
                                 ``ISqlCommand Implementation``.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                             @@>
                     )
@@ -423,7 +436,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes (outputColumns, resultType, rank, commandText, hasOutputParameters, ?connectionString) =    
+    static member internal GetOutputTypes(outputColumns, resultType, rank, commandText, hasOutputParameters, allowDesignTimeConnectionStringReUse, ?connectionString) =    
          
         if resultType = ResultType.DataReader 
         then 
@@ -440,6 +453,7 @@ type internal QuotationsFactory private() =
                     dataRowType, 
                     outputColumns, 
                     <@ new NpgsqlCommand(commandText) @>, 
+                    allowDesignTimeConnectionStringReUse,
                     ?connectionString = connectionString
                 )
 
@@ -532,16 +546,41 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
-    static member internal GetCommandCtors(cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, ?connectionString: string, ?factoryMethodName) = 
+    static member internal GetCommandCtors
+        (
+            cmdProvidedType: ProvidedTypeDefinition, 
+            designTimeConfig, 
+            allowDesignTimeConnectionStringReUse: bool,            
+            ?connectionString: string, 
+            ?factoryMethodName
+        ) = 
+
         [
             let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructor [| typeof<DesignTimeConfig>; typeof<Connection>; typeof<int> |]
 
             let parameters1 = [ 
-                ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (Option.map box connectionString)) 
+                ProvidedParameter(
+                    "connectionString", 
+                    typeof<string>, 
+                    ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))
+                ) 
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
-            let body1 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice1Of2 %%args.Head @@> :: args.Tail)
+            let body1 (args: _ list) = 
+                let designTimeConnectionString = defaultArg connectionString ""
+                let runTimeConnectionString = 
+                    <@@
+                        if %%args.Head = reuseDesignTimeConnectionString
+                        then 
+                            if allowDesignTimeConnectionStringReUse 
+                            then designTimeConnectionString
+                            else failwith ErrorMessage.prohibitDesignTimeConnStrReUse
+                        else
+                            %%args.Head
+                    @@>
+
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
 
             yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
             

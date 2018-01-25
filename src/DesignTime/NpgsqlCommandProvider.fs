@@ -10,7 +10,7 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open System.Collections.Concurrent
 
-let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime) = 
+let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString, resultType, singleRow, fsx,  allParametersOptional, verifyOutputAtRuntime, isHostedExecution) = 
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then 
@@ -40,6 +40,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
             rank, 
             sqlStatement, 
             hasOutputParameters = false, 
+            allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
             ?connectionString = (if fsx then Some connectionString else None)
         )
 
@@ -75,6 +76,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
             QuotationsFactory.GetCommandCtors(
                 cmdProvidedType, 
                 designTimeConfig, 
+                allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
                 ?connectionString  = (if fsx then Some connectionString else None), 
                 factoryMethodName = "Create"
             )
@@ -96,7 +98,7 @@ let createRootType(assembly, nameSpace, typeName, sqlStatement, connectionString
 
     cmdProvidedType
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, isHostedExecution) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlCommand", Some typeof<obj>, hideObjectMethods = true)
 
@@ -115,16 +117,9 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
                 typeName, 
                 fun _ -> 
                     createRootType(
-                        assembly, 
-                        nameSpace, 
-                        typeName, 
-                        args.[0] :?> _, 
-                        args.[1] :?> _, 
-                        args.[2] :?> _, 
-                        args.[3] :?> _, 
-                        args.[4] :?> _, 
-                        args.[5] :?> _, 
-                        args.[6] :?> _
+                        assembly, nameSpace, typeName, 
+                        unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6],
+                        isHostedExecution
                     )
             )
         ) 
@@ -137,7 +132,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <param name='ResultType'>A value that defines structure of result: Records, Tuples, DataTable or DataReader.</param>
 <param name='SingleRow'>If set the query is expected to return a single row of the result set. See MSDN documentation for details on CommandBehavior.SingleRow.</param>
 <param name='AllParametersOptional'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
-<param name='Fsx'>Re-use design time connection for the type provider instantiation from *.fsx files.</param>
+<param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='VerifyOutputAtRuntime'>Verify output columns names and types at run-time.</param>
 """
     providerType
