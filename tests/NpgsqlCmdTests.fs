@@ -14,7 +14,7 @@ let openConnection() =
 open FSharp.Data
 
 [<Literal>]
-let config = __SOURCE_DIRECTORY__ + "\\" + "development.settings.json"
+let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
 
 [<Fact>]
 let selectLiterals() =

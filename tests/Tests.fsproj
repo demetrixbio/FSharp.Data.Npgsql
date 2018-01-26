@@ -33,13 +33,6 @@
     
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="FSharp.Data.Npgsql">
-      <HintPath>..\src\Runtime\bin\Debug\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-  </ItemGroup>
-
   <PropertyGroup>
     <IsWindows Condition="'$(OS)' == 'Windows_NT'">true</IsWindows>
     <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
@@ -58,5 +51,13 @@
     <FscToolPath>/usr/bin</FscToolPath>
     <FscToolExe>fsharpc</FscToolExe>
   </PropertyGroup>
+  
+  
+  <ItemGroup>
+    <Reference Include="FSharp.Data.Npgsql">
+      <HintPath>..\src\Runtime\bin\Debug\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
 
 </Project>
