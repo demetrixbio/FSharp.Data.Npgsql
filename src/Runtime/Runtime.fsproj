@@ -1,12 +1,17 @@
 ﻿<Project>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <!--<TargetFramework>netstandard2.0</TargetFramework>-->
-    <!--<TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>-->
-    <!--<TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>-->
+    <TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>
+    <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
+    <Description>NpgsqlCommand is F# type provider to support statically typed access to input parameters and result set of sql statement in idiomatic F# way.</Description>
+    <Copyright>Copyright 2017-2018 Dmitry Morozov</Copyright>
+    <PackageTags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <Version>0.1.10-beta</Version>
   </PropertyGroup>
+  
   <PropertyGroup>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
