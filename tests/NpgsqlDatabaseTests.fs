@@ -2,12 +2,18 @@ module NpgsqlConnectionTests
 
 open System
 open Xunit
+open Microsoft.Extensions.Configuration
 
 [<Literal>]
-let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
+let config = __SOURCE_DIRECTORY__ + "\\" + "development.settings.json"
+
+[<Literal>]
+let connectionStringName ="dvdRental"
+
+let dvdRental = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
 
 open FSharp.Data
-type DvdRental = NpgsqlConnection<dvdRental>
+type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
 
 open Npgsql
 
@@ -16,7 +22,7 @@ let selectLiterals() =
     use cmd = 
         DvdRental.CreateCommand<"        
             SELECT 42 AS Answer, current_date as today
-        ">(dvdRental)
+        ">(dvdRental.Value)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
@@ -26,7 +32,7 @@ let selectLiterals() =
 let selectSingleRow() =
     use cmd = DvdRental.CreateCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", SingleRow = true>(dvdRental)
+    ", SingleRow = true>(dvdRental.Value)
 
     Assert.Equal(
         Some( Some 42, Some DateTime.UtcNow.Date), 
@@ -37,7 +43,7 @@ let selectSingleRow() =
 let selectTuple() =
     use cmd = DvdRental.CreateCommand<"    
         SELECT 42 AS Answer, current_date as today
-    ", ResultType.Tuples>(dvdRental)
+    ", ResultType.Tuples>(dvdRental.Value)
 
     Assert.Equal<_ list>(
         [ Some 42, Some DateTime.UtcNow.Date ],
@@ -46,12 +52,12 @@ let selectTuple() =
 
 [<Fact>]
 let selectSingleNull() =
-    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRental.Value)
     Assert.Equal(Some None, cmd.Execute())
 
 [<Fact>]
 let selectSingleColumn() =
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRental.Value)
 
     Assert.Equal<_ seq>(
         { 0 .. 10 }, 
@@ -63,7 +69,7 @@ let paramInFilter() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
-        ">(dvdRental)
+        ">(dvdRental.Value)
 
     Assert.Equal<_ seq>(
         { 0 .. 2 .. 10 }, 
@@ -75,7 +81,7 @@ let paramInLimit() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) LIMIT @limit
-        ">(dvdRental)
+        ">(dvdRental.Value)
 
     let limit = 5
     Assert.Equal<_ seq>(
@@ -94,7 +100,7 @@ let dateTableWithUpdate() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM rental WHERE rental_id = @rental_id
-        ", ResultType.DataTable>(dvdRental) 
+        ", ResultType.DataTable>(dvdRental.Value) 
         
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
@@ -104,24 +110,24 @@ let dateTableWithUpdate() =
     try
         let new_return_date = Some DateTime.Now.Date
         r.return_date <- new_return_date
-        rowsAffected := t.Update(dvdRental)
+        rowsAffected := t.Update(dvdRental.Value)
         Assert.Equal(1, !rowsAffected)
 
-        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental)
+        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental.Value)
         Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
         if !rowsAffected = 1
         then 
             r.return_date <- return_date
-            t.Update(dvdRental) |>  ignore      
+            t.Update(dvdRental.Value) |>  ignore      
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental)
+    use conn = new NpgsqlConnection(dvdRental.Value)
     conn.Open()
     use tran = conn.BeginTransaction()
 
@@ -156,7 +162,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental)
+    use conn = new NpgsqlConnection(dvdRental.Value)
     conn.Open()
     use tran = conn.BeginTransaction()
 
@@ -185,11 +191,11 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 let deleteWithTx() =
     let rental_id = 2
 
-    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental.Value)
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
-        use conn = new NpgsqlConnection(dvdRental)
+        use conn = new NpgsqlConnection(dvdRental.Value)
         conn.Open()
         use tran = conn.BeginTransaction()
 
@@ -212,7 +218,7 @@ let selectEnum() =
             SELECT * 
             FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
             WHERE X <> @exclude;          
-        ">(dvdRental)
+        ">(dvdRental.Value)
     Assert.Equal<_ list>(
         [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
         [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
@@ -224,7 +230,7 @@ let selectEnum() =
 let selectEnumWithArray() =
     use cmd = DvdRental.CreateCommand<"
         SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-    ", SingleRow = true>(dvdRental)
+    ", SingleRow = true>(dvdRental.Value)
 
     Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
 
@@ -233,7 +239,7 @@ let allParametersOptional() =
     let cmd = 
         DvdRental.CreateCommand<"
             SELECT coalesce(@x, 'Empty') AS x
-        ", AllParametersOptional = true, SingleRow = true>(dvdRental)
+        ", AllParametersOptional = true, SingleRow = true>(dvdRental.Value)
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
     Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
 
@@ -242,10 +248,10 @@ let tableInsert() =
     
     let rental_id = 2
     
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental)  
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
-    use conn = new NpgsqlConnection(dvdRental)
+    use conn = new NpgsqlConnection(dvdRental.Value)
     conn.Open()
     use tran = conn.BeginTransaction()
     use t = new DvdRental.``public``.Tables.rental()
@@ -276,7 +282,7 @@ let tableInsert() =
 
 [<Fact>]
 let selectEnumWithArray2() =
-    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRental.Value)
 
     let ratings = [| 
         DvdRental.``public``.Types.mpaa_rating.``PG-13``

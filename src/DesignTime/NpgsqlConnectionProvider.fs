@@ -368,8 +368,10 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, connectionString, fsx, isHostedExecution) =
+let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionString, fsx, configFile) =
+
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
+    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionString, configFile)
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
@@ -426,10 +428,12 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             parameters = [ 
                 ProvidedStaticParameter("Connection", typeof<string>) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
+                ProvidedStaticParameter("Config", typeof<string>, "") 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
-                    typeName, fun _ -> createRootType(assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], isHostedExecution)
+                    typeName, fun _ -> 
+                        createRootType(assembly, nameSpace, typeName, isHostedExecution, unbox args.[0], unbox args.[1], unbox args.[2])
                 )
             ) 
         )
@@ -438,6 +442,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
 <param name='Connection'>String used to open a Postgresql database or the name of the connection string in the configuration file in the form of “name=&lt;connection string name&gt;”.</param>
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
+<param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 """
     providerType
 

@@ -4,7 +4,7 @@ open System
 open Xunit
 
 [<Literal>]
-let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
+let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 
 let openConnection() = 
     let conn = new Npgsql.NpgsqlConnection(dvdRental)
@@ -13,11 +13,24 @@ let openConnection() =
 
 open FSharp.Data
 
+[<Literal>]
+let config = __SOURCE_DIRECTORY__ + "\\" + "development.settings.json"
+
 [<Fact>]
 let selectLiterals() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
     ", dvdRental>(dvdRental)
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+
+[<Fact>]
+let selectLiteralsConnStrFromConfig() =
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", Config = config >(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
