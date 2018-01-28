@@ -368,10 +368,10 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionString, fsx, configFile) =
+let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configFile) =
 
-    if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
-    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionString, configFile)
+    if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
+    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionStringOrName, configFile)
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 

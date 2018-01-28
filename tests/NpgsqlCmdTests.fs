@@ -13,24 +13,11 @@ let openConnection() =
 
 open FSharp.Data
 
-[<Literal>]
-let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
-
 [<Fact>]
 let selectLiterals() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
     ", dvdRental>(dvdRental)
-
-    let x = cmd.Execute() |> Seq.exactlyOne
-    Assert.Equal(Some 42, x.answer)
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
-
-[<Fact>]
-let selectLiteralsConnStrFromConfig() =
-    use cmd = new NpgsqlCommand<"        
-        SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", ConfigFile = config >(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
@@ -246,5 +233,18 @@ let allParametersOptional() =
     ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
     Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
+
+[<Literal>]
+let jsonConfig = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
+
+[<Fact>]
+let selectLiteralsConnStrFromJsonConfig() =
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigFile = jsonConfig >(dvdRental)
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
 

@@ -11,11 +11,11 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open System.Collections.Concurrent
 
-let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatement, connectionString, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configFile) = 
+let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configFile) = 
 
-    if String.IsNullOrWhiteSpace( connectionString) then invalidArg "Connection" "Value is empty!" 
+    if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
 
-    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionString, configFile)
+    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionStringOrName, configFile)
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
