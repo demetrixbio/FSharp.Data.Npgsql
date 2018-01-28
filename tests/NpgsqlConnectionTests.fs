@@ -5,7 +5,7 @@ open Xunit
 open Microsoft.Extensions.Configuration
 
 [<Literal>]
-let config = __SOURCE_DIRECTORY__ + "\\" + "development.settings.json"
+let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
 
 [<Literal>]
 let connectionStringName ="dvdRental"

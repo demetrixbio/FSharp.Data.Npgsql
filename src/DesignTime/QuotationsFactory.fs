@@ -350,7 +350,7 @@ type internal QuotationsFactory private() =
                                     then 
                                         if allowDesignTimeConnectionStringReUse 
                                         then designTimeConnectionString
-                                        else failwith ErrorMessage.prohibitDesignTimeConnStrReUse
+                                        else failwith Const.prohibitDesignTimeConnStrReUse
                                     else
                                         %%connectionString
 
@@ -575,7 +575,7 @@ type internal QuotationsFactory private() =
                         then 
                             if allowDesignTimeConnectionStringReUse 
                             then designTimeConnectionString
-                            else failwith ErrorMessage.prohibitDesignTimeConnStrReUse
+                            else failwith Const.prohibitDesignTimeConnStrReUse
                         else
                             %%args.Head
                     @@>

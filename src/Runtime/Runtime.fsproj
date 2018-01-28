@@ -25,8 +25,8 @@
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 
   <ItemGroup>
-    <Compile Include="DesignTime.fs" />
     <Compile Include="ISqlCommand.fs" />
+    <Compile Include="DesignTime.fs" />
   </ItemGroup>
 
   <ItemGroup>
