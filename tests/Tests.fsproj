@@ -1,14 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.0</TargetFramework>
+    <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
+    <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
   </PropertyGroup>
   
   <Import Project="fsc.props" />
   
   <ItemGroup>
     <Compile Include="NpgsqlCmdTests.fs" />
-    <Compile Include="NpgsqlDatabaseTests.fs" />
+    <Compile Include="NpgsqlConnectionTests.fs" />
     <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netstandard2.0' OR '$(TargetFramework)' == 'netcoreapp2.0' " />
   </ItemGroup>
   
@@ -33,6 +34,12 @@
     
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="FSharp.Data.Npgsql">
+      <HintPath>..\src\Runtime\bin\Debug\$(TargetFramework)\FSharp.Data.Npgsql.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
   <PropertyGroup>
     <IsWindows Condition="'$(OS)' == 'Windows_NT'">true</IsWindows>
     <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>
@@ -51,13 +58,5 @@
     <FscToolPath>/usr/bin</FscToolPath>
     <FscToolExe>fsharpc</FscToolExe>
   </PropertyGroup>
-  
-  
-  <ItemGroup>
-    <Reference Include="FSharp.Data.Npgsql">
-      <HintPath>..\src\Runtime\bin\Debug\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-  </ItemGroup>
 
 </Project>

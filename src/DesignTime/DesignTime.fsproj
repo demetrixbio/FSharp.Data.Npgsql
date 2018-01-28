@@ -1,13 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
     <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
     <!--<TargetFramework>net461</TargetFramework>-->
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
     <DefineConstants>NO_GENERATIVE</DefineConstants>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <DebugType Condition="'$(TargetFramework)' == 'net461'">full</DebugType>
+    <DebugType Condition="'$(TargetFramework)' == 'netstandard2.0'">full</DebugType>
   </PropertyGroup>
 
   <PropertyGroup>

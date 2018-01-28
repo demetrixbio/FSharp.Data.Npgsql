@@ -114,7 +114,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("Fsx", typeof<bool>, false) 
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
-            ProvidedStaticParameter("Config", typeof<string>, "") 
+            ProvidedStaticParameter("ConfigFile", typeof<string>, "") 
         ],             
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
@@ -137,6 +137,6 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <param name='AllParametersOptional'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='VerifyOutputAtRuntime'>Verify output columns names and types at run-time.</param>
-<param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
+<param name='ConfigFile'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 """
     providerType

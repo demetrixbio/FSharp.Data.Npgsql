@@ -34,10 +34,10 @@ type NpgsqlProviders(config) as this =
             ]
         )
 
-    override this.ResolveAssembly args = 
-        config.ReferencedAssemblies 
-        |> Array.tryFind (fun x -> AssemblyName.ReferenceMatchesDefinition(AssemblyName.GetAssemblyName x, AssemblyName args.Name)) 
-        |> Option.map Assembly.LoadFrom
-        |> defaultArg 
-        <| base.ResolveAssembly args
+    //override this.ResolveAssembly args = 
+    //    config.ReferencedAssemblies 
+    //    |> Array.tryFind (fun x -> AssemblyName.ReferenceMatchesDefinition(AssemblyName.GetAssemblyName x, AssemblyName args.Name)) 
+    //    |> Option.map Assembly.LoadFrom
+    //    |> defaultArg 
+    //    <| base.ResolveAssembly args
 

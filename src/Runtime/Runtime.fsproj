@@ -1,7 +1,7 @@
 ﻿<Project>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
-    <TargetFramework Condition="'$(Configuration)'=='Debug'">netstandard2.0</TargetFramework>
+    <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
     <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
     
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>

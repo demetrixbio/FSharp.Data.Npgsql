@@ -428,7 +428,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             parameters = [ 
                 ProvidedStaticParameter("Connection", typeof<string>) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
-                ProvidedStaticParameter("Config", typeof<string>, "") 
+                ProvidedStaticParameter("ConfigFile", typeof<string>, "") 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(

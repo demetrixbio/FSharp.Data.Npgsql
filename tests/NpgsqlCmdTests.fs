@@ -30,7 +30,7 @@ let selectLiterals() =
 let selectLiteralsConnStrFromConfig() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", Config = config >(dvdRental)
+    ", "dvdRental", ConfigFile = config >(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
