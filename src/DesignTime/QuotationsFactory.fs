@@ -556,7 +556,7 @@ type internal QuotationsFactory private() =
         ) = 
 
         [
-            let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructor [| typeof<DesignTimeConfig>; typeof<Connection>; typeof<int> |]
+            let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
 
             let parameters1 = [ 
                 ProvidedParameter(
@@ -580,7 +580,7 @@ type internal QuotationsFactory private() =
                             %%args.Head
                     @@>
 
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlTransaction>.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
 
             yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
             
@@ -594,7 +594,7 @@ type internal QuotationsFactory private() =
                         ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
                     ]
 
-            let body2 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Connection.Choice2Of2 %%args.Head @@> :: args.Tail )
+            let body2 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlTransaction>.Choice2Of2 %%args.Head @@> :: args.Tail )
                     
             yield upcast ProvidedConstructor(parameters2, invokeCode = body2)
             if factoryMethodName.IsSome

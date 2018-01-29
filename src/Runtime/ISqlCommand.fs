@@ -6,7 +6,6 @@ open Npgsql
 open System.Data.Common
 open System.Reflection
 
-
 ///<summary>Enum describing output type</summary>
 type ResultType =
 ///<summary>Sequence of custom records with properties matching column names and types</summary>
@@ -28,7 +27,6 @@ module internal Const =
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type ISqlCommand = 
-    
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
 
@@ -51,8 +49,6 @@ type DesignTimeConfig = {
     ExpectedColumns: DataColumn[]
 }
 
-type internal Connection = Choice<string, NpgsqlTransaction>
-
 [<AutoOpen>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 module Extensions =
@@ -69,7 +65,7 @@ module Extensions =
     let DbNull = box DBNull.Value
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection: Connection, commandTimeout) = 
+type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTimeout) = 
 
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)
     let manageConnection = 
