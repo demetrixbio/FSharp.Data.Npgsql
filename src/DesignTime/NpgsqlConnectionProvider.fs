@@ -49,12 +49,13 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
                 else []
 
-            let rank = if singleRow then ResultRank.SingleRow else ResultRank.Sequence
+            let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
+
             let returnType = 
                 QuotationsFactory.GetOutputTypes(
                     outputColumns, 
                     resultType, 
-                    rank, 
+                    commandBehaviour, 
                     sqlStatement, 
                     hasOutputParameters = false, 
                     allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
@@ -101,7 +102,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     IsStoredProcedure = false
                     Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                     ResultType = %%Expr.Value(resultType)
-                    Rank = rank
+                    SingleRow = singleRow
                     Row2ItemMapping = %%returnType.Row2ItemMapping
                     SeqItemTypeName = %%returnType.SeqItemTypeName
                     ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, expectedColumns)

@@ -25,6 +25,7 @@
     </Compile>
     <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi" />
     <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs" />
+    <Compile Include="Configuration.fs" />
     <Compile Include="InformationSchema.fs" />
     <Compile Include="QuotationsFactory.fs" />
     <Compile Include="NpgsqlCommandProvider.fs" />

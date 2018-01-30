@@ -436,7 +436,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, resultType, rank, commandText, hasOutputParameters, allowDesignTimeConnectionStringReUse, ?connectionString) =    
+    static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, commandText, hasOutputParameters, allowDesignTimeConnectionStringReUse, ?connectionString) =    
          
         if resultType = ResultType.DataReader 
         then 
@@ -499,13 +499,12 @@ type internal QuotationsFactory private() =
             
             { 
                 Single = 
-                    match rank with
-                    | ResultRank.ScalarValue -> providedRowType
-                    | ResultRank.SingleRow -> ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ providedRowType ])
-                    | ResultRank.Sequence -> 
+                    if commandBehaviour.HasFlag(CommandBehavior.SingleRow)  
+                    then
+                        ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ providedRowType ])
+                    else
                         let collectionType = if hasOutputParameters then typedefof<_ list> else typedefof<_ seq>
                         ProvidedTypeBuilder.MakeGenericType( collectionType, [ providedRowType ])
-                    | unexpected -> failwithf "Unexpected ResultRank value: %A" unexpected
 
                 PerRow = Some { 
                     Provided = providedRowType

@@ -200,6 +200,7 @@ let readConnectionStringFromConfig(connectionString, configFile) =
         then failwithf "Relative path %s is not allowed for config file." configFile
 
         let config = ConfigurationBuilder().AddJsonFile(configFile).Build()
+
         match config.GetConnectionString(connectionString) with 
         | null -> connectionString
         | x -> x
