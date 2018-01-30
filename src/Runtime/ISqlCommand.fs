@@ -73,30 +73,30 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
         ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ ->  CommandBehavior.Default
 
-    let manageConnection = 
-        match connection with
-        | Choice1Of2 connectionString -> 
-            cmd.Connection <- new NpgsqlConnection(connectionString)
-            true
-
-        | Choice2Of2 tran -> 
-            cmd.Transaction <- tran 
-            cmd.Connection <- tran.Connection
-            false
-
     do
         cmd.CommandType <- if cfg.IsStoredProcedure then CommandType.StoredProcedure else CommandType.Text
         cmd.Parameters.AddRange( cfg.Parameters)
         
     let setupConnection() = 
-        if cmd.Connection.State <> ConnectionState.Open && manageConnection
-        then cmd.Connection.Open() 
-
+        match connection with
+        | Choice2Of2 tx -> 
+            cmd.Transaction <- tx 
+            cmd.Connection <- tx.Connection
+            { new IDisposable with member __.Dispose() = () }            
+        | Choice1Of2 connectionString -> 
+            cmd.Connection <- new NpgsqlConnection(connectionString)
+            cmd.Connection.Open()
+            upcast cmd.Connection
+        
     let asyncSetupConnection() = 
         async {
-            if cmd.Connection.State <> ConnectionState.Open && manageConnection
-            then 
+            match connection with
+            | Choice2Of2 _ -> 
+                return setupConnection()
+            | Choice1Of2 connectionString -> 
+                cmd.Connection <- new NpgsqlConnection(connectionString)
                 do! cmd.Connection.OpenAsync() |> Async.AwaitTask
+                return upcast cmd.Connection
         }
 
     static let seqToOption source =  
@@ -116,8 +116,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | ResultType.Records | ResultType.Tuples ->
             match box cfg.Row2ItemMapping, cfg.SeqItemTypeName with
             | null, null ->
-                ``ISqlCommand Implementation``.ExecuteNonQuery manageConnection >> box, 
-                ``ISqlCommand Implementation``.AsyncExecuteNonQuery manageConnection >> box
+                ``ISqlCommand Implementation``.ExecuteNonQuery setupConnection >> box, 
+                ``ISqlCommand Implementation``.AsyncExecuteNonQuery asyncSetupConnection >> box
             | rowMapping, itemTypeName ->
                 assert (rowMapping <> null && itemTypeName <> null)
                 let itemType = Type.GetType( itemTypeName, throwOnError = true)
@@ -202,7 +202,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        setupConnection() 
+        setupConnection() |> ignore
         let cursor = cmd.ExecuteReader(readerBehavior)
         ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedColumns)
         cursor
@@ -210,7 +210,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, expectedColumns) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-            do! setupConnection() 
+            let! _ = setupConnection() 
             let! cursor = cmd.ExecuteReaderAsync( readerBehavior) |> Async.AwaitTask
             ``ISqlCommand Implementation``.VerifyOutputColumns(downcast cursor, expectedColumns)
             return cursor
@@ -281,34 +281,24 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         else 
             box xs 
 
-    static member internal ExecuteNonQuery manageConnection (cmd, _, _, parameters, _) = 
+    static member internal ExecuteNonQuery setupConnection (cmd, _, _, parameters, _) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
-        try
-            if manageConnection 
-            then cmd.Connection.Open()
+        use __ = setupConnection()
 
-            let recordsAffected = cmd.ExecuteNonQuery() 
-            for i = 0 to parameters.Length - 1 do
-                let name, _ = parameters.[i]
-                let p = cmd.Parameters.[name]
-                if p.Direction.HasFlag( ParameterDirection.Output)
-                then 
-                    parameters.[i] <- name, p.Value
-            recordsAffected
-        finally
-            if manageConnection 
-            then cmd.Connection.Close()
+        let recordsAffected = cmd.ExecuteNonQuery() 
+        for i = 0 to parameters.Length - 1 do
+            let name, _ = parameters.[i]
+            let p = cmd.Parameters.[name]
+            if p.Direction.HasFlag( ParameterDirection.Output)
+            then 
+                parameters.[i] <- name, p.Value
+        recordsAffected
 
-    static member internal AsyncExecuteNonQuery manageConnection (cmd, _, _, parameters, _) = 
+    static member internal AsyncExecuteNonQuery setupConnection (cmd, _, _, parameters, _) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         async {         
-            try 
-                if manageConnection 
-                then do! cmd.Connection.OpenAsync() |> Async.AwaitTask
-                return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
-            finally
-                if manageConnection 
-                then cmd.Connection.Close()
+            use! __ = setupConnection()
+            return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
         }
 
     static member UpdateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 

@@ -154,7 +154,7 @@ let dateTableWithUpdateAndTx() =
 
     Assert.Equal(
         return_date, 
-        getRentalByIdCmd.Execute( rental_id) |> Seq.exactlyOne
+        DvdRental.CreateCommand<getRentalById>(dvdRental.Value).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
 [<Fact>]
