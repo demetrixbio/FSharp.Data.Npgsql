@@ -67,7 +67,6 @@ let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatemen
 
             <@@ {
                 SqlStatement = sqlStatement
-                IsStoredProcedure = false
                 Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                 ResultType = resultType
                 SingleRow = singleRow

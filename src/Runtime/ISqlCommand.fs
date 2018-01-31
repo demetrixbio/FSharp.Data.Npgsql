@@ -39,7 +39,6 @@ type ResultRank =
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type DesignTimeConfig = {
     SqlStatement: string
-    IsStoredProcedure: bool 
     Parameters: NpgsqlParameter[]
     ResultType: ResultType
     SingleRow: bool
@@ -64,18 +63,18 @@ module Extensions =
     let DbNull = box DBNull.Value
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+//[<Sealed>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTimeout) = 
 
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)
+    do
+        cmd.Parameters.AddRange( cfg.Parameters)
+
     let readerBehavior = 
         CommandBehavior.SingleResult
         ||| if cfg.SingleRow then CommandBehavior.SingleRow else CommandBehavior.Default
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
         ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ ->  CommandBehavior.Default
-
-    do
-        cmd.CommandType <- if cfg.IsStoredProcedure then CommandType.StoredProcedure else CommandType.Text
-        cmd.Parameters.AddRange( cfg.Parameters)
         
     let setupConnection() = 
         match connection with
@@ -132,8 +131,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                         .GetMethod("AsyncExecuteSeq", BindingFlags.NonPublic ||| BindingFlags.Static)
                         .MakeGenericMethod(itemType)
                         
-                executeHandle.Invoke(null, [| cfg.Row2ItemMapping |]) |> unbox >> box, 
-                asyncExecuteHandle.Invoke(null, [| cfg.Row2ItemMapping |]) |> unbox >> box
+                executeHandle.Invoke(null, [| rowMapping |]) |> unbox >> box, 
+                asyncExecuteHandle.Invoke(null, [| rowMapping |]) |> unbox >> box
 
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
