@@ -19,8 +19,8 @@ type ResultType =
 
 type ConfigType =
     | JsonFile = 1
-    | EnvironmentVariables = 2
-    | EncryptedUserStore = 3
+    | Environment = 2
+    | UserStore = 3
 
 module internal Const = 
     [<Literal>]

@@ -369,10 +369,10 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configType, configFile) =
+let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configType, config) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
-    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, configFile)
+    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config)
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
@@ -390,11 +390,6 @@ let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, co
     for s in schemas do
         let ts = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
 
-        //enums |> Map.tryFind s.Name |> Option.iter ts.AddMembers
-
-        //ts.AddMembersDelayed <| fun() ->
-        //    enums |> Map.tryFind s.Name |> Option.defaultValue [] 
-        
         enums 
         |> Map.tryFind s.Name 
         |> Option.iter (fun xs ->
@@ -405,11 +400,6 @@ let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, co
 
         s.AddMember ts
 
-        //for t in ts.GetNestedTypes() do    
-        //    //let typeName = t.Name
-        //    //let ns = t.Namespace
-        //    customTypes.Add(sprintf "%s.%s" s.Name t.Name, downcast t)
-        
     for schemaType in schemas do
         schemaType.AddMemberDelayed <| fun() -> 
             getTableTypes(connectionString, schemaType.Name, enums, fsx, isHostedExecution)
@@ -430,7 +420,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
                 ProvidedStaticParameter("Connection", typeof<string>) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
                 ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
-                ProvidedStaticParameter("ConfigFile", typeof<string>, "") 
+                ProvidedStaticParameter("Config", typeof<string>, "") 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(

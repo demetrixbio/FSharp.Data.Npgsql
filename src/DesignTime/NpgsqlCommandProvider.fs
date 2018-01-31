@@ -11,11 +11,11 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open System.Collections.Concurrent
 
-let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configType, configFile) = 
+let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configType, config) = 
 
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
 
-    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, configFile)
+    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config)
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
@@ -115,7 +115,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
             ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
-            ProvidedStaticParameter("ConfigFile", typeof<string>, "") 
+            ProvidedStaticParameter("Config", typeof<string>, "") 
         ],             
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
@@ -138,6 +138,6 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
 <param name='AllParametersOptional'>If set all parameters become optional. NULL input values must be handled inside SQL script.</param>
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='VerifyOutputAtRuntime'>Verify output columns names and types at run-time.</param>
-<param name='ConfigFile'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
+<param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 """
     providerType

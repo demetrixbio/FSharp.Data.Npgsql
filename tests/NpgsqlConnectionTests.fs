@@ -13,7 +13,7 @@ let connectionStringName ="dvdRental"
 let dvdRental = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
 
 open FSharp.Data
-type DvdRental = NpgsqlConnection<connectionStringName, ConfigFile = config>
+type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
 
 open Npgsql
 

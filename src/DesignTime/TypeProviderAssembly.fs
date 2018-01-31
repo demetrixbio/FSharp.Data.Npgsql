@@ -31,7 +31,7 @@ type NpgsqlProviders(config) as this =
             let sss = config.RuntimeAssembly
             assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
             assert (Const.designTimeComponent = assemblyName)
-
+            
         this.AddNamespace(
             nameSpace, [ 
                 NpgsqlCommandProvider.getProviderType(assembly, nameSpace, cache, config.IsHostedExecution)

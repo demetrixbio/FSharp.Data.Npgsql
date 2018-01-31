@@ -3,22 +3,22 @@ module FSharp.Data.Configuration
 open Microsoft.Extensions.Configuration
 open FSharp.Data
 
-let readConnectionString(connectionString, configType, configFile) = 
+let readConnectionString(connectionString, configType, config) = 
     
-    if configType = ConfigType.JsonFile && configFile = ""
+    if configType = ConfigType.JsonFile && config = ""
     then 
         connectionString
     else
         let builder = 
             match configType with 
             | ConfigType.JsonFile -> 
-                if not (System.IO.Path.IsPathRooted(configFile))
-                then failwithf "Relative path %s is not allowed for config file." configFile
-                ConfigurationBuilder().AddJsonFile(configFile)
-            | ConfigType.EnvironmentVariables -> 
+                if not (System.IO.Path.IsPathRooted(config))
+                then failwithf "Relative path %s is not allowed for config file." config
+                ConfigurationBuilder().AddJsonFile(config)
+            | ConfigType.Environment -> 
                 ConfigurationBuilder().AddEnvironmentVariables()
-            | ConfigType.EncryptedUserStore -> 
-                ConfigurationBuilder().AddUserSecrets<``ISqlCommand Implementation``>()
+            | ConfigType.UserStore -> 
+                ConfigurationBuilder().AddUserSecrets(config)
             | _ -> 
                 upcast ConfigurationBuilder()
             
