@@ -1,7 +1,10 @@
-module FSharp.Data.Configuration
+module internal FSharp.Data.Configuration
 
 open Microsoft.Extensions.Configuration
 open FSharp.Data
+
+[<Literal>]
+let connectionStringsSection = "ConnectionStrings"
 
 let readConnectionString(connectionString, configType, config) = 
     
@@ -13,7 +16,7 @@ let readConnectionString(connectionString, configType, config) =
             match configType with 
             | ConfigType.JsonFile -> 
                 if not (System.IO.Path.IsPathRooted(config))
-                then failwithf "Relative path %s is not allowed for config file." config
+                then failwithf "Relative path %s is not allowed for config file. Use absolute path." config
                 ConfigurationBuilder().AddJsonFile(config)
             | ConfigType.Environment -> 
                 ConfigurationBuilder().AddEnvironmentVariables()
@@ -23,9 +26,13 @@ let readConnectionString(connectionString, configType, config) =
                 upcast ConfigurationBuilder()
             
         let config = builder.Build() 
-        let allKeys = config.AsEnumerable() |> Seq.toArray |> Array.sortBy (fun x -> x.Key)
-        match config.GetConnectionString(connectionString) with 
-        | null -> connectionString
+        let connectionStrings = config.GetSection( connectionStringsSection)
+
+        if not( connectionStrings.Exists()) 
+        then failwithf "%s section is missing in configuration" connectionStringsSection
+
+        match connectionStrings.[connectionString] with 
+        | null -> failwithf "Cannot find name %s in %s section of configuration." connectionString connectionStringsSection
         | x -> x
         
 
