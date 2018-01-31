@@ -1,4 +1,4 @@
-﻿module internal FSharp.Data.NpgsqlConnectionProvider
+﻿module internal FSharp.Data.Npgsql.DesignTime.NpgsqlConnectionProvider
 
 open System
 open System.Data
@@ -12,9 +12,8 @@ open ProviderImplementation.ProvidedTypes
 
 open Npgsql
 
+open FSharp.Data.Npgsql
 open InformationSchema
-open FSharp.Data
-open FSharp.Data
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
@@ -43,11 +42,11 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
 
-            let parameters = InformationSchema.extractParameters(connectionString, sqlStatement, allParametersOptional)
+            let parameters = extractParameters(connectionString, sqlStatement, allParametersOptional)
 
             let outputColumns = 
                 if resultType <> ResultType.DataReader
-                then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
+                then getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
                 else []
 
             let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
@@ -132,7 +131,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tables.AddMembersDelayed <| fun() ->
         
-        InformationSchema.getTables(connectionString, schema)
+        getTables(connectionString, schema)
         |> List.map (fun (tableName, baseTableName, baseSchemaName, description) -> 
 
             use builder = new NpgsqlCommandBuilder()
@@ -162,14 +161,14 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     WHERE c.table_schema = '%s' AND c.table_name = '%s';
             """ baseSchemaName baseTableName
 
-            let columns = [
+            let columns: Column list = [
                 use row = cmd.ExecuteReader()
                 while row.Read() do
 
                     let udt = string row.["udt_name"]
                     let schema = unbox row.["table_schema"] 
                     yield {
-                        Column.Name = unbox row.["column_name"]
+                        Name = unbox row.["column_name"]
                         DataType = 
                             {
                                 Name = udt
@@ -177,12 +176,12 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                                 ClrType = 
                                     match unbox row.["data_type"] with 
                                     | "ARRAY" -> 
-                                        let elemType = InformationSchema.typesMapping.[udt.TrimStart('_')] |> fst              
+                                        let elemType = typesMapping.[udt.TrimStart('_')] |> fst              
                                         elemType.MakeArrayType()
                                     | "USER-DEFINED" -> 
                                         typeof<obj>
                                     | _ -> 
-                                        InformationSchema.typesMapping.[udt] |> fst
+                                        typesMapping.[udt] |> fst
                             }
 
                         Nullable = unbox row.["is_nullable"] = "YES"
@@ -324,7 +323,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
     tables
 
 let getEnums connectionString = 
-    use conn = InformationSchema.openConnection(connectionString)
+    use conn = openConnection(connectionString)
     use cmd = conn.CreateCommand()
     cmd.CommandText <- "
         SELECT
@@ -356,7 +355,7 @@ let getEnums connectionString =
     |> Map.ofList
     
 let getUserSchemas connectionString = 
-    use conn = InformationSchema.openConnection connectionString
+    use conn = openConnection connectionString
     use cmd = new NpgsqlCommand("
         SELECT n.nspname  
         FROM pg_catalog.pg_namespace n                                       
@@ -433,7 +432,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
                             unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3]
                         )
-                )
+                )   
             ) 
         )
 
@@ -441,6 +440,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
 <summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
 <param name='Connection'>String used to open a Postgresql database or the name of the connection string in the configuration file in the form of “name=&lt;connection string name&gt;”.</param>
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
+<param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
 <param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 """
     providerType

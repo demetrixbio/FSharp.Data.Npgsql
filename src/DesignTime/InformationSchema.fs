@@ -1,4 +1,4 @@
-﻿module internal FSharp.Data.InformationSchema 
+﻿module internal FSharp.Data.Npgsql.DesignTime.InformationSchema 
 
 open System.Data
 open System

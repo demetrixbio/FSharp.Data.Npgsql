@@ -1,4 +1,4 @@
-﻿namespace FSharp.Data
+﻿namespace FSharp.Data.Npgsql.DesignTime
 
 open System
 open System.Data
@@ -9,7 +9,7 @@ open FSharp.Quotations
 
 open ProviderImplementation.ProvidedTypes
 
-open FSharp.Data
+open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
 

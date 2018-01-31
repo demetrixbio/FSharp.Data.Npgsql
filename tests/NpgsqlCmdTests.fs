@@ -11,7 +11,7 @@ let openConnection() =
     conn.Open()
     conn
 
-open FSharp.Data
+open FSharp.Data.Npgsql
 
 [<Fact>]
 let selectLiterals() =

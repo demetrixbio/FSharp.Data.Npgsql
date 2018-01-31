@@ -1,10 +1,10 @@
-module internal FSharp.Data.Configuration
+module internal FSharp.Data.Npgsql.DesignTime.Configuration
 
 open Microsoft.Extensions.Configuration
-open FSharp.Data
 open System.Xml.Linq
 open System.Xml.XPath
 open System.IO
+open FSharp.Data.Npgsql
 
 [<Literal>]
 let connectionStringsSection = "ConnectionStrings"
@@ -12,12 +12,11 @@ let connectionStringsSection = "ConnectionStrings"
 let readUserSecretIdFromProjectFile resolutionFolder = 
     match Directory.GetFiles(resolutionFolder, "*.fsproj") with 
     | [| fsproj |] -> 
-        match XDocument.Load( fsproj).XPathSelectElement("/Project/PropertyGroup/UserSecretsId") with 
+        match XDocument.Load( fsproj).XPathSelectElement( "/Project/PropertyGroup/UserSecretsId") with 
         | null -> ""
         | node -> node.Value
     | _ -> ""        
     
-
 let readConnectionString(connectionString, configType, config, resolutionFolder) = 
     
     if configType = ConfigType.JsonFile && config = ""

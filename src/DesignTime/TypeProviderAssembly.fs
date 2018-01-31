@@ -1,9 +1,10 @@
-﻿namespace FSharp.Data
+﻿namespace FSharp.Data.Npgsql
 
 open System.Reflection
 open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
 open System.Collections.Concurrent
+open FSharp.Data.Npgsql.DesignTime
 
 [<assembly:TypeProviderAssembly()>]
 do()
@@ -12,9 +13,6 @@ do()
 type NpgsqlProviders(config) as this = 
     inherit TypeProviderForNamespaces(config, assemblyReplacementMap = [(Const.designTimeComponent, "FSharp.Data.Npgsql")])
     
-    [<Literal>]
-    let nameSpace = "FSharp.Data"
-
     let cache = ConcurrentDictionary()
 
     do 
@@ -26,10 +24,10 @@ type NpgsqlProviders(config) as this =
     do 
         let assembly = Assembly.GetExecutingAssembly()
         let assemblyName = assembly.GetName().Name
+        let nameSpace = this.GetType().Namespace
         
-        do 
-            assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
-            assert (Const.designTimeComponent = assemblyName)
+        assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
+        assert (Const.designTimeComponent = assemblyName)
             
         this.AddNamespace(
             nameSpace, [ 
@@ -37,11 +35,4 @@ type NpgsqlProviders(config) as this =
                 NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
             ]
         )
-
-    //override this.ResolveAssembly args = 
-    //    config.ReferencedAssemblies 
-    //    |> Array.tryFind (fun x -> AssemblyName.ReferenceMatchesDefinition(AssemblyName.GetAssemblyName x, AssemblyName args.Name)) 
-    //    |> Option.map Assembly.LoadFrom
-    //    |> defaultArg 
-    //    <| base.ResolveAssembly args
 
