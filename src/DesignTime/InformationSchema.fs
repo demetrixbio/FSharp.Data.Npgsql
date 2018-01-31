@@ -194,13 +194,6 @@ let inline openConnection connectionString =
     conn.Open()
     conn
 
-//let inline asyncOpenConnection connectionString =  
-//    async {
-//        let conn = new NpgsqlConnection(connectionString)
-//        do! conn.OpenAsync() |> Async.AwaitTask
-//        return conn
-//    }
-
 let extractParameters(connectionString, commandText, allParametersOptional) =  
     use conn = openConnection(connectionString)
     use cmd = new NpgsqlCommand(commandText, conn)
@@ -214,7 +207,7 @@ let extractParameters(connectionString, commandText, allParametersOptional) =
                 Name = p.ParameterName
                 NpgsqlDbType = 
                     match p.PostgresType with
-                    | :? PostgresArrayType as x when x.Element.GetType() = typeof<PostgresEnumType> -> 
+                    | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
                         //probably array of custom type (enum or composite)
                         NpgsqlDbType.Array ||| NpgsqlDbType.Text
                     | _ -> p.NpgsqlDbType
@@ -243,7 +236,7 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
         let enumTypes = 
             cols 
             |> List.choose (fun c -> 
-                if typeof<PostgresTypes.PostgresEnumType> = c.PostgresType.GetType()
+                if c.PostgresType :? PostgresTypes.PostgresEnumType
                 then Some( c.PostgresType.FullName)
                 else None
             )
