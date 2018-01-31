@@ -33,8 +33,8 @@ type NpgsqlProviders(config) as this =
             
         this.AddNamespace(
             nameSpace, [ 
-                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, cache, config.IsHostedExecution)
-                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, cache, config.IsHostedExecution)
+                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
+                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
             ]
         )
 

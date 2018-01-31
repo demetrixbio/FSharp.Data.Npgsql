@@ -11,11 +11,15 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open System.Collections.Concurrent
 
-let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configType, config) = 
+let createRootType
+    (
+        assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
+        sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configType, config
+    ) = 
 
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
 
-    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config)
+    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
 
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
@@ -101,7 +105,7 @@ let createRootType(assembly, nameSpace, typeName, isHostedExecution, sqlStatemen
 
     cmdProvidedType
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, isHostedExecution) = 
+let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlCommand", Some typeof<obj>, hideObjectMethods = true)
 
@@ -122,7 +126,7 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
                 typeName, 
                 fun _ -> 
                     createRootType(
-                        assembly, nameSpace, typeName, isHostedExecution,
+                        assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
                         unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
                     )
             )

@@ -369,10 +369,14 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configType, config) =
+let createRootType
+    ( 
+        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder,
+        connectionStringOrName, fsx, configType, config
+    ) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
-    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config)
+    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
@@ -410,7 +414,7 @@ let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, co
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, isHostedExecution) = 
+let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -425,7 +429,10 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName, fun _ -> 
-                        createRootType(assembly, nameSpace, typeName, isHostedExecution, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3])
+                        createRootType(
+                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3]
+                        )
                 )
             ) 
         )

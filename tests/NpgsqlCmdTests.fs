@@ -259,10 +259,20 @@ let selectLiteralsConnStrFromEnvironmentVariables() =
 
 //%APPDATA%\microsoft\UserSecrets\e0db9c78-0c59-4e4f-9d15-ed0c2848e94e\secrets.json
 [<Fact>]
-let selectLiteralsConnStrFromUserSecretStore() =
+let selectLiteralsConnStrFromUserSecretStorePassingUserSecretsIdExplicitely() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">(dvdRental)
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+
+[<Fact>]
+let selectLiteralsConnStrFromUserSecretStore() =
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)

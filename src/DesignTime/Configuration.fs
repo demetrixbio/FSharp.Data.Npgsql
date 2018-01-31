@@ -2,26 +2,48 @@ module internal FSharp.Data.Configuration
 
 open Microsoft.Extensions.Configuration
 open FSharp.Data
+open System.Xml.Linq
+open System.Xml.XPath
+open System.IO
 
 [<Literal>]
 let connectionStringsSection = "ConnectionStrings"
 
-let readConnectionString(connectionString, configType, config) = 
+let readUserSecretIdFromProjectFile resolutionFolder = 
+    match Directory.GetFiles(resolutionFolder, "*.fsproj") with 
+    | [| fsproj |] -> 
+        match XDocument.Load( fsproj).XPathSelectElement("/Project/PropertyGroup/UserSecretsId") with 
+        | null -> ""
+        | node -> node.Value
+    | _ -> ""        
+    
+
+let readConnectionString(connectionString, configType, config, resolutionFolder) = 
     
     if configType = ConfigType.JsonFile && config = ""
     then 
         connectionString
     else
-        let builder = 
+        let builder =
             match configType with 
             | ConfigType.JsonFile -> 
-                if not (System.IO.Path.IsPathRooted(config))
+                if not( Path.IsPathRooted( config))
                 then failwithf "Relative path %s is not allowed for config file. Use absolute path." config
                 ConfigurationBuilder().AddJsonFile(config)
             | ConfigType.Environment -> 
                 ConfigurationBuilder().AddEnvironmentVariables()
             | ConfigType.UserStore -> 
-                ConfigurationBuilder().AddUserSecrets(config)
+                let userSecretsId = 
+                    if config <> ""
+                    then 
+                        config
+                    else
+                        readUserSecretIdFromProjectFile resolutionFolder
+
+                if userSecretsId = "" 
+                then failwith "Provide UserSecretsId value via Config parameter."
+
+                ConfigurationBuilder().AddUserSecrets(userSecretsId)
             | _ -> 
                 upcast ConfigurationBuilder()
             
