@@ -247,4 +247,13 @@ let selectLiteralsConnStrFromJsonConfig() =
     Assert.Equal(Some 42, x.answer)
     Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
+[<Fact>]
+let selectLiteralsConnStrFromEnvironmentVariables() =
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.EnvironmentVariables>(dvdRental)
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 

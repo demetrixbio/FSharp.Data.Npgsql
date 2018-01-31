@@ -17,6 +17,11 @@ type ResultType =
 ///<summary>raw DataReader</summary>
     | DataReader = 3
 
+type ConfigType =
+    | JsonFile = 1
+    | EnvironmentVariables = 2
+    | EncryptedUserStore = 3
+
 module internal Const = 
     [<Literal>]
     let infraMessage = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
@@ -29,12 +34,6 @@ module internal Const =
 type ISqlCommand = 
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
-
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-[<RequireQualifiedAccess>]
-type ResultRank = 
-    | Sequence = 0
-    | SingleRow = 1
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type DesignTimeConfig = {

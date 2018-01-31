@@ -14,6 +14,7 @@ open Npgsql
 
 open InformationSchema
 open FSharp.Data
+open FSharp.Data
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
@@ -368,10 +369,10 @@ let getUserSchemas connectionString =
             yield cursor.GetString(0) 
     ]
         
-let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configFile) =
+let createRootType( assembly, nameSpace: string, typeName, isHostedExecution, connectionStringOrName, fsx, configType, configFile) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
-    let connectionString = InformationSchema.readConnectionStringFromConfig(connectionStringOrName, configFile)
+    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, configFile)
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
@@ -428,12 +429,13 @@ let getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<_, Provided
             parameters = [ 
                 ProvidedStaticParameter("Connection", typeof<string>) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
+                ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
                 ProvidedStaticParameter("ConfigFile", typeof<string>, "") 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName, fun _ -> 
-                        createRootType(assembly, nameSpace, typeName, isHostedExecution, unbox args.[0], unbox args.[1], unbox args.[2])
+                        createRootType(assembly, nameSpace, typeName, isHostedExecution, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3])
                 )
             ) 
         )

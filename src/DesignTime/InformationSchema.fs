@@ -189,33 +189,17 @@ type Parameter = {
         //| DbType.NChar | SqlDbType.NText | SqlDbType.NVarChar -> this.MaxLength / 2
         //| _ -> this.MaxLength
 
-open Microsoft.Extensions.Configuration
-let readConnectionStringFromConfig(connectionString, configFile) = 
-
-    if configFile = ""
-    then
-        connectionString
-    else 
-        if not (System.IO.Path.IsPathRooted(configFile))
-        then failwithf "Relative path %s is not allowed for config file." configFile
-
-        let config = ConfigurationBuilder().AddJsonFile(configFile).Build()
-
-        match config.GetConnectionString(connectionString) with 
-        | null -> connectionString
-        | x -> x
-
 let inline openConnection connectionString =  
     let conn = new NpgsqlConnection(connectionString)
     conn.Open()
     conn
 
-let inline asyncOpenConnection connectionString =  
-    async {
-        let conn = new NpgsqlConnection(connectionString)
-        do! conn.OpenAsync() |> Async.AwaitTask
-        return conn
-    }
+//let inline asyncOpenConnection connectionString =  
+//    async {
+//        let conn = new NpgsqlConnection(connectionString)
+//        do! conn.OpenAsync() |> Async.AwaitTask
+//        return conn
+//    }
 
 let extractParameters(connectionString, commandText, allParametersOptional) =  
     use conn = openConnection(connectionString)
