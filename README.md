@@ -7,7 +7,7 @@ The library includes two type providers: NpgsqlConnection and NpgsqlCommand. It'
   - netstandard2.0
   - net461
 
-## Getting started
+## Setup
 
 All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions to exist.
 ```fsharp
@@ -19,7 +19,7 @@ open FSharp.Data.Npgsql
 type DvdRental = NpgsqlConnection<dvdRental>
 ```
 
-### Basic query to get data
+## Basic query
 
 ```fsharp
 use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
@@ -40,11 +40,15 @@ use cmd = BasicQuery.Create(dvdRental)
 //...
 ```
 
+## Parameterized query
+
+
+
 ## Configuration
 
-## Scripting
-
 ## Data modifications
+
+## Scripting
 
 ## Transactions
 
