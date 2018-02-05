@@ -14,6 +14,8 @@ All examples based on [DVD rental sample database](http://www.postgresqltutorial
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 
+open FSharp.Data.Npgsql
+
 type DvdRental = NpgsqlConnection<dvdRental>
 ```
 
