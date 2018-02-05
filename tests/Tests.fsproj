@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
-    <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
+    <TargetFrameworks Condition="'$(Configuration)'=='Release'">net461;netcoreapp2.0</TargetFrameworks>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
   </PropertyGroup>
   
@@ -11,7 +11,7 @@
   <ItemGroup>
     <Compile Include="NpgsqlCmdTests.fs" />
     <Compile Include="NpgsqlConnectionTests.fs" />
-    <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netstandard2.0' OR '$(TargetFramework)' == 'netcoreapp2.0' " />
+    <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netcoreapp2.0' " />
   </ItemGroup>
   
   <ItemGroup>
@@ -41,7 +41,7 @@
       <Private>true</Private>
     </Reference>
   </ItemGroup>
-
+  
   <PropertyGroup>
     <IsWindows Condition="'$(OS)' == 'Windows_NT'">true</IsWindows>
     <IsOSX Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX)))' == 'true'">true</IsOSX>

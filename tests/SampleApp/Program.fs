@@ -1,8 +1,9 @@
-﻿
+﻿open FSharp.Data.Npgsql
+
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 
-type MyCommand = FSharp.Data.NpgsqlCommand<"SELECT 42 AS Answer, current_date as today", dvdRental>
+type MyCommand = NpgsqlCommand<"SELECT 42 AS Answer, current_date as today", dvdRental>
 
 [<EntryPoint>]
 let main _ =
