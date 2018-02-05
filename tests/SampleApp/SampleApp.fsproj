@@ -6,6 +6,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Connection.fs" />
+    <Compile Include="NpgsqlConnectionSamples.fs" />
+    <Compile Include="NpgsqlCommandSamples.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
