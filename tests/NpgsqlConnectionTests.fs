@@ -281,6 +281,43 @@ let tableInsert() =
     Assert.Equal(None, cmd.Execute(r.rental_id))
 
 [<Fact>]
+let tableInsertViaAddRow() =
+    
+    let rental_id = 2
+    
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
+    let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
+        
+    use conn = new NpgsqlConnection(dvdRental.Value)
+    conn.Open()
+    use tran = conn.BeginTransaction()
+    use t = new DvdRental.``public``.Tables.rental()
+
+    t.AddRow(
+        staff_id = x.staff_id, 
+        customer_id = x.customer_id, 
+        inventory_id = x.inventory_id, 
+        rental_date = x.rental_date.AddDays(1.), 
+        return_date = x.return_date
+    )
+
+    let r = t.Rows.[t.Rows.Count - 1]
+
+    Assert.Equal(1, t.Update(transaction = tran))
+    let y = 
+        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, Tx = true>(tran)
+        cmd.Execute(r.rental_id) |> Option.get
+
+    Assert.Equal(x.staff_id, y.staff_id)
+    Assert.Equal(x.customer_id, y.customer_id)
+    Assert.Equal(x.inventory_id, y.inventory_id)
+    Assert.Equal(x.rental_date.AddDays(1.), y.rental_date)
+    Assert.Equal(x.return_date, y.return_date)
+
+    tran.Rollback()
+
+    Assert.Equal(None, cmd.Execute(r.rental_id))
+[<Fact>]
 let selectEnumWithArray2() =
     use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRental.Value)
 
