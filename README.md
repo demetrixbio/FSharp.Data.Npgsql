@@ -17,27 +17,26 @@ let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 type DvdRental = NpgsqlConnection<dvdRental>
 ```
 
-#### Basic query to get data
+### Basic query to get data
 
 ```fsharp
-    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
 
-    for x in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+for x in cmd.Execute() do   
+    printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 Alternatevly using inline ```NpgsqlCommand``` definition.
 ```fsharp
-    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
-    //...
+use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+//...
 ```
-Or using ```NpgsqlCommand``` with explicit type alias. Or using ```NpgsqlCommand``` with explicit type alias. `Create` factory method can be used in addition to traditional constructor. It mainly exists to work around [Intellisense deficiency]().
+Or using ```NpgsqlCommand``` with explicit type alias. `Create` factory method can be used in addition to traditional constructor. It mainly exists to work around [Intellisense deficiency]().
 
 ```fsharp
-    type BasicQuery = NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
-    use cmd = BasicQuery.Create(dvdRental)
-    //...
+type BasicQuery = NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
+use cmd = BasicQuery.Create(dvdRental)
+//...
 ```
-
 
 ## Configuration
 
