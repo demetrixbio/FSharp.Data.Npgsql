@@ -13,7 +13,7 @@
     <PackageTags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <IsPackable>true</IsPackable>
-    <Version>0.1.14-beta</Version>
+    <Version>0.1.15-beta</Version>
   </PropertyGroup>
   
   <PropertyGroup>

@@ -12,6 +12,7 @@ open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
+open FSharp.Data.Npgsql
 
 type internal RowType = {
     Provided: Type
@@ -194,7 +195,7 @@ type internal QuotationsFactory private() =
                             if sqlParam.Direction.HasFlag( ParameterDirection.Output)
                             then 
                                 let mi = 
-                                    typeof<``ISqlCommand Implementation``>
+                                    typeof<Utils>
                                         .GetMethod("SetRef")
                                         .MakeGenericMethod( sqlParam.DataType.ClrType)
                                 Expr.Call(mi, [ argExpr; Expr.Var arr; Expr.Value index ]) |> Some
@@ -367,7 +368,7 @@ type internal QuotationsFactory private() =
                     ||> List.map2 (fun valueExpr c ->
                         if c.OptionalForInsert
                         then 
-                            typeof<``ISqlCommand Implementation``>
+                            typeof<QuotationsFactory>
                                 .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
                                 .MakeGenericMethod(c.ClrType)
                                 .Invoke(null, [| box valueExpr |])
@@ -439,7 +440,7 @@ type internal QuotationsFactory private() =
                                     %%connectionString
 
                             selectCommand.Connection <- new NpgsqlConnection(runTimeConnectionString)
-                            Utils.updateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
@@ -452,7 +453,7 @@ type internal QuotationsFactory private() =
                             let selectCommand = %selectCommand
                             selectCommand.Transaction <- %%tx
                             selectCommand.Connection <- selectCommand.Transaction.Connection
-                            Utils.updateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
@@ -592,7 +593,7 @@ type internal QuotationsFactory private() =
                 PerRow = Some { 
                     Provided = providedRowType
                     ErasedTo = erasedToRowType
-                    Mapping = <@@ Utils.getMapperWithNullsToOptions(%%nullsToOptions, %%rowMapping) @@> 
+                    Mapping = <@@ Utils.GetMapperWithNullsToOptions(%%nullsToOptions, %%rowMapping) @@> 
                 }               
             }
 

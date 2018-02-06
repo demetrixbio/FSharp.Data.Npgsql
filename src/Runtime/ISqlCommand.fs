@@ -5,6 +5,7 @@ open System.Data
 open Npgsql
 open System.Data.Common
 open System.Reflection
+open System.Runtime.CompilerServices
 
 ///<summary>Enum describing output type</summary>
 type ResultType =
@@ -46,26 +47,35 @@ type DesignTimeConfig = {
     ExpectedColumns: DataColumn[]
 }
 
+[<Extension>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-module Utils =
-    type internal DbDataReader with
-        member this.MapRowValues<'TItem>( rowMapping) = 
-            seq {
-                use _ = this
-                let values = Array.zeroCreate this.FieldCount
-                while this.Read() do
-                    this.GetValues(values) |> ignore
-                    yield values |> rowMapping |> unbox<'TItem>
-            }
+type Utils private() =
 
-    let DbNull = box DBNull.Value
+    [<Extension>]
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    static member MapRowValues<'TItem>(this: DbDataReader ,rowMapping) = 
+        seq {
+            use _ = this
+            let values = Array.zeroCreate this.FieldCount
+            while this.Read() do
+                this.GetValues(values) |> ignore
+                yield values |> rowMapping |> unbox<'TItem>
+        }
 
-    let getMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    static member DbNull = box DBNull.Value
+
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
         fun values -> 
             nullsToOptions values
             mapper values
 
-    let updateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
+
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    static member UpdateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
 
         use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
 
@@ -95,10 +105,8 @@ module Utils =
 
         dataAdapter.Update(table)   
 
-open Utils
-
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 //[<Sealed>]
+[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTimeout) = 
 
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)
@@ -197,13 +205,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             elif p.Direction.HasFlag(ParameterDirection.Output) && value :? Array
             then
                 p.Size <- (value :?> Array).Length
-
-    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Utils.DbNull @@>    
-
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
-
-
 
 
 //Execute/AsyncExecute versions
