@@ -61,10 +61,11 @@ do
 ```NpgsqlCommand``` version:
 ```fsharp
 do
-  use cmd = DvdRental.CreateCommand<"SELECT title FROM public.film WHERE length > @longer_than">(dvdRental)
-  let longerThan = TimeSpan.FromHours(3.)
-  let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
-  printfn "Movies longer than %A:\n%A" longerThan xs
+    use cmd = new NpgsqlCommand<"SELECT title FROM public.film WHERE length > @longer_than", dvdRental>(dvdRental)
+    let longerThan = System.TimeSpan.FromHours(3.)
+    cmd.Execute(longer_than = int16 longerThan.TotalMinutes)
+    |> Seq.toList 
+    |> printfn "Movies longer than %A:\n%A" longerThan 
 ```
 
 ## NpgsqlConnection or NpgsqlCommand?
