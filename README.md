@@ -3,6 +3,10 @@ FSharp.Data.Npgsql is F# type providers library on a top of well-known [Npgsql A
 
 The library includes two type providers: NpgsqlConnection and NpgsqlCommand. 
 
+## Nuget package
+
+https://www.nuget.org/packages/FSharp.Data.Npgsql/
+
 ## Target platforms: 
   - netstandard2.0
   - net461
