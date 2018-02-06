@@ -14,7 +14,7 @@ The library includes two type providers: NpgsqlConnection and NpgsqlCommand.
 All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions to exist:
 ```fsharp
 [<Literal>]
-let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
+let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental"
 
 open FSharp.Data.Npgsql
 
