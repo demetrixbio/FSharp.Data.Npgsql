@@ -67,9 +67,9 @@ do
 
 It's recommended to use NpgsqlConnection by default.  NpgsqlCommand exists mainly for flexibility.
 
-## Async execution
-
 ## Naming 
+
+## Async execution
 
 ## Configuration
 
