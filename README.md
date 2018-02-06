@@ -65,6 +65,7 @@ use cmd = BasicQuery.Create(dvdRental)
   assert( cmd.Execute() |> Seq.exactlyOne = Some 42)
   ```
   will infer ```seq<Option<int>>``` as result although it's cleary should be ```seq<int>```. 
+  - Custom enums and array types are supported but composite types not yet.
 
 ## Running tests
 
