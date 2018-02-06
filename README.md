@@ -112,8 +112,6 @@ It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand`
 
  - Use type alias for 'Npgsql.NpgsqlConnection and Npgsql.NpgsqlCommand
 ```fsharp
-open Npgsql
-
 type PgConnectoin = Npgsql.NpgsqlConnection
 type PgCommand = Npgsql.NpgsqlCommand
 ```
