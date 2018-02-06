@@ -96,10 +96,7 @@ It means that types from Npgsql shadowed the type providers because ```open FSha
 There are several ways to work around the issue:
 
  - Use fully qualified names for type providers. For example:
- ```fsharp
- type BasicQuery = FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
- ```
- or
+
 ```fsharp
 type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<connectionStringName, Config = config>
 
