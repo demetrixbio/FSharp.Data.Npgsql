@@ -6,10 +6,15 @@ The library includes two type providers: NpgsqlConnection and NpgsqlCommand. It'
 ## Target platforms: 
   - netstandard2.0
   - net461
+  
+  
+  To compile on Linux/Mac F# project consuming the type provider make sure to run on [Mono 5.8.0](http://www.mono-project.com/docs/about-mono/releases/5.8.0/) or later. Mono 5.4.1 was failing for me with mysterious errors. Also apply [this fix](https://github.com/Microsoft/visualfsharp/issues/3303#issuecomment-331426983) to your project file. See examples [here](https://github.com/fsprojects/FSharp.TypeProviders.SDK/tree/master/examples). 
+ 
+ 
 
 ## Setup
 
-All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions to exist.
+All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions to exist:
 ```fsharp
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
@@ -54,7 +59,7 @@ use cmd = BasicQuery.Create(dvdRental)
 
 ## Limitations
 
-  #### One unfortunate PostgreSQL limitation is that column nullability cannot be inferred for derived columns. A command 
+  - One unfortunate PostgreSQL limitation is that column nullability cannot be inferred for derived columns. A command 
   ```fsharp
   use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental>(dvdRental)
   assert( cmd.Execute() |> Seq.exactlyOne = Some 42)
