@@ -68,7 +68,7 @@ do
 It's recommended to use ```NpgsqlConnection``` by default. ```NpgsqlCommand``` exists mainly for flexibility.
 ```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place. 
 
-But, but ... because it relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense fails showing red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
+But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
 
 ## Naming 
 
