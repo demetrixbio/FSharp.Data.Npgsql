@@ -108,7 +108,7 @@ do
  
 It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little. 
 
-Use fully qualified names for Npgsql.NpgConnection and Npgsql.NpgCommand
+ - Use fully qualified names for Npgsql.NpgConnection and Npgsql.NpgCommand
 
  - Use type alias for Npgsql.NpgConnection and Npgsql.NpgCommand
 ```fsharp
