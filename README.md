@@ -47,7 +47,7 @@ use cmd = BasicQuery.Create(dvdRental)
 
 ## Parameterized query
 
-
+## Naming 
 
 ## Configuration
 
@@ -64,6 +64,7 @@ use cmd = BasicQuery.Create(dvdRental)
   use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental>(dvdRental)
   assert( cmd.Execute() |> Seq.exactlyOne = Some 42)
   ```
+  will infer ```seq<Option<int>>``` as result although it's cleary should be ```seq<int>```. 
 
 ## Running tests
 
