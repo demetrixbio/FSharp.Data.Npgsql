@@ -46,9 +46,8 @@ type DesignTimeConfig = {
     ExpectedColumns: DataColumn[]
 }
 
-[<AutoOpen>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-module Extensions =
+module Utils =
     type internal DbDataReader with
         member this.MapRowValues<'TItem>( rowMapping) = 
             seq {
@@ -60,6 +59,43 @@ module Extensions =
             }
 
     let DbNull = box DBNull.Value
+
+    let getMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
+        fun values -> 
+            nullsToOptions values
+            mapper values
+
+    let updateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
+
+        use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
+
+        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter)
+        commandBuilder.ConflictOption <- conflictOption 
+
+        use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
+
+            if  args.Errors = null 
+                && args.StatementType = Data.StatementType.Insert 
+                && dataAdapter.UpdateBatchSize = 1
+            then 
+                let columnsToRefresh = ResizeArray()
+                for c in table.Columns do
+                    if c.AutoIncrement  
+                        || (c.AllowDBNull && args.Row.IsNull c.Ordinal)
+                    then 
+                        columnsToRefresh.Add( commandBuilder.QuoteIdentifier c.ColumnName)
+
+                if columnsToRefresh.Count > 0
+                then                        
+                    let returningClause = columnsToRefresh |> String.concat "," |> sprintf " RETURNING %s"
+                    let cmd = args.Command
+                    cmd.CommandText <- cmd.CommandText + returningClause
+                    cmd.UpdatedRowSource <- UpdateRowSource.FirstReturnedRecord
+        )
+
+        dataAdapter.Update(table)   
+
+open Utils
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 //[<Sealed>]
@@ -162,14 +198,12 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             then
                 p.Size <- (value :?> Array).Length
 
-    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> DbNull @@>    
+    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Utils.DbNull @@>    
 
+    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
     static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
-    static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
-        fun values -> 
-            nullsToOptions values
-            mapper values
+
 
 
 //Execute/AsyncExecute versions
@@ -299,33 +333,5 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
         }
 
-    static member UpdateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
 
-        use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
-
-        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter)
-        commandBuilder.ConflictOption <- conflictOption 
-
-        use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
-
-            if  args.Errors = null 
-                && args.StatementType = Data.StatementType.Insert 
-                && dataAdapter.UpdateBatchSize = 1
-            then 
-                let columnsToRefresh = ResizeArray()
-                for c in table.Columns do
-                    if c.AutoIncrement  
-                        || (c.AllowDBNull && args.Row.IsNull c.Ordinal)
-                    then 
-                        columnsToRefresh.Add( commandBuilder.QuoteIdentifier c.ColumnName)
-
-                if columnsToRefresh.Count > 0
-                then                        
-                    let returningClause = columnsToRefresh |> String.concat "," |> sprintf " RETURNING %s"
-                    let cmd = args.Command
-                    cmd.CommandText <- cmd.CommandText + returningClause
-                    cmd.UpdatedRowSource <- UpdateRowSource.FirstReturnedRecord
-        )
-
-        dataAdapter.Update(table)   
 

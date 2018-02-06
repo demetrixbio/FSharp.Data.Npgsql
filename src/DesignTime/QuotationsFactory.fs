@@ -138,7 +138,7 @@ type internal QuotationsFactory private() =
 
     static member internal SetNullableValueInDataRow<'T>(exprArgs : Expr list, name : string) =
         <@
-            (%%exprArgs.[0] : DataRow).[name] <- match (%%exprArgs.[1] : option<'T>) with None -> DbNull | Some value -> box value
+            (%%exprArgs.[0] : DataRow).[name] <- match (%%exprArgs.[1] : option<'T>) with None -> Utils.DbNull | Some value -> box value
         @> 
 
     static member internal GetNonNullableValueFromDataRow<'T>(exprArgs : Expr list, name: string) =
@@ -146,6 +146,8 @@ type internal QuotationsFactory private() =
 
     static member internal SetNonNullableValueInDataRow<'T>(exprArgs : Expr list, name : string) =
         <@ (%%exprArgs.[0] : DataRow).[name] <- %%Expr.Coerce(exprArgs.[1], typeof<obj>) @>
+    
+    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Utils.DbNull @@>    
 
     static member internal AddGeneratedMethod
         (sqlParameters: Parameter list, hasOutputParameters, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
@@ -158,7 +160,7 @@ type internal QuotationsFactory private() =
                     then 
                         if param.Optional 
                         then 
-                            typeof<``ISqlCommand Implementation``>
+                            typeof<QuotationsFactory>
                                 .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
                                 .MakeGenericMethod(param.DataType.ClrType)
                                 .Invoke(null, [| box expr|])
@@ -321,58 +323,140 @@ type internal QuotationsFactory private() =
             
                 columnsType.AddMember property
 
+        let rowsType = ProvidedTypeDefinition("Rows", None)
+        tableType.AddMember rowsType
+
         do //Rows
-            let rowsType = ProvidedTypeDefinition("Rows", None)
-            tableType.AddMember rowsType
             let rows = ProvidedProperty("Rows", rowsType, getterCode = fun args -> <@@ (%%args.Head: DataTable).Rows @@>)
             tableType.AddMember rows
 
-            do
-                let commonParams = [
-                    ProvidedParameter("updateBatchSize", typeof<int>, optionalValue = 1) 
-                    ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
-                    ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
+        do
+            let parameters, updateableColumns = 
+                [ 
+                    for c in outputColumns do 
+                        if not(c.Identity || c.ReadOnly)
+                        then 
+                            let dataType = c.MakeProvidedType(forceNullability = c.OptionalForInsert)
+                            let parameter = 
+                                if c.OptionalForInsert
+                                then ProvidedParameter(c.Name, parameterType = dataType, optionalValue = null)
+                                else ProvidedParameter(c.Name, dataType)
+
+                            yield parameter, c
+                ] 
+                |> List.sortBy (fun (_, c) -> c.OptionalForInsert) //move non-nullable params in front
+                |> List.unzip
+
+            let methodXmlDoc = 
+                String.concat "\n" [
+                    for c in updateableColumns do
+                        if c.Description <> "" 
+                        then 
+                            let defaultConstrain = 
+                                if c.HasDefaultConstraint 
+                                then sprintf " Default constraint: %s." c.DefaultConstraint
+                                else ""
+                            yield sprintf "<param name='%s'>%s%s</param>" c.Name c.Description defaultConstrain
                 ]
 
-                let designTimeConnectionString = defaultArg connectionString ""
 
-                tableType.AddMembers [
+            let invokeCode = fun (args: _ list)-> 
 
+                let argsValuesConverted = 
+                    (args.Tail, updateableColumns)
+                    ||> List.map2 (fun valueExpr c ->
+                        if c.OptionalForInsert
+                        then 
+                            typeof<``ISqlCommand Implementation``>
+                                .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
+                                .MakeGenericMethod(c.ClrType)
+                                .Invoke(null, [| box valueExpr |])
+                                |> unbox
+                        else
+                            valueExpr
+                    )
+
+                <@@ 
+                    let table: DataTable = %%args.[0]
+                    let row = table.NewRow()
+
+                    let values: obj[] = %%Expr.NewArray(typeof<obj>, [ for x in argsValuesConverted -> Expr.Coerce(x, typeof<obj>) ])
+                    let namesOfUpdateableColumns: string[] = %%Expr.NewArray(typeof<string>, [ for c in updateableColumns -> Expr.Value(c.Name) ])
+                    let optionalParams: bool[] = %%Expr.NewArray(typeof<bool>, [ for c in updateableColumns -> Expr.Value(c.OptionalForInsert) ])
+
+                    for name, value, optional in Array.zip3 namesOfUpdateableColumns values optionalParams do 
+                        row.[name] <- if value = null && optional then Utils.DbNull else value
+                    row
+                @@>
+
+            do 
+                let newRowMethod = ProvidedMethod("NewRow", parameters, dataRowType, invokeCode)
+                if methodXmlDoc <> "" then newRowMethod.AddXmlDoc methodXmlDoc
+                tableType.AddMember newRowMethod
+
+                let addRowMethod =
                     ProvidedMethod(
-                        "Update", 
-                        ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))) :: commonParams, 
-                        typeof<int>,
-                        fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
-                            <@@ 
-                                let selectCommand = %selectCommand
-                                let runTimeConnectionString = 
-                                    if %%connectionString = reuseDesignTimeConnectionString
-                                    then 
-                                        if allowDesignTimeConnectionStringReUse 
-                                        then designTimeConnectionString
-                                        else failwith Const.prohibitDesignTimeConnStrReUse
-                                    else
-                                        %%connectionString
-
-                                selectCommand.Connection <- new NpgsqlConnection(runTimeConnectionString)
-                                ``ISqlCommand Implementation``.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                        "AddRow", 
+                        parameters, 
+                        typeof<Void>, 
+                        invokeCode = fun args ->
+                            let newRow = invokeCode args
+                            <@@
+                                let table: DataTable = %%args.[0]
+                                let row: DataRow = %%newRow
+                                table.Rows.Add row
                             @@>
                     )
 
-                    ProvidedMethod(
-                        "Update", 
-                        ProvidedParameter("transaction", typeof<NpgsqlTransaction> ) :: commonParams, 
-                        typeof<int>,
-                        fun (Arg5(table, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
-                            <@@ 
-                                let selectCommand = %selectCommand
-                                selectCommand.Transaction <- %%tx
-                                selectCommand.Connection <- selectCommand.Transaction.Connection
-                                ``ISqlCommand Implementation``.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
-                            @@>
-                    )
+                if methodXmlDoc <> "" then addRowMethod.AddXmlDoc methodXmlDoc
+                tableType.AddMember addRowMethod
 
-                ]
+        do
+            let commonParams = [
+                ProvidedParameter("updateBatchSize", typeof<int>, optionalValue = 1) 
+                ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
+                ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
+            ]
+
+            let designTimeConnectionString = defaultArg connectionString ""
+
+            tableType.AddMembers [
+
+                ProvidedMethod(
+                    "Update", 
+                    ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))) :: commonParams, 
+                    typeof<int>,
+                    fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
+                        <@@ 
+                            let selectCommand = %selectCommand
+                            let runTimeConnectionString = 
+                                if %%connectionString = reuseDesignTimeConnectionString
+                                then 
+                                    if allowDesignTimeConnectionStringReUse 
+                                    then designTimeConnectionString
+                                    else failwith Const.prohibitDesignTimeConnStrReUse
+                                else
+                                    %%connectionString
+
+                            selectCommand.Connection <- new NpgsqlConnection(runTimeConnectionString)
+                            Utils.updateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                        @@>
+                )
+
+                ProvidedMethod(
+                    "Update", 
+                    ProvidedParameter("transaction", typeof<NpgsqlTransaction> ) :: commonParams, 
+                    typeof<int>,
+                    fun (Arg5(table, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
+                        <@@ 
+                            let selectCommand = %selectCommand
+                            selectCommand.Transaction <- %%tx
+                            selectCommand.Connection <- selectCommand.Transaction.Connection
+                            Utils.updateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                        @@>
+                )
+
+            ]
 
             do 
                 rowsType.AddMembersDelayed <| fun() -> 
@@ -495,7 +579,6 @@ type internal QuotationsFactory private() =
                     providedType, erasedToTupleType, mapping
             
             let nullsToOptions = QuotationsFactory.MapArrayNullableItems(outputColumns, "MapArrayObjItemToOption") 
-            let combineWithNullsToOptions = typeof<``ISqlCommand Implementation``>.GetMethod("GetMapperWithNullsToOptions") 
             
             { 
                 Single = 
@@ -509,7 +592,7 @@ type internal QuotationsFactory private() =
                 PerRow = Some { 
                     Provided = providedRowType
                     ErasedTo = erasedToRowType
-                    Mapping = Expr.Call( combineWithNullsToOptions, [ nullsToOptions; rowMapping ]) 
+                    Mapping = <@@ Utils.getMapperWithNullsToOptions(%%nullsToOptions, %%rowMapping) @@> 
                 }               
             }
 
