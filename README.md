@@ -90,20 +90,47 @@ FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type a
 ...
 ```
 
-It means that types from Npgsql shadowed the type providers because open FSharp.Data.Npgsql was followed by open Npgsql
+It means that types from Npgsql shadowed the type providers because ```open FSharp.Data.Npgsql``` statement was followed by ```open Npgsql```
 
 There are several ways to work around the issue:
 
-Use fully qualified names for type providers 
+ - Use fully qualified names for type providers. For example:
+ ```fsharp
+ type BasicQuery = FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
+ ```
+ or
+```fsharp
+type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<connectionStringName, Config = config>
 
-It's acceptable solution for NpgsqlConnection provider but for NpgsqlCommand provider it will cause a lot of extra typing and reduce readability a little. 
+type BasicQuery = FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
+//or
+do
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+```
+ 
+It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little. 
 
 Use fully qualified names for Npgsql.NpgConnection and Npgsql.NpgCommand
 
-Use type alias for Npgsql.NpgConnection and Npgsql.NpgCommand
+ - Use type alias for Npgsql.NpgConnection and Npgsql.NpgCommand
+```fsharp
+open Npgsql
 
-Separate usage by module or file 
+type PgConnectoin = Npgsql.NpgsqlConnection
+type PgCommand = Npgsql.NpgsqlCommand
+```
 
+- Isolate usage by module or file  
+
+I expect once you commit to the ```NpgsqlCommand``` type provider usage of ```Npgsql.NpgsqlCommand``` type will be very limited so name collision is not an issue.  
+
+```Npgsql.NpgsqlConnection``` collision can be solved by a simple helper function:
+```fsharp
+let openConnection(connectionString) = 
+    let conn = new Npgsql.NpgsqlConnection(connectionString)
+    conn.Open()
+    conn
+```
 
 ## Async execution
 
