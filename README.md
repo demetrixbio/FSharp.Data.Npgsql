@@ -76,6 +76,35 @@ But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler fea
 
 ## Naming 
 
+Both type providers have local type names that collide with types from Npgsql library. I admit it's slightly controversial decision but naming is too important to be compromised on. I believe both names best communicate the intent. 
+If you'll end up having following error message :
+```
+...
+FS0033	The non-generic type 'Npgsql.NpgsqlCommand' does not expect any type arguments, but here is given 3 type argument(s)
+...
+```
+or
+```
+...
+FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type arguments, but here is given 2 type argument(s)	
+...
+```
+
+It means that types from Npgsql shadowed the type providers because open FSharp.Data.Npgsql was followed by open Npgsql
+
+There are several ways to work around the issue:
+
+Use fully qualified names for type providers 
+
+It's acceptable solution for NpgsqlConnection provider but for NpgsqlCommand provider it will cause a lot of extra typing and reduce readability a little. 
+
+Use fully qualified names for Npgsql.NpgConnection and Npgsql.NpgCommand
+
+Use type alias for Npgsql.NpgConnection and Npgsql.NpgCommand
+
+Separate usage by module or file 
+
+
 ## Async execution
 
 ## Configuration
