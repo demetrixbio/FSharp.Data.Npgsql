@@ -121,9 +121,9 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         
     let setupConnection() = 
         match connection with
-        | Choice2Of2 tx -> 
+        | Choice2Of2(conn, tx) -> 
+            cmd.Connection <- conn
             cmd.Transaction <- tx 
-            cmd.Connection <- tx.Connection
             { new IDisposable with member __.Dispose() = () }            
         | Choice1Of2 connectionString -> 
             cmd.Connection <- new NpgsqlConnection(connectionString)

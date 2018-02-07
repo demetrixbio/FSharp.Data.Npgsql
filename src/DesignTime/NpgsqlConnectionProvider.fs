@@ -2,8 +2,6 @@
 
 open System
 open System.Data
-open System.Diagnostics
-open System.Reflection
 open System.Collections.Concurrent
 open System.Collections.Generic
 
@@ -17,30 +15,37 @@ open InformationSchema
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor) = 
         
-    let staticParams = [
-        ProvidedStaticParameter("CommandText", typeof<string>) 
-        ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
-        ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
-        ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
-        ProvidedStaticParameter("TypeName", typeof<string>, "") 
-        ProvidedStaticParameter("Tx", typeof<bool>, false) 
-        ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
-    ]
+    let xctorParam = ProvidedStaticParameter("XCtor", typeof<bool>, false) 
+
+    let staticParams = 
+        [
+            ProvidedStaticParameter("CommandText", typeof<string>) 
+            ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
+            ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
+            ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
+            ProvidedStaticParameter("TypeName", typeof<string>, "") 
+            ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
+        ] @ [ 
+            if not globalXCtor then yield xctorParam
+        ]
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, tx, verifyOutputAtRuntime  = 
-                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
-            
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, verifyOutputAtRuntime, xctor  = 
+                if not globalXCtor
+                then 
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
+                else
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true
+                    
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
-
 
             let parameters = extractParameters(connectionString, sqlStatement, allParametersOptional)
 
@@ -117,7 +122,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     factoryMethodName = methodName
                 )
             assert (ctorsAndFactories.Length = 4)
-            let impl: ProvidedMethod = downcast ctorsAndFactories.[if tx then 3 else 1] 
+            let impl: ProvidedMethod = downcast ctorsAndFactories.[if xctor then 3 else 1] 
             rootType.AddMember impl
             impl
 
@@ -288,7 +293,7 @@ let getUserSchemas connectionString =
 let createRootType
     ( 
         assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder,
-        connectionStringOrName, fsx, configType, config
+        connectionStringOrName, configType, config, xctor, fsx
     ) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
@@ -326,7 +331,7 @@ let createRootType
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor)
 
     databaseRootType           
 
@@ -338,16 +343,17 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
         providerType.DefineStaticParameters(
             parameters = [ 
                 ProvidedStaticParameter("Connection", typeof<string>) 
-                ProvidedStaticParameter("Fsx", typeof<bool>, false) 
                 ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
                 ProvidedStaticParameter("Config", typeof<string>, "") 
+                ProvidedStaticParameter("XCtor", typeof<bool>, false) 
+                ProvidedStaticParameter("Fsx", typeof<bool>, false) 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName, fun _ -> 
                         createRootType(
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3]
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
                         )
                 )   
             ) 

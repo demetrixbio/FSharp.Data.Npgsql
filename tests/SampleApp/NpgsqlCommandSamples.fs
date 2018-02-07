@@ -2,7 +2,6 @@ module NpgsqlCommandSamples
 
 open Connection
 open FSharp.Data.Npgsql
-open FSharp.Data.Npgsql
 
 let basicQuery() = 
     use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
@@ -18,3 +17,9 @@ let basicQueryTypeAlias() =
     for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 
+let ``Parameterized query``() = 
+    use cmd = new NpgsqlCommand<"SELECT title FROM public.film WHERE length > @longer_than", dvdRental>(dvdRental)
+    let longerThan = System.TimeSpan.FromHours(3.)
+    cmd.Execute(longer_than = int16 longerThan.TotalMinutes)
+    |> Seq.toList 
+    |> printfn "Movies longer than %A:\n%A" longerThan 

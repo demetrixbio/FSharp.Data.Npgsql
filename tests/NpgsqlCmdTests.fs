@@ -20,7 +20,7 @@ let selectLiterals() =
     ", dvdRental>(dvdRental)
 
     let x = cmd.Execute() |> Seq.exactlyOne
-    Assert.Equal(Some 42, x.answer)
+    Assert.Equal(Some 42, x.answer) 
     Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
 [<Fact>]
@@ -122,11 +122,11 @@ let dateTableWithUpdateAndTx() =
     
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
-    use tran = conn.BeginTransaction()
+    use tx = conn.BeginTransaction()
 
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
-    ", dvdRental, ResultType.DataTable>(tran)    
+    ", dvdRental, ResultType.DataTable>(conn, tx)    
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
@@ -134,14 +134,14 @@ let dateTableWithUpdateAndTx() =
 
     let new_return_date = Some DateTime.Now.Date
     r.return_date <- new_return_date
-    Assert.Equal(1, t.Update(transaction = tran))
+    Assert.Equal(1, t.Update(transaction = tx))
 
     Assert.Equal( 
         new_return_date, 
-        GetRentalReturnDateById.Create(tran).Execute( rental_id) |> Seq.exactlyOne
+        GetRentalReturnDateById.Create(conn, tx).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
-    tran.Rollback()
+    tx.Rollback()
     conn.Close()
 
     Assert.Equal(
@@ -160,7 +160,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 
     use cmd = new NpgsqlCommand<"
         SELECT * FROM rental WHERE rental_id = @rental_id
-    ", dvdRental, ResultType.DataTable>(tran)    
+    ", dvdRental, ResultType.DataTable>(conn, tran)    
   
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
@@ -170,7 +170,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 
     Assert.Equal( 
         r.return_date, 
-        GetRentalReturnDateById.Create(tran).Execute( rental_id) |>  Seq.exactlyOne 
+        GetRentalReturnDateById.Create(conn, tran).Execute( rental_id) |>  Seq.exactlyOne 
     ) 
 
 [<Fact>]
@@ -186,9 +186,9 @@ let deleteWithTx() =
 
         use del = new NpgsqlCommand<"
             DELETE FROM rental WHERE rental_id = @rental_id
-        ", dvdRental>(tran)  
+        ", dvdRental>(conn, tran)  
         Assert.Equal(1, del.Execute(rental_id))
-        Assert.Empty( GetRentalReturnDateById.Create(tran).Execute( rental_id)) 
+        Assert.Empty( GetRentalReturnDateById.Create(conn, tran).Execute( rental_id)) 
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
@@ -278,3 +278,12 @@ let selectLiteralsConnStrFromUserSecretStore() =
     Assert.Equal(Some 42, x.answer)
     Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
+[<Fact>]
+let selectLiteralsWithConnObject() =
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", dvdRental>(connection = openConnection())
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer) 
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)

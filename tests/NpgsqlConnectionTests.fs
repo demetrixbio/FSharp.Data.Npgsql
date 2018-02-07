@@ -3,6 +3,7 @@ module NpgsqlConnectionTests
 open System
 open Xunit
 open Microsoft.Extensions.Configuration
+open FSharp.Data.Npgsql
 
 [<Literal>]
 let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
@@ -12,10 +13,12 @@ let connectionStringName ="dvdRental"
 
 let dvdRental = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
 
-open FSharp.Data.Npgsql
-type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
+let openConnection() = 
+    let conn = new Npgsql.NpgsqlConnection(dvdRental.Value)
+    conn.Open()
+    conn
 
-open Npgsql
+type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
 
 [<Fact>]
 let selectLiterals() =
@@ -127,14 +130,11 @@ let dateTableWithUpdateAndTx() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental.Value)
-    conn.Open()
+    use conn = openConnection()
     use tran = conn.BeginTransaction()
 
     use cmd = 
-        DvdRental.CreateCommand<"
-            SELECT * FROM rental WHERE rental_id = @rental_id
-        ", ResultType.DataTable, Tx = true>(tran)    
+        DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", ResultType.DataTable, XCtor = true>(conn, tran)    
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
@@ -144,7 +144,7 @@ let dateTableWithUpdateAndTx() =
     r.return_date <- new_return_date
     Assert.Equal(1, t.Update(transaction = tran))
 
-    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, Tx = true>(tran)
+    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, XCtor = true>(conn, tran)
     Assert.Equal( 
         new_return_date, 
         getRentalByIdCmd.Execute( rental_id) |>  Seq.exactlyOne
@@ -162,14 +162,13 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     
     let rental_id = 2
     
-    use conn = new NpgsqlConnection(dvdRental.Value)
-    conn.Open()
+    use conn = openConnection()
     use tran = conn.BeginTransaction()
 
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM rental WHERE rental_id = @rental_id
-        ", ResultType.DataTable, Tx = true>(tran)    
+        ", ResultType.DataTable, XCtor = true>(conn, tran)    
   
     let t = cmd.Execute(rental_id)
 
@@ -181,7 +180,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     //Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
     Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
      
-    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, Tx = true>(tran)
+    use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, XCtor = true>(conn, tran)
     Assert.Equal( 
         r.return_date, 
         getRentalByIdCmd.Execute( rental_id) |>  Seq.exactlyOne 
@@ -195,16 +194,15 @@ let deleteWithTx() =
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
-        use conn = new NpgsqlConnection(dvdRental.Value)
-        conn.Open()
+        use conn = openConnection()
         use tran = conn.BeginTransaction()
 
         use del = 
             DvdRental.CreateCommand<"
                 DELETE FROM rental WHERE rental_id = @rental_id
-            ", Tx = true>(tran)  
+            ", XCtor = true>(conn, tran)  
         Assert.Equal(1, del.Execute(rental_id))
-        Assert.Empty( DvdRental.CreateCommand<getRentalById, Tx = true>(tran).Execute( rental_id)) 
+        Assert.Empty( DvdRental.CreateCommand<getRentalById, XCtor = true>(conn, tran).Execute( rental_id)) 
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
@@ -251,8 +249,7 @@ let tableInsert() =
     use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
-    use conn = new NpgsqlConnection(dvdRental.Value)
-    conn.Open()
+    use conn = openConnection()
     use tran = conn.BeginTransaction()
     use t = new DvdRental.``public``.Tables.rental()
     let r = 
@@ -267,7 +264,7 @@ let tableInsert() =
     t.Rows.Add(r)
     Assert.Equal(1, t.Update(transaction = tran))
     let y = 
-        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, Tx = true>(tran)
+        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, XCtor = true>(conn, tran)
         cmd.Execute(r.rental_id) |> Option.get
 
     Assert.Equal(x.staff_id, y.staff_id)
@@ -288,8 +285,7 @@ let tableInsertViaAddRow() =
     use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
-    use conn = new NpgsqlConnection(dvdRental.Value)
-    conn.Open()
+    use conn = openConnection()
     use tran = conn.BeginTransaction()
     use t = new DvdRental.``public``.Tables.rental()
 
@@ -305,7 +301,7 @@ let tableInsertViaAddRow() =
 
     Assert.Equal(1, t.Update(transaction = tran))
     let y = 
-        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, Tx = true>(tran)
+        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, XCtor = true>(conn, tran)
         cmd.Execute(r.rental_id) |> Option.get
 
     Assert.Equal(x.staff_id, y.staff_id)
@@ -327,3 +323,25 @@ let selectEnumWithArray2() =
     |]
         
     Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
+
+[<Fact>]
+let selectLiteralsWithConnObject() =
+    use cmd = 
+        DvdRental.CreateCommand<"SELECT 42 AS Answer, current_date as today", XCtor = true>( NpgsqlCmdTests.openConnection())
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer) 
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+
+
+type DvdRentalWithConn = NpgsqlConnection<NpgsqlCmdTests.dvdRental, XCtor = true>
+
+[<Fact>]
+let selectLiteralsWithConnObjectGlobalSet() =
+    use cmd = 
+        DvdRentalWithConn.CreateCommand<"SELECT 42 AS Answer, current_date as today">( NpgsqlCmdTests.openConnection())
+
+    let x = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal(Some 42, x.answer) 
+    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+

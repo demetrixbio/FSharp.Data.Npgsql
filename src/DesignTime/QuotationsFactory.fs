@@ -663,7 +663,7 @@ type internal QuotationsFactory private() =
                             %%args.Head
                     @@>
 
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlTransaction>.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
 
             yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
             
@@ -673,11 +673,18 @@ type internal QuotationsFactory private() =
            
             let parameters2 = 
                     [ 
-                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>) 
+                        ProvidedParameter("connection", typeof<NpgsqlConnection>) 
+                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
                         ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
                     ]
 
-            let body2 (args: _ list) = Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlTransaction>.Choice2Of2 %%args.Head @@> :: args.Tail )
+            let body2 (Arg3(connection, transaction, commandTimeout)) = 
+                let arguments = [  
+                    designTimeConfig
+                    <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice2Of2(%%connection, %%transaction) @@>
+                    commandTimeout
+                ]
+                Expr.NewObject(ctorImpl, arguments)
                     
             yield upcast ProvidedConstructor(parameters2, invokeCode = body2)
             if factoryMethodName.IsSome
