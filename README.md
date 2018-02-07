@@ -68,6 +68,10 @@ do
     |> printfn "Movies longer than %A:\n%A" longerThan 
 ```
 
+## Retrieve singleton record
+
+## Resultset types
+
 ## NpgsqlConnection or NpgsqlCommand?
 
 It's recommended to use ```NpgsqlConnection``` by default. ```NpgsqlCommand``` exists mainly for flexibility.
