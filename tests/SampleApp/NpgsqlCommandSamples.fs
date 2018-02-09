@@ -23,3 +23,7 @@ let ``Parameterized query``() =
     cmd.Execute(longer_than = int16 longerThan.TotalMinutes)
     |> Seq.toList 
     |> printfn "Movies longer than %A:\n%A" longerThan 
+
+let singleton() = 
+    use cmd = new NpgsqlCommand<"SELECT current_date as today", dvdRental, SingleRow = true>(dvdRental)
+    cmd.Execute() |> printfn "Today is: %A"

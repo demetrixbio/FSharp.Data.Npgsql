@@ -55,6 +55,9 @@ module internal Quotations =
         assert (List.length xs = 5)
         Arg5(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4])
 
+    let (|Arg6|) xs = 
+        assert (List.length xs = 6)
+        Arg6(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5])
 
 type internal QuotationsFactory private() = 
 
@@ -446,13 +449,15 @@ type internal QuotationsFactory private() =
 
                 ProvidedMethod(
                     "Update", 
-                    ProvidedParameter("transaction", typeof<NpgsqlTransaction> ) :: commonParams, 
+                    ProvidedParameter("connection", typeof<NpgsqlConnection> ) 
+                    :: ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null) 
+                    :: commonParams, 
                     typeof<int>,
-                    fun (Arg5(table, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
+                    fun (Arg6(table, conn, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
                         <@@ 
                             let selectCommand = %selectCommand
+                            selectCommand.Connection <- %%conn
                             selectCommand.Transaction <- %%tx
-                            selectCommand.Connection <- selectCommand.Transaction.Connection
                             Utils.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )

@@ -145,7 +145,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         match source |> Seq.truncate 2 |> Seq.toArray with
         | [||] -> None
         | [| x |] -> Some x
-        | _ -> invalidArg "source" "The input sequence contains more than one element."
+        | _ -> invalidOp "The output sequence contains more than one element."
 
     let execute, asyncExecute = 
         match cfg.ResultType with

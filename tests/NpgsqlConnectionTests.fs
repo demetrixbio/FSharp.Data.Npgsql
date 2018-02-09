@@ -142,7 +142,7 @@ let dateTableWithUpdateAndTx() =
 
     let new_return_date = Some DateTime.Now.Date
     r.return_date <- new_return_date
-    Assert.Equal(1, t.Update(transaction = tran))
+    Assert.Equal(1, t.Update(conn, transaction = tran))
 
     use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, XCtor = true>(conn, tran)
     Assert.Equal( 
@@ -178,7 +178,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     let r = t.Rows.[0]
     r.return_date <- r.return_date |> Option.map (fun d -> d.AddDays(1.))
     //Assert.Equal(1, t.Update(connection = conn, transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
-    Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
+    Assert.Equal(1, t.Update(conn, tran, conflictOption = Data.ConflictOption.OverwriteChanges ))
      
     use getRentalByIdCmd = DvdRental.CreateCommand<getRentalById, XCtor = true>(conn, tran)
     Assert.Equal( 
@@ -262,7 +262,7 @@ let tableInsert() =
         )
 
     t.Rows.Add(r)
-    Assert.Equal(1, t.Update(transaction = tran))
+    Assert.Equal(1, t.Update(conn, tran))
     let y = 
         use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, XCtor = true>(conn, tran)
         cmd.Execute(r.rental_id) |> Option.get
@@ -299,7 +299,7 @@ let tableInsertViaAddRow() =
 
     let r = t.Rows.[t.Rows.Count - 1]
 
-    Assert.Equal(1, t.Update(transaction = tran))
+    Assert.Equal(1, t.Update(connection = conn, transaction = tran))
     let y = 
         use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, XCtor = true>(conn, tran)
         cmd.Execute(r.rental_id) |> Option.get

@@ -134,7 +134,7 @@ let dateTableWithUpdateAndTx() =
 
     let new_return_date = Some DateTime.Now.Date
     r.return_date <- new_return_date
-    Assert.Equal(1, t.Update(transaction = tx))
+    Assert.Equal(1, t.Update(conn, tx))
 
     Assert.Equal( 
         new_return_date, 
@@ -166,7 +166,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
     Assert.Equal(1, t.Rows.Count)
     let r = t.Rows.[0]
     r.return_date <- Some DateTime.Now.Date
-    Assert.Equal(1, t.Update(transaction = tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
+    Assert.Equal(1, t.Update(conn, tran, conflictOption = Data.ConflictOption.CompareAllSearchableValues ))
 
     Assert.Equal( 
         r.return_date, 

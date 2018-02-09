@@ -6,6 +6,9 @@ let main _ =
     //NpgsqlCommandSamples.basicQueryTypeAlias()
 
     //NpgsqlConnectionSamples.``Parameterized query``()
-    NpgsqlCommandSamples.``Parameterized query``()
+    //NpgsqlCommandSamples.``Parameterized query``()
+
+    NpgsqlConnectionSamples.singleton()
+    //NpgsqlCommandSamples.singleton()
 
     0 

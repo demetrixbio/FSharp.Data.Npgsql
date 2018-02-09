@@ -17,3 +17,8 @@ let ``Parameterized query``() =
     let longerThan = TimeSpan.FromHours(3.)
     let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
     printfn "Movies longer than %A:\n%A" longerThan xs
+
+let singleton() = 
+    use cmd = DvdRental.CreateCommand<"SELECT current_date as today", SingleRow = true>(dvdRental)
+    cmd.Execute() |> printfn "Today is: %A"
+
