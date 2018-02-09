@@ -70,7 +70,7 @@ do
 
 ## Retrieve singleton record
 
-## Resultset types
+## Result types
 
 ## NpgsqlConnection or NpgsqlCommand?
 
