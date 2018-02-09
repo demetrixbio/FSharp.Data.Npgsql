@@ -69,8 +69,21 @@ do
 ```
 
 ## Retrieve singleton record
+Specify "SingleRow = true" to retrieve single row result. Command execution throws an exception if result set contains more than one row.
 
-## Resultset types
+```fsharp
+do
+    use cmd = DvdRental.CreateCommand<"SELECT current_date as today", SingleRow = true>(dvdRental)
+    cmd.Execute() |> printfn "Today is: %A"
+```
+
+```fsharp
+do 
+    use cmd = new NpgsqlCommand<"SELECT current_date as today", dvdRental, SingleRow = true>(dvdRental)
+    cmd.Execute() |> printfn "Today is: %A"
+```
+
+## Result types
 
 ## NpgsqlConnection or NpgsqlCommand?
 
