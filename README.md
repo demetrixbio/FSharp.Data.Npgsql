@@ -146,6 +146,18 @@ let openConnection(connectionString) =
 ```
 
 ## Async execution
+```fsharp
+do
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+    for x in cmd.AsyncExecute() |>  Async.RunSynchronously do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
+
+```fsharp
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+    for x in cmd.AsyncExecute() |>  Async.RunSynchronously do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
 
 ## Configuration
 
