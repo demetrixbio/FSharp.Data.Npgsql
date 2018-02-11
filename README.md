@@ -146,6 +146,8 @@ let openConnection(connectionString) =
 ```
 
 ## Async execution
+Every instance of generated command has async counterpart of ```Execute``` method - ```AsyncExecute```.
+
 ```fsharp
 do
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
