@@ -194,5 +194,12 @@ do
   - Custom enums and array types are supported but composite types not yet.
 
 ## Running tests
+- git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
+From the repo root folder
+- dotnet build .\src\DesignTime\
+- dotnet build .\src\Runtime\
+- docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
+- docker build -t pg_dvdrental .\tests\
+- dotnet test .\tests\
 
 ## Implemenation details
