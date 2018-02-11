@@ -86,16 +86,16 @@ do
 ## Result types
 
 There 4 result types:
- - ResultType.Record (default) - returns F# record like class with read-only properties.  See see examples above. 
- - ResultType.Tuples - In practice it's rarely useful but why not? 
+ - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See see examples above. 
+ - `ResultType.Tuples` - In practice it's rarely useful but why not? 
  ```fsharp
  do
      use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
     for title, releaseYear in cmd.Execute() do   
         printfn "Movie '%s' released in %i." title releaseYear.Value
  ```
- - ResultType.DataTable comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#Data modifications) section for details. 
- -  ResultType.DataReader returns plain NpgsqlDataReader. I think passing it as parameter to https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0
+ - `ResultType.DataTable` comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details. 
+ - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
 is the only useful scenario. 
 
 ## NpgsqlConnection or NpgsqlCommand?
