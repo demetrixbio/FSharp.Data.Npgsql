@@ -216,4 +216,3 @@ From the repo root folder
 - docker build -t pg_dvdrental .\tests\
 - dotnet test .\tests\
 
-## Implemenation details
