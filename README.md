@@ -178,6 +178,27 @@ do
 ## Configuration
 
 ## Data modifications
+- Hand-written statements
+```fsharp
+    let name = "Tom", "Hanks"
+    try
+        use cmd = new NpgsqlCommand<"        
+            INSERT INTO public.actor (first_name, last_name)
+            VALUES(@firstName, @lastNames)
+        ", dvdRental>(dvdRental)
+        assert(cmd.Execute(name) = 1)
+    finally
+        use cmd = new NpgsqlCommand<"        
+            DELETE FROM public.actor 
+            WHERE first_name = @firstName 
+                AND last_name = @lastNames
+        ", dvdRental>(dvdRental)
+        assert(cmd.Execute(name) = 1)     
+```
+- `ResultType.DataTable`
+```fsharp
+
+```
 
 ## Transactions
 Every instance of generated command has constructor overload that accepts mandatory live connection and optional transaction. Use it to executed commands inside transaction. 
