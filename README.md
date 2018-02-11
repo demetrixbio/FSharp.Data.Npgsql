@@ -179,9 +179,23 @@ do
 
 ## Data modifications
 
-## Scripting
-
 ## Transactions
+
+## Scripting
+To make scripting experience more palatable the type providers accept boolean flag called Fsx. When set it makes run-time connection string parameter optional with default set to design time connection string.
+```
+type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
+do
+    use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
+    //...
+```
+
+```fsharp
+do 
+    use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental, Fsx = true>()    
+    //...
+```
+Re-using design time connection string allowed only for types evaluated in FSI. Attempt to create command that re-uses design time connection string outside FSI will throw exception. 
 
 ## Limitations
 
