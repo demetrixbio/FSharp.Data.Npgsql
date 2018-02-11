@@ -180,6 +180,20 @@ do
 ## Data modifications
 
 ## Transactions
+Every instance of generated command has constructor overload that accepts mandatory live connection and optional transaction. Use it to executed commands inside transaction. 
+```fsharp
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = new NpgsqlCommand<"        
+        INSERT INTO public.actor (first_name, last_name)
+        VALUES(@firstName, @lastName)
+    ", dvdRental>(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()    
+```
 
 ## Scripting
 To make scripting experience more palatable the type providers accept boolean flag called Fsx. When set it makes run-time connection string parameter optional with default set to design time connection string.
