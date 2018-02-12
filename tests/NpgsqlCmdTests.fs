@@ -287,3 +287,15 @@ let selectLiteralsWithConnObject() =
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
     Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+
+[<Fact>]
+let fsx() =
+    let why = Assert.Throws<exn>(fun()  -> 
+        use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental, Fsx = true>()        
+        cmd.Execute() |> ignore
+    )
+    Assert.Equal(
+        "Design-time connection string re-use allowed at run-time only when executed inside FSI.",
+        why.Message
+    )
+

@@ -8,7 +8,24 @@ let main _ =
     //NpgsqlConnectionSamples.``Parameterized query``()
     //NpgsqlCommandSamples.``Parameterized query``()
 
-    NpgsqlConnectionSamples.singleton()
+    //NpgsqlConnectionSamples.singleton()
     //NpgsqlCommandSamples.singleton()
+
+    //NpgsqlCommandSamples.asyncBasicQuery()
+    //NpgsqlConnectionSamples.asyncBasicQuery()
+
+    //NpgsqlConnectionSamples.basicQueryTuples()
+
+    //NpgsqlCommandSamples.basicQueryFsx()
+
+    //NpgsqlCommandSamples.tx()
+    //NpgsqlConnectionSamples.tx()
+    //NpgsqlConnectionSamples.txGlobal()
+
+    //NpgsqlCommandSamples.handWrittenUpsert()
+
+    //NpgsqlCommandSamples.resultTypeDataTable()
+
+    NpgsqlConnectionSamples.insertOnly()
 
     0 

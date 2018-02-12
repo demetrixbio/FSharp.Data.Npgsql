@@ -2,13 +2,14 @@ module NpgsqlCommandSamples
 
 open Connection
 open FSharp.Data.Npgsql
+open System
+open System.Data
 
 let basicQuery() = 
     use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
 
     for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
-
 
 type BasicQuery = NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
 
@@ -27,3 +28,76 @@ let ``Parameterized query``() =
 let singleton() = 
     use cmd = new NpgsqlCommand<"SELECT current_date as today", dvdRental, SingleRow = true>(dvdRental)
     cmd.Execute() |> printfn "Today is: %A"
+
+let asyncBasicQuery() = 
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+    for x in cmd.AsyncExecute() |>  Async.RunSynchronously do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+
+let basicQueryFsx() = 
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental, Fsx = true>()
+
+    for x in cmd.Execute() do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+
+let tx() =
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = new NpgsqlCommand<"        
+        INSERT INTO public.actor (first_name, last_name)
+        VALUES(@firstName, @lastName)
+    ", dvdRental>(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()
+
+let handWrittenUpsert() = 
+
+    //deactivate customer if exists
+    let email = "mary.smith@sakilacustomer.org"
+
+    use cmd = new NpgsqlCommand<" 
+            UPDATE public.customer 
+            SET activebool = false 
+            WHERE email = @email 
+                AND activebool
+    ", dvdRental, SingleRow = true>(dvdRental)
+
+    let recordsAffected = cmd.Execute(email)
+    if recordsAffected = 0 
+    then
+        printfn "Could not deactivate customer %s" email
+    elif recordsAffected = 1
+    then 
+        use restore = 
+            new NpgsqlCommand<" 
+                UPDATE public.customer 
+                SET activebool = true
+                WHERE email = @email 
+            ", dvdRental>(dvdRental)
+        assert( restore.Execute(email) = 1)
+        
+let resultTypeDataTable() = 
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()    
+    use cmd = 
+        new NpgsqlCommand<"
+            SELECT * --customer_id, active, email
+            FROM public.customer 
+            WHERE email = @email  
+        ", dvdRental, ResultType.DataTable>(conn, tx)
+    let t = cmd.Execute(email = "mary.smith@sakilacustomer.org")
+    if t.Rows.Count > 0 && t.Rows.[0].active = Some 1
+    then 
+        //t.Rows.[0].activebool <- true
+        ///t.Rows.[0].active <- Some 0  
+        t.Rows.[0].last_name <- t.Rows.[0].last_name + "_test" 
+        assert( t.Update(conn, tx, conflictOption = ConflictOption.OverwriteChanges) = 1)
+
+    //Commit to persist changes
+    //tx.Commit() 
+
+
+     

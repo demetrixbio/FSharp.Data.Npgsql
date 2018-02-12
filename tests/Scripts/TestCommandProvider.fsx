@@ -1,9 +1,9 @@
-﻿#I "../../src/Runtime/bin/Debug/netstandard2.0"
+﻿#I "../../src/Runtime/bin/Debug/net461"
 #r "FSharp.Data.Npgsql.dll"
 #r "Npgsql.dll"
 #r "netstandard.dll"
 
-open FSharp.Data
+open FSharp.Data.Npgsql
 open System
 
 [<Literal>]

@@ -345,3 +345,16 @@ let selectLiteralsWithConnObjectGlobalSet() =
     Assert.Equal(Some 42, x.answer) 
     Assert.Equal(Some DateTime.UtcNow.Date, x.today)
 
+type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
+
+[<Fact>]
+let fsx() =
+    let why = Assert.Throws<exn>(fun()  -> 
+        use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
+        cmd.Execute() |> ignore
+    )
+    Assert.Equal(
+        "Design-time connection string re-use allowed at run-time only when executed inside FSI.",
+        why.Message
+    )
+
