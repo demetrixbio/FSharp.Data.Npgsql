@@ -176,6 +176,10 @@ do
 ```
 
 ## Configuration
+_Design-time type providers configuration is never passed to run-time._
+Command constructor/factory method expects run-time connection parameter.
+A notable exception is Fsx[#fsx] flag.
+
 
 ## Data modifications
 - Hand-written statements
