@@ -350,7 +350,7 @@ Re-using design time connection string allowed only for types evaluated in FSI. 
 From the repo root folder
 - dotnet build .\src\DesignTime\
 - dotnet build .\src\Runtime\
-- docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
 - docker build -t pg_dvdrental .\tests\
+- docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
 - dotnet test .\tests\
 
