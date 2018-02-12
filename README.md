@@ -347,6 +347,7 @@ Re-using design time connection string allowed only for types evaluated in FSI. 
 
 ## Running tests
 - git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
+
 From the repo root folder
 - dotnet build .\src\DesignTime\
 - dotnet build .\src\Runtime\
