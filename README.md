@@ -201,8 +201,21 @@ The type provider will look for connection string named `dvdRental` in file that
 }
 ```
 - `ConfigType.Environment`
+Reads configuration from environment variable named `ConnectionStrings:dvdRental`.
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.Environment>(dvdRental)
+```
 - 'ConfigType.UserStore`
-
+Reads design time connection string from user store. 
+```fsharp
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
+```
+More on .NET Core configuration is (here)[https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration].
 ## Data modifications`
 - Hand-written statements
 ```fsharp
