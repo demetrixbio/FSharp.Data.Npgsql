@@ -204,9 +204,28 @@ do
             ", dvdRental>(dvdRental)
         assert( restore.Execute(email) = 1)    
 ```
-- `ResultType.DataTable`
+- `ResultType.DataTable` - good to handle updates, deletes, upserts or inserts mixed with any above. 
+
 ```fsharp
 
+```
+
+- Statically-typed for inserts-only scenario for example ETL data upload.
+```fsharp
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    let t = new DvdRental.``public``.Tables.actor()
+
+    let r = t.NewRow(first_name = "Tom", last_name = "Hanks")
+    t.Rows.Add(r)
+
+    //or
+    //t.AddRow(first_name = "Tom", last_name = "Hanks")
+    //let r = t.Rows.[0] 
+
+    assert( t.Update(conn, tx) = 1)
+    printfn "Identity 'actor_id' %i and column with default 'last update': %A auto-fetched." r.actor_id r.last_update
 ```
 
 ## Transactions
