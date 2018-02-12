@@ -90,7 +90,7 @@ There are 4 result types:
  - `ResultType.Tuples` - In practice it's rarely useful but why not? 
  ```fsharp
  do
-     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
     for title, releaseYear in cmd.Execute() do   
         printfn "Movie '%s' released in %i." title releaseYear.Value
  ```
