@@ -224,6 +224,37 @@ do
     //Commit to persist changes
     //tx.Commit()    
 ```
+NpgsqlConnection handles transaction object diffrerently because [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) cannot have overloads by design. Pass extra `XCtor = true` parameter to have `CreateCommand` method that accepts connection + optipnal transaction. `XCtor` stands for extended constructor`
+```fsharp
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = 
+        DvdRental.CreateCommand<"        
+            INSERT INTO public.actor (first_name, last_name)
+            VALUES(@firstName, @lastName)
+        ", XCtor = true>(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()
+```
+XCtor also can be set on top level  effectively making all CreateCommand method to accept connection + transaction combination. 
+```fsharp
+type DvdRentalXCtor = NpgsqlConnection<dvdRental, XCtor = true>
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = 
+        DvdRentalXCtor.CreateCommand<"        
+            INSERT INTO public.actor (first_name, last_name)
+            VALUES(@firstName, @lastName)
+        ">(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()
+  ```
 
 ## Scripting
 To make scripting experience more palatable the type providers accept boolean flag called Fsx. When set it makes run-time connection string parameter optional with default set to design time connection string.
