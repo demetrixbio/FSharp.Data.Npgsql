@@ -15,14 +15,14 @@ open InformationSchema
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor, resultTypeType) = 
         
     let xctorParam = ProvidedStaticParameter("XCtor", typeof<bool>, false) 
 
     let staticParams = 
         [
             ProvidedStaticParameter("CommandText", typeof<string>) 
-            ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
+            ProvidedStaticParameter("ResultType", resultTypeType, 0) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("TypeName", typeof<string>, "") 
@@ -37,20 +37,21 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         let getMethodImpl () = 
 
             let sqlStatement, resultType, singleRow, allParametersOptional, typename, verifyOutputAtRuntime, xctor  = 
+                let resultType = Enum.Parse(resultTypeType, string args.[1]).ToString()
                 if not globalXCtor
                 then 
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
+                    args.[0] :?> _ , resultType, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
                 else
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true
+                    args.[0] :?> _ , resultType, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true
                     
-            if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
+            if singleRow && not (resultType = "Records" || resultType = "Tuples")
             then 
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
             let parameters = extractParameters(connectionString, sqlStatement, allParametersOptional)
 
             let outputColumns = 
-                if resultType <> ResultType.DataReader
+                if resultType <> "DataReader"
                 then getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
                 else []
 
@@ -86,13 +87,13 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
             commands.AddMember cmdProvidedType
 
-            if resultType = ResultType.Records 
+            if resultType = "Records" 
             then
                 returnType.PerRow 
                 |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1)
                 |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
 
-            elif resultType = ResultType.DataTable 
+            elif resultType = "DataTable" 
             then
                 returnType.Single |> cmdProvidedType.AddMember
 
@@ -292,7 +293,7 @@ let getUserSchemas connectionString =
         
 let createRootType
     ( 
-        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder,
+        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, resultTypeType,
         connectionStringOrName, configType, config, xctor, fsx
     ) =
 
@@ -331,11 +332,11 @@ let createRootType
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor, resultTypeType)
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultTypeType) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -352,7 +353,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                 cache.GetOrAdd(
                     typeName, fun _ -> 
                         createRootType(
-                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
+                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, resultTypeType, 
                             unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
                         )
                 )   

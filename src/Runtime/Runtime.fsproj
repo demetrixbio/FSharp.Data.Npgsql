@@ -13,7 +13,7 @@
     <PackageTags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</PackageTags>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <IsPackable>true</IsPackable>
-    <Version>0.1.17-beta</Version>
+    <Version>0.1.20-beta</Version>
   </PropertyGroup>
   
   <PropertyGroup>
@@ -25,6 +25,7 @@
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
 
   <ItemGroup>
+    <Compile Include="ResultType.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="DesignTime.fs" />
   </ItemGroup>
