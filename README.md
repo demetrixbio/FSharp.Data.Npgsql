@@ -184,7 +184,11 @@ Library doesn't have any support to simplify run-time confirmation but there is 
 
 Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
 
-## Data modifications
+- `ConfigType.JsonFile`
+- `ConfigType.Environment`
+- 'ConfigType.UserStore`
+
+## Data modifications`
 - Hand-written statements
 ```fsharp
     //deactivate customer if exists and active
