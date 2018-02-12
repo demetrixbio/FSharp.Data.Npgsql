@@ -210,7 +210,7 @@ do
 ```
 
 ## Transactions
-Every instance of generated command has constructor overload that accepts mandatory live connection and optional transaction. Use it to executed commands inside transaction. 
+Every instance of generated command has constructor overload that accepts mandatory connection instance and optional transaction instance. Use it to executed commands inside transaction. 
 ```fsharp
 do
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
