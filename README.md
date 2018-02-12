@@ -177,9 +177,12 @@ do
 
 ## Configuration
 _Design-time type providers configuration is never passed to run-time._
-Command constructor/factory method expects run-time connection parameter.
-A notable exception is Fsx[#fsx] flag.
 
+Command constructor/factory method expects run-time connection parameter. 
+A notable exception is (Fsx)[#scripting] flag.
+Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.  
+
+Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
 
 ## Data modifications
 - Hand-written statements
