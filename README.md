@@ -100,7 +100,7 @@ is the only useful scenario.
 
 ## NpgsqlConnection or NpgsqlCommand?
 
-It's recommended to use ```NpgsqlConnection``` by default. ```NpgsqlCommand``` exists mainly for flexibility.
+It's recommended to use ```NpgsqlConnection``` type provider by default. ```NpgsqlCommand``` type provider exists mainly for flexibility.
 ```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place. 
 
 But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
@@ -180,20 +180,29 @@ do
 ## Data modifications
 - Hand-written statements
 ```fsharp
-    let name = "Tom", "Hanks"
-    try
-        use cmd = new NpgsqlCommand<"        
-            INSERT INTO public.actor (first_name, last_name)
-            VALUES(@firstName, @lastNames)
-        ", dvdRental>(dvdRental)
-        assert(cmd.Execute(name) = 1)
-    finally
-        use cmd = new NpgsqlCommand<"        
-            DELETE FROM public.actor 
-            WHERE first_name = @firstName 
-                AND last_name = @lastNames
-        ", dvdRental>(dvdRental)
-        assert(cmd.Execute(name) = 1)     
+    //deactivate customer if exists and active
+    let email = "mary.smith@sakilacustomer.org"
+
+    use cmd = new NpgsqlCommand<" 
+            UPDATE public.customer 
+            SET activebool = false 
+            WHERE email = @email 
+                AND activebool
+    ", dvdRental, SingleRow = true>(dvdRental)
+
+    let recordsAffected = cmd.Execute(email)
+    if recordsAffected = 0 
+    then
+        printfn "Could not deactivate customer %s" email
+    elif recordsAffected = 1
+    then 
+        use restore = 
+            new NpgsqlCommand<" 
+                UPDATE public.customer 
+                SET activebool = true
+                WHERE email = @email 
+            ", dvdRental>(dvdRental)
+        assert( restore.Execute(email) = 1)    
 ```
 - `ResultType.DataTable`
 ```fsharp
