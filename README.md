@@ -85,9 +85,22 @@ do
 
 ## Result types
 
+There are 4 result types:
+ - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See see examples above. 
+ - `ResultType.Tuples` - In practice it's rarely useful but why not? 
+ ```fsharp
+ do
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
+    for title, releaseYear in cmd.Execute() do   
+        printfn "Movie '%s' released in %i." title releaseYear.Value
+ ```
+ - `ResultType.DataTable` comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details. 
+ - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
+is the only useful scenario. 
+
 ## NpgsqlConnection or NpgsqlCommand?
 
-It's recommended to use ```NpgsqlConnection``` by default. ```NpgsqlCommand``` exists mainly for flexibility.
+It's recommended to use ```NpgsqlConnection``` type provider by default. ```NpgsqlCommand``` type provider exists mainly for flexibility.
 ```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place. 
 
 But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
@@ -146,14 +159,181 @@ let openConnection(connectionString) =
 ```
 
 ## Async execution
+Every instance of generated command has async counterpart of ```Execute``` method - ```AsyncExecute```.
+
+```fsharp
+do
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+    for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
+
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+    for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
 
 ## Configuration
+_Design-time type providers configuration is never passed to run-time._
 
-## Data modifications
+Command constructor/factory method expects run-time connection parameter. 
+A notable exception is (Fsx)[#scripting] flag.
+Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.  
 
-## Scripting
+Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
+
+- `ConfigType.JsonFile`
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", Config = jsonConfig >(dvdRental)  
+    //...
+```
+The type provider will look for connection string named `dvdRental` in file that should have content like:
+```json
+{
+  "ConnectionStrings": {
+    "dvdRental": "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
+  }
+}
+```
+- `ConfigType.Environment`
+
+Reads configuration from `ConnectionStrings:dvdRental` environment variable.
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.Environment>(dvdRental)
+```
+- 'ConfigType.UserStore`
+
+Reads design time connection string from user store. 
+```fsharp
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
+```
+
+
+More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration).
+
+## Data modifications`
+- Hand-written statements
+```fsharp
+    //deactivate customer if exists and active
+    let email = "mary.smith@sakilacustomer.org"
+
+    use cmd = new NpgsqlCommand<" 
+            UPDATE public.customer 
+            SET activebool = false 
+            WHERE email = @email 
+                AND activebool
+    ", dvdRental, SingleRow = true>(dvdRental)
+
+    let recordsAffected = cmd.Execute(email)
+    if recordsAffected = 0 
+    then
+        printfn "Could not deactivate customer %s" email
+    elif recordsAffected = 1
+    then 
+        use restore = 
+            new NpgsqlCommand<" 
+                UPDATE public.customer 
+                SET activebool = true
+                WHERE email = @email 
+            ", dvdRental>(dvdRental)
+        assert( restore.Execute(email) = 1)    
+```
+- `ResultType.DataTable` - good to handle updates, deletes, upserts or inserts mixed with any above. 
+
+```fsharp
+
+```
+
+- Statically-typed for inserts-only scenario for example ETL data upload.
+```fsharp
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    let t = new DvdRental.``public``.Tables.actor()
+
+    let r = t.NewRow(first_name = "Tom", last_name = "Hanks")
+    t.Rows.Add(r)
+
+    //or
+    //t.AddRow(first_name = "Tom", last_name = "Hanks")
+    //let r = t.Rows.[0] 
+
+    assert( t.Update(conn, tx) = 1)
+    printfn "Identity 'actor_id' %i and column with default 'last update': %A auto-fetched." r.actor_id r.last_update
+```
 
 ## Transactions
+Every instance of generated by `NpgsqlCoammnd` type provider command has constructor overload that accepts mandatory connection instance and optional transaction instance. Use it to executed commands inside transaction. 
+```fsharp
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = new NpgsqlCommand<"        
+        INSERT INTO public.actor (first_name, last_name)
+        VALUES(@firstName, @lastName)
+    ", dvdRental>(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()    
+```
+`NpgsqlConnection` type provider handles transaction object diffrerently because [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) cannot have overloads by design. Pass extra `XCtor = true` parameter to have `CreateCommand` method signature that accepts connection + optional transaction. `XCtor` stands for extended constructor.
+```fsharp
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = 
+        DvdRental.CreateCommand<"        
+            INSERT INTO public.actor (first_name, last_name)
+            VALUES(@firstName, @lastName)`
+        ", XCtor = true>(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()
+```
+`XCtor` also can be set on top level effectively making all `CreateCommand` methods to accept connection + transaction combination. 
+```fsharp
+type DvdRentalXCtor = NpgsqlConnection<dvdRental, XCtor = true>
+do
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    use cmd = 
+        DvdRentalXCtor.CreateCommand<"        
+            INSERT INTO public.actor (first_name, last_name)
+            VALUES(@firstName, @lastName)
+        ">(conn, tx)
+    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+    //Commit to persist changes
+    //tx.Commit()
+  ```
+
+## Scripting
+To make scripting experience more palatable the type providers accept boolean flag called Fsx. When set it makes run-time connection string parameter optional with default set to design time connection string.
+```
+type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
+do
+    use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
+    //...
+```
+
+```fsharp
+do 
+    use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental, Fsx = true>()    
+    //...
+```
+Re-using design time connection string allowed only for types evaluated in FSI. Attempt to create command that re-uses design time connection string outside FSI will throw an exception. 
 
 ## Limitations
 
@@ -166,5 +346,11 @@ let openConnection(connectionString) =
   - Custom enums and array types are supported but composite types not yet.
 
 ## Running tests
+- git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
+From the repo root folder
+- dotnet build .\src\DesignTime\
+- dotnet build .\src\Runtime\
+- docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
+- docker build -t pg_dvdrental .\tests\
+- dotnet test .\tests\
 
-## Implemenation details
