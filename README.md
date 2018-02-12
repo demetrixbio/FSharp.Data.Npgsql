@@ -185,6 +185,21 @@ Library doesn't have any support to simplify run-time confirmation but there is 
 Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
 
 - `ConfigType.JsonFile`
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", Config = jsonConfig >(dvdRental)  
+    //...
+```
+The type provider will look for connection string named `dvdRental` in file that should have content like:
+```json
+{
+  "ConnectionStrings": {
+    "dvdRental": "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
+  }
+}
+```
 - `ConfigType.Environment`
 - 'ConfigType.UserStore`
 
