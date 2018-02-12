@@ -85,7 +85,7 @@ do
 
 ## Result types
 
-There 4 result types:
+There are 4 result types:
  - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See see examples above. 
  - `ResultType.Tuples` - In practice it's rarely useful but why not? 
  ```fsharp
