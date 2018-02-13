@@ -138,9 +138,9 @@ do
  
 It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little. 
 
- - Use fully qualified names for 'Npgsql.NpgsqlConnection and Npgsql.NpgsqlCommand
+ - Use fully qualified names for `Npgsql.NpgsqlConnection` and `Npgsql.NpgsqlCommand`
 
- - Use type alias for 'Npgsql.NpgsqlConnection and Npgsql.NpgsqlCommand
+ - Use type alias for `Npgsql.NpgsqlConnection` and `Npgsql.NpgsqlCommand`
 ```fsharp
 type PgConnectoin = Npgsql.NpgsqlConnection
 type PgCommand = Npgsql.NpgsqlCommand
