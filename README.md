@@ -221,7 +221,7 @@ Reads design time connection string from user store.
 
 More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration).
 
-## Data modifications`
+## Data modifications
 - Hand-written statements
 ```fsharp
     //deactivate customer if exists and active
