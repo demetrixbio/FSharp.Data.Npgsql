@@ -350,7 +350,7 @@ do
 ## Scripting
 To make scripting experience more palatable the type providers accept boolean flag called Fsx. When set it makes run-time connection string parameter optional with default set to design time connection string.
 ```
-type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
+type DvdRentalForScripting = NpgsqlConnection<dvdRental, Fsx = true>
 do
     use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
     //...
