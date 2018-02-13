@@ -148,9 +148,9 @@ type PgCommand = Npgsql.NpgsqlCommand
 
 - Isolate usage by module or file  
 
-I expect once you commit to the ```NpgsqlCommand``` type provider usage of ```Npgsql.NpgsqlCommand``` type will be very limited so name collision is not an issue.  
+I expect once you commit to the `NpgsqlCommand` type provider usage of `Npgsql.NpgsqlCommand` type will be very limited so name collision is not an issue.  
 
-```Npgsql.NpgsqlConnection``` collision can be solved by a simple helper function:
+`Npgsql.NpgsqlConnection` collision can be solved by a simple helper function:
 ```fsharp
 let openConnection(connectionString) = 
     let conn = new Npgsql.NpgsqlConnection(connectionString)
@@ -159,7 +159,7 @@ let openConnection(connectionString) =
 ```
 
 ## Async execution
-Every instance of generated command has async counterpart of ```Execute``` method - ```AsyncExecute```.
+Every instance of generated command has async counterpart of `Execute` method - `AsyncExecute`.
 
 ```fsharp
 do
@@ -179,7 +179,7 @@ do
 _Design-time type providers configuration is never passed to run-time._
 
 Command constructor/factory method expects run-time connection parameter. 
-A notable exception is (Fsx)[#scripting] flag.
+A notable exception is [Fsx](#scripting) flag.
 Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.  
 
 Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
@@ -209,7 +209,7 @@ do
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.Environment>(dvdRental)
 ```
-- 'ConfigType.UserStore`
+- `ConfigType.UserStore`
 
 Reads design time connection string from user store. 
 ```fsharp
