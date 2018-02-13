@@ -15,7 +15,7 @@ https://www.nuget.org/packages/FSharp.Data.Npgsql/
   
 ## Setup
 
-All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions to exist:
+All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions exist:
 ```fsharp
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental"
