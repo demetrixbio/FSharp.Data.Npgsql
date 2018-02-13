@@ -218,6 +218,16 @@ Reads design time connection string from user store.
     ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
 ```
 
+For the code above the type provider will try to find _single_ F# project in resolution folder and parse it to extract value of <UserSecretsId> element. This approach relies on several assumptions. Unfortunately more robust way via reading [UserSecretsIdAttribute](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.usersecrets.usersecretsidattribute?view=aspnetcore-2.0) is not available for the type provider because final assembly is not generated yet. To address this UserSecretsId can be supplied via Config parameter.  
+ 
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"        
+        SELECT 42 AS Answer, current_date as today
+    ", "dvdRental", ConfigType = ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">(dvdRental)
+    //...
+```
+User store id is just file name so it can be practically any text.
 
 More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration).
 
