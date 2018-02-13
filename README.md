@@ -186,6 +186,12 @@ Configuring instance of `NpgsqlConnection` type provider is simple but configuri
 
 - `ConfigType.JsonFile`
 ```fsharp
+[<Literal>]
+let jsonConfig = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
+
+type DvdRental = NpgsqlConnection<connectionStringName, Config = jsonConfig>
+
+// NpgsqlCommand
 do
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
@@ -204,6 +210,9 @@ The type provider will look for connection string named `dvdRental` in file that
 
 Reads configuration from `ConnectionStrings:dvdRental` environment variable.
 ```fsharp
+type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.Environment>
+
+// NpgsqlCommand
 do
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
@@ -213,6 +222,10 @@ do
 
 Reads design time connection string from user store. 
 ```fsharp
+type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore>
+
+// NpgsqlCommand
+do
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
@@ -221,6 +234,9 @@ Reads design time connection string from user store.
 For the code above the type provider will try to find _single_ F# project in resolution folder and parse it to extract value of <UserSecretsId> element. This approach relies on several assumptions. Unfortunately more robust way via reading [UserSecretsIdAttribute](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.usersecrets.usersecretsidattribute?view=aspnetcore-2.0) is not available for the type provider because final assembly is not generated yet. To address this UserSecretsId can be supplied via Config parameter.  
  
 ```fsharp
+type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">
+
+// NpgsqlCommand
 do
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
@@ -228,6 +244,8 @@ do
     //...
 ```
 User store id is just file name so it can be practically any text.
+
+I hope you see that `NpgsqlConnection` has much simple configuration story.
 
 More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration).
 
