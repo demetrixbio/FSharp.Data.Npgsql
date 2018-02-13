@@ -282,7 +282,7 @@ More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspne
 
 ```
 
-- Statically-typed for inserts-only scenario for example ETL data upload.
+- Statically-typed data tables for inserts-only scenarios (for example ETL). Avalable only on ```NpgsqlConnection``` type provider.
 ```fsharp
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
