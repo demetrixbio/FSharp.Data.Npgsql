@@ -11,7 +11,7 @@ do()
 
 [<TypeProvider>]
 type NpgsqlProviders(config) as this = 
-    inherit TypeProviderForNamespaces( NpgsqlProviders.FixRuntimeAssembly(config), assemblyReplacementMap = [(Const.designTimeComponent, "FSharp.Data.Npgsql")])
+    inherit TypeProviderForNamespaces(config, assemblyReplacementMap = [(Const.designTimeComponent, "FSharp.Data.Npgsql")])
     
     let cache = ConcurrentDictionary()
 
@@ -29,16 +29,10 @@ type NpgsqlProviders(config) as this =
         assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
         assert (Const.designTimeComponent = assemblyName)
             
-        let resultTypeType = Assembly.LoadFrom(config.RuntimeAssembly).GetType("FSharp.Data.Npgsql.ResultType")
-
         this.AddNamespace(
             nameSpace, [ 
-                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, resultTypeType)
-                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, resultTypeType)
+                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
+                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
             ]
         )
 
-    static member private FixRuntimeAssembly(config: TypeProviderConfig) = 
-        if System.IO.Path.GetFileNameWithoutExtension(config.RuntimeAssembly) = Const.designTimeComponent
-        then config.RuntimeAssembly <- config.RuntimeAssembly.Replace(".DesignTime", "")
-        config

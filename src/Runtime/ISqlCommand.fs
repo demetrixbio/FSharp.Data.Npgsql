@@ -7,6 +7,17 @@ open System.Data.Common
 open System.Reflection
 open System.Runtime.CompilerServices
 
+///<summary>Enum describing output type</summary>
+type ResultType =
+///<summary>Sequence of custom records with properties matching column names and types</summary>
+    | Records = 0
+///<summary>Sequence of tuples matching column types with the same order</summary>
+    | Tuples = 1
+///<summary>Typed DataTable <see cref='T:FSharp.Data.DataTable`1'/></summary>
+    | DataTable = 2
+///<summary>raw DataReader</summary>
+    | DataReader = 3
+
 type ConfigType =
     | JsonFile = 1
     | Environment = 2
@@ -29,7 +40,7 @@ type ISqlCommand =
 type DesignTimeConfig = {
     SqlStatement: string
     Parameters: NpgsqlParameter[]
-    ResultType: string
+    ResultType: ResultType
     SingleRow: bool
     Row2ItemMapping: (obj[] -> obj)
     SeqItemTypeName: string
@@ -105,7 +116,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     let readerBehavior = 
         CommandBehavior.SingleResult
         ||| if cfg.SingleRow then CommandBehavior.SingleRow else CommandBehavior.Default
-        ||| if cfg.ResultType = "DataTable" then CommandBehavior.KeyInfo else CommandBehavior.Default
+        ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
         ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ ->  CommandBehavior.Default
         
     let setupConnection() = 
@@ -138,13 +149,13 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     let execute, asyncExecute = 
         match cfg.ResultType with
-        | "DataReader" -> 
+        | ResultType.DataReader -> 
             ``ISqlCommand Implementation``.ExecuteReader >> box, 
             ``ISqlCommand Implementation``.AsyncExecuteReader >> box
-        | "DataTable" ->
+        | ResultType.DataTable ->
             ``ISqlCommand Implementation``.ExecuteDataTable >> box, 
             ``ISqlCommand Implementation``.AsyncExecuteDataTable >> box
-        | "Records" | "Tuples" ->
+        | ResultType.Records | ResultType.Tuples ->
             match box cfg.Row2ItemMapping, cfg.SeqItemTypeName with
             | null, null ->
                 ``ISqlCommand Implementation``.ExecuteNonQuery setupConnection >> box, 

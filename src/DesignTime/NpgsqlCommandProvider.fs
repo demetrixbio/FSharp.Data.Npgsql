@@ -18,7 +18,7 @@ let createRootType
 
     let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
 
-    if singleRow && not (resultType = "Records" || resultType = "Tuples")
+    if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
     let parameters = InformationSchema.extractParameters(connectionString, sqlStatement, allParametersOptional)
@@ -26,7 +26,7 @@ let createRootType
     let customTypes = ref( dict [])
 
     let outputColumns = 
-        if resultType <> "DataReader"
+        if resultType <> ResultType.DataReader
         then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, customTypes)
         else []
 
@@ -48,13 +48,13 @@ let createRootType
         )
 
     do
-        if resultType = "Records" 
+        if resultType = ResultType.Records 
         then
             returnType.PerRow 
             |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1 )
             |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
 
-        elif resultType = "DataTable" 
+        elif resultType = ResultType.DataTable 
         then
             returnType.Single |> cmdProvidedType.AddMember
 
@@ -102,7 +102,7 @@ let createRootType
 
     cmdProvidedType
 
-let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>, resultTypeType) = 
+let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlCommand", Some typeof<obj>, hideObjectMethods = true)
 
@@ -110,7 +110,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
         parameters = [ 
             ProvidedStaticParameter("CommandText", typeof<string>) 
             ProvidedStaticParameter("Connection", typeof<string>) 
-            ProvidedStaticParameter("ResultType", resultTypeType, 0) 
+            ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("Fsx", typeof<bool>, false) 
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
@@ -122,10 +122,9 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
             cache.GetOrAdd(
                 typeName, 
                 fun _ -> 
-                    let resultType = Enum.Parse(resultTypeType, string args.[2]).ToString()
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
-                        unbox args.[0],  unbox args.[1], resultType, unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
+                        unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
                     )
             )
         ) 

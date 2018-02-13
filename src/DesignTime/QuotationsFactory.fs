@@ -528,13 +528,13 @@ type internal QuotationsFactory private() =
 
     static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, commandText, hasOutputParameters, allowDesignTimeConnectionStringReUse, ?connectionString) =    
          
-        if resultType = "DataReader" 
+        if resultType = ResultType.DataReader 
         then 
             { Single = typeof<NpgsqlDataReader>; PerRow = None }
         elif List.isEmpty outputColumns
         then 
             { Single = typeof<int>; PerRow = None }
-        elif resultType = "DataTable" 
+        elif resultType = ResultType.DataTable 
         then
             let dataRowType = QuotationsFactory.GetDataRowType(outputColumns)
             let dataTableType = 
@@ -562,7 +562,7 @@ type internal QuotationsFactory private() =
                     let indexGet = Expr.Call(Expr.Var values, typeof<Array>.GetMethod("GetValue", [| typeof<int> |]), [ Expr.Value 0 ])
                     provided, erasedTo, Expr.Lambda(values,  indexGet) 
 
-                elif resultType = "Records" 
+                elif resultType = ResultType.Records 
                 then 
                     let provided = QuotationsFactory.GetRecordType(outputColumns)
                     let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
