@@ -84,17 +84,15 @@ let resultTypeDataTable() =
     use tx = conn.BeginTransaction()    
     use cmd = 
         new NpgsqlCommand<"
-            SELECT * --customer_id, active, email
+            SELECT customer_id, activebool
             FROM public.customer 
             WHERE email = @email  
         ", dvdRental, ResultType.DataTable>(conn, tx)
     let t = cmd.Execute(email = "mary.smith@sakilacustomer.org")
-    if t.Rows.Count > 0 && t.Rows.[0].active = Some 1
+    if t.Rows.Count > 0 && t.Rows.[0].activebool
     then 
-        //t.Rows.[0].activebool <- true
-        ///t.Rows.[0].active <- Some 0  
-        t.Rows.[0].last_name <- t.Rows.[0].last_name + "_test" 
-        assert( t.Update(conn, tx, conflictOption = ConflictOption.OverwriteChanges) = 1)
+        t.Rows.[0].activebool <- true
+        assert( t.Update(conn, tx) = 1)
 
     //Commit to persist changes
     //tx.Commit() 

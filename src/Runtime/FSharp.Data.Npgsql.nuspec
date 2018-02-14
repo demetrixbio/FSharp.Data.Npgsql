@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
     <id>FSharp.Data.Npgsql</id>
-    <version>0.1.21-beta</version>
+    <version>0.1.22-beta</version>
     <authors>Dmitry Morozov</authors>
     <owners>Dmitry Morozov</owners>
     <licenseUrl>https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE</licenseUrl>
@@ -11,6 +11,9 @@
     <description>F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.</description>
     <copyright>Copyright 2017-2018 Dmitry Morozov</copyright>
     <tags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</tags>
+    <dependencies>
+      <dependency id="Npgsql" version="3.2.6"/>
+    </dependencies>
     <references>
       <reference file="FSharp.Data.Npgsql.dll" />
     </references>
