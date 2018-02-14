@@ -3,17 +3,9 @@
   <PropertyGroup>
     <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
     <TargetFrameworks Condition="'$(Configuration)'=='Release'">netstandard2.0;net461</TargetFrameworks>
-    
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
-
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeAllDlls</TargetsForTfmSpecificBuildOutput>
-
-    <Description>F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.</Description>
-    <Copyright>Copyright 2017-2018 Dmitry Morozov</Copyright>
-    <PackageTags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</PackageTags>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <IsPackable>true</IsPackable>
-    <Version>0.1.17-beta</Version>
+    <Nuspecfile>FSharp.Data.Npgsql.nuspec</Nuspecfile>
   </PropertyGroup>
   
   <PropertyGroup>
@@ -51,6 +43,10 @@
     <Content Include="System.Runtime.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="FSharp.Data.Npgsql.nuspec" />
   </ItemGroup>
 
   <ItemGroup>

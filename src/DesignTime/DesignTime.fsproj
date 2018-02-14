@@ -15,10 +15,6 @@
     <WarningsAsErrors>1182</WarningsAsErrors>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <OutputPath>bin\Debug\</OutputPath>
-  </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="..\Runtime\ISqlCommand.fs">
       <Link>ISqlCommand.fs</Link>
