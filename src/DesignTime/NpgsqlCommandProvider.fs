@@ -86,8 +86,7 @@ let createRootType
             )
             |> cmdProvidedType.AddMembers
 
-    do  //AsyncExecute, Execute, and ToTraceString
-
+    do  
         let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, !customTypes)
 
         let hasOutputParameters = false

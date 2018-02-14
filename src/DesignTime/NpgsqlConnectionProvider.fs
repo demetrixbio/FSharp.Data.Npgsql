@@ -70,8 +70,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
             let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
 
-            do  //AsyncExecute, Execute, and ToTraceString
-
+            do  
                 let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
 
                 let addRedirectToISqlCommandMethod outputType name = 
@@ -212,7 +211,6 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     tableName, 
                     dataRowType, 
                     columns, 
-                    <@ new NpgsqlCommand(tableName, CommandType = CommandType.TableDirect) @>, 
                     isHostedExecution && fsx,
                     ?connectionString = if fsx then Some connectionString else None
                 )
@@ -229,7 +227,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
 
                     <@@ 
                         let selectCommand = new NpgsqlCommand(twoPartTableName, CommandType = CommandType.TableDirect)
-                        let table = new DataTable(twoPartTableName)
+                        let table = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand)
                         table.TableName <- twoPartTableName
                         table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
                         table

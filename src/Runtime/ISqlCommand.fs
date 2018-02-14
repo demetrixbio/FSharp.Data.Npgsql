@@ -7,30 +7,6 @@ open System.Data.Common
 open System.Reflection
 open System.Runtime.CompilerServices
 
-///<summary>Enum describing output type</summary>
-type ResultType =
-///<summary>Sequence of custom records with properties matching column names and types</summary>
-    | Records = 0
-///<summary>Sequence of tuples matching column types with the same order</summary>
-    | Tuples = 1
-///<summary>Typed DataTable <see cref='T:FSharp.Data.DataTable`1'/></summary>
-    | DataTable = 2
-///<summary>raw DataReader</summary>
-    | DataReader = 3
-
-type ConfigType =
-    | JsonFile = 1
-    | Environment = 2
-    | UserStore = 3
-
-module internal Const = 
-    [<Literal>]
-    let infraMessage = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
-    [<Literal>]
-    let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
-    [<Literal>]
-    let designTimeComponent = "FSharp.Data.Npgsql.DesignTime"
-
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type ISqlCommand = 
     abstract Execute: parameters: (string * obj)[] -> obj
@@ -53,12 +29,12 @@ type Utils private() =
 
     [<Extension>]
     [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member MapRowValues<'TItem>(this: DbDataReader ,rowMapping) = 
+    static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
         seq {
-            use _ = this
-            let values = Array.zeroCreate this.FieldCount
-            while this.Read() do
-                this.GetValues(values) |> ignore
+            use _ = cursor
+            let values = Array.zeroCreate cursor.FieldCount
+            while cursor.Read() do
+                cursor.GetValues(values) |> ignore
                 yield values |> rowMapping |> unbox<'TItem>
         }
 
@@ -75,7 +51,12 @@ type Utils private() =
     static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
     [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member UpdateDataTable(table: DataTable, selectCommand, updateBatchSize, continueUpdateOnError, conflictOption) = 
+    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, updateBatchSize, continueUpdateOnError, conflictOption) = 
+
+        let selectCommand = table.SelectCommand
+
+        if connection <> null then selectCommand.Connection <- connection
+        if transaction <> null then selectCommand.Transaction <- transaction
 
         use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
 
@@ -179,15 +160,15 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
-    member this.CommandTimeout = cmd.CommandTimeout
+    member __.CommandTimeout = cmd.CommandTimeout
 
     interface ISqlCommand with
 
-        member this.Execute parameters = execute(cmd, setupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
-        member this.AsyncExecute parameters = asyncExecute(cmd, asyncSetupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
+        member __.Execute parameters = execute(cmd, setupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
+        member __.AsyncExecute parameters = asyncExecute(cmd, asyncSetupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
 
     interface IDisposable with
-        member this.Dispose() =
+        member __.Dispose() =
             cmd.Dispose()
 
     static member internal SetParameters(cmd: NpgsqlCommand, parameters: (string * obj)[]) = 
@@ -251,7 +232,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     
     static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
         use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
-        let result = new DataTable()
+        let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
         result.Columns.AddRange(expectedColumns)
         result.Load(cursor)
         result
@@ -259,7 +240,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     static member internal AsyncExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
         async {
             use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
-            let result = new DataTable()
+            let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
             result.Load(reader)
             return result
         }

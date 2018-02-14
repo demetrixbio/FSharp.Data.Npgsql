@@ -304,17 +304,16 @@ type internal QuotationsFactory private() =
             typeName, 
             dataRowType: ProvidedTypeDefinition, 
             outputColumns: Column list, 
-            selectCommand: Expr<NpgsqlCommand>, 
             allowDesignTimeConnectionStringReUse: bool,
             ?connectionString: string
         ) =
 
-        let tableType = ProvidedTypeDefinition(typeName, Some typeof<DataTable>)
+        let tableType = ProvidedTypeDefinition(typeName, Some( ProvidedTypeBuilder.MakeGenericType(typedefof<_ DataTable>, [ dataRowType ])))
       
         do //Columns
             let columnsType = ProvidedTypeDefinition("Columns", Some typeof<DataColumnCollection>)
             tableType.AddMember columnsType
-            let columns = ProvidedProperty("Columns", columnsType, getterCode = fun args -> <@@ (%%args.Head: DataTable).Columns @@>)
+            let columns = ProvidedProperty("Columns", columnsType, getterCode = fun args -> <@@ (%%args.Head: DataTable<DataRow>).Columns @@>)
             tableType.AddMember columns
       
             for column in outputColumns do
@@ -326,13 +325,6 @@ type internal QuotationsFactory private() =
                     ProvidedProperty(column.Name, propertyType, getterCode = fun args -> <@@ (%%args.Head: DataColumnCollection).[columnName] @@>)
             
                 columnsType.AddMember property
-
-        let rowsType = ProvidedTypeDefinition("Rows", None)
-        tableType.AddMember rowsType
-
-        do //Rows
-            let rows = ProvidedProperty("Rows", rowsType, getterCode = fun args -> <@@ (%%args.Head: DataTable).Rows @@>)
-            tableType.AddMember rows
 
         do
             let parameters, updateableColumns = 
@@ -381,7 +373,7 @@ type internal QuotationsFactory private() =
                     )
 
                 <@@ 
-                    let table: DataTable = %%args.[0]
+                    let table: DataTable<DataRow> = %%args.[0]
                     let row = table.NewRow()
 
                     let values: obj[] = %%Expr.NewArray(typeof<obj>, [ for x in argsValuesConverted -> Expr.Coerce(x, typeof<obj>) ])
@@ -405,11 +397,7 @@ type internal QuotationsFactory private() =
                         typeof<Void>, 
                         invokeCode = fun args ->
                             let newRow = invokeCode args
-                            <@@
-                                let table: DataTable = %%args.[0]
-                                let row: DataRow = %%newRow
-                                table.Rows.Add row
-                            @@>
+                            <@@ (%%args.[0]: DataTable<DataRow>).Rows.Add(%%newRow) @@>
                     )
 
                 if methodXmlDoc <> "" then addRowMethod.AddXmlDoc methodXmlDoc
@@ -432,7 +420,6 @@ type internal QuotationsFactory private() =
                     typeof<int>,
                     fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
                         <@@ 
-                            let selectCommand = %selectCommand
                             let runTimeConnectionString = 
                                 if %%connectionString = reuseDesignTimeConnectionString
                                 then 
@@ -442,8 +429,8 @@ type internal QuotationsFactory private() =
                                 else
                                     %%connectionString
 
-                            selectCommand.Connection <- new NpgsqlConnection(runTimeConnectionString)
-                            Utils.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            let conn = new NpgsqlConnection(runTimeConnectionString)
+                            Utils.UpdateDataTable(%%table, conn, null, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
@@ -455,74 +442,11 @@ type internal QuotationsFactory private() =
                     typeof<int>,
                     fun (Arg6(table, conn, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
                         <@@ 
-                            let selectCommand = %selectCommand
-                            selectCommand.Connection <- %%conn
-                            selectCommand.Transaction <- %%tx
-                            Utils.UpdateDataTable(%%table, selectCommand, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
             ]
-
-            do 
-                rowsType.AddMembersDelayed <| fun() -> 
-                    [
-                        ProvidedProperty(
-                            "Item", 
-                            dataRowType, 
-                            getterCode = (fun args -> <@@ (%%Expr.Coerce(args.[0], typeof<DataRowCollection>): DataRowCollection).[%%args.[1]] @@>),
-                            setterCode = (fun args -> <@@ (%%Expr.Coerce(args.[0], typeof<DataRowCollection>): DataRowCollection).[%%args.[1]] = %%args.[2] @@>),
-                            indexParameters = [ ProvidedParameter("index", typeof<int>) ]
-                        )
-
-                        ProvidedProperty("Count", typeof<int>,
-                            fun args -> <@@ (%%Expr.Coerce(args.[0], typeof<DataRowCollection>): DataRowCollection).Count @@>
-                        )
-                    ]
-
-            do 
-                rowsType.AddMembersDelayed <| fun() -> 
-                    [
-                        ProvidedMethod("Add", [ ProvidedParameter("row", dataRowType) ], typeof<Void>, 
-                            fun (Arg2(xs, row)) -> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).Add(%%row: DataRow) @@> 
-                        )
-                
-                        ProvidedMethod("Clear", [], typeof<Void>, 
-                            fun (Arg1 xs) -> <@@(%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).Clear() @@> 
-                        )
-                
-                        //ProvidedMethod("Contains", [ ProvidedParameter("keys", typeof<obj[]>, IsParamArray = true) ], typeof<bool>, 
-                        //    fun (Arg2(xs, keys)) -> <@@(%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).Contains(%%keys: obj[]) @@> 
-                        //)
-
-                        //ProvidedMethod("CopyTo", [ ProvidedParameter("array", dataRowType.MakeArrayType()); ProvidedParameter("index", typeof<int>) ], typeof<Void>, 
-                        //    fun (Arg3(xs, array, index))-> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).CopyTo(%%array, %%index) @@> 
-                        //)
-                
-                        //ProvidedMethod("Find", [ ProvidedParameter("keys", typeof<obj[]>, IsParamArray = true) ], dataRowType, 
-                        //    fun (Arg2(xs, keys)) -> <@@(%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).Find(%%keys: obj[]) @@> 
-                        //)
-
-                        ProvidedMethod("GetEnumerator", [], ProvidedTypeBuilder.MakeGenericType(typedefof<_ seq>, [dataRowType]),
-                            fun (Arg1 xs) -> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection) |> Seq.cast<DataRow>  @@> 
-                        )
-
-                        ProvidedMethod("IndexOf", [ ProvidedParameter("row", dataRowType) ], typeof<Void>, 
-                            fun (Arg2(xs, row)) -> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).IndexOf(%%row: DataRow) @@> 
-                        )
-
-                        ProvidedMethod("InsertAt", [ ProvidedParameter("row", dataRowType); ProvidedParameter("index", typeof<int>) ], typeof<Void>, 
-                            fun (Arg3(xs, row, index))-> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).InsertAt(%%row, %%index) @@> 
-                        )
-                
-                        ProvidedMethod("Remove", [ ProvidedParameter("row", dataRowType) ], typeof<Void>, 
-                            fun (Arg2(xs, row)) -> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).Remove(%%row) @@> 
-                        )
-                
-                        ProvidedMethod("RemoveAt", [ ProvidedParameter("index", typeof<int>) ], typeof<Void>, 
-                            fun (Arg2(xs, index)) -> <@@ (%%Expr.Coerce(xs, typeof<DataRowCollection>): DataRowCollection).RemoveAt(%%index) @@> 
-                        )
-                    ] 
 
         tableType
 
@@ -542,7 +466,6 @@ type internal QuotationsFactory private() =
                     "Table", 
                     dataRowType, 
                     outputColumns, 
-                    <@ new NpgsqlCommand(commandText) @>, 
                     allowDesignTimeConnectionStringReUse,
                     ?connectionString = connectionString
                 )

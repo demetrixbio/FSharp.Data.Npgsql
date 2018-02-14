@@ -24,8 +24,8 @@ let main _ =
 
     //NpgsqlCommandSamples.handWrittenUpsert()
 
-    //NpgsqlCommandSamples.resultTypeDataTable()
+    NpgsqlCommandSamples.resultTypeDataTable()
 
-    NpgsqlConnectionSamples.insertOnly()
+    //NpgsqlConnectionSamples.insertOnly()
 
     0 

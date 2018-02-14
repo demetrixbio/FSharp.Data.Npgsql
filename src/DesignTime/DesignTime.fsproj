@@ -16,6 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Runtime\DataTable.fs">
+      <Link>DataTable.fs</Link>
+    </Compile>
     <Compile Include="..\Runtime\ISqlCommand.fs">
       <Link>ISqlCommand.fs</Link>
     </Compile>

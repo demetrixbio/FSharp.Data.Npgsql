@@ -5,13 +5,14 @@ open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
 open System.Collections.Concurrent
 open FSharp.Data.Npgsql.DesignTime
+open System.IO
 
 [<assembly:TypeProviderAssembly()>]
 do()
 
 [<TypeProvider>]
 type NpgsqlProviders(config) as this = 
-    inherit TypeProviderForNamespaces(config, assemblyReplacementMap = [(Const.designTimeComponent, "FSharp.Data.Npgsql")])
+    inherit TypeProviderForNamespaces(config, assemblyReplacementMap = [(Const.designTimeComponent, Path.GetFileNameWithoutExtension(config.RuntimeAssembly))])
     
     let cache = ConcurrentDictionary()
 
@@ -27,7 +28,6 @@ type NpgsqlProviders(config) as this =
         let nameSpace = this.GetType().Namespace
         
         assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
-        assert (Const.designTimeComponent = assemblyName)
             
         this.AddNamespace(
             nameSpace, [ 

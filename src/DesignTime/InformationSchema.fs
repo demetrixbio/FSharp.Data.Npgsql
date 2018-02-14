@@ -14,9 +14,9 @@ open ProviderImplementation.ProvidedTypes
 
 type internal NpgsqlDataReader with
 
-    member this.GetValueOrDefault(name: string, defaultValue) =    
-        let i = this.GetOrdinal(name)
-        if this.IsDBNull( i) then defaultValue else this.GetFieldValue( i)
+    member cursor.GetValueOrDefault(name: string, defaultValue) =    
+        let i = cursor.GetOrdinal(name)
+        if cursor.IsDBNull( i) then defaultValue else cursor.GetFieldValue( i)
 
 let typesMapping = 
     Map.ofList [
