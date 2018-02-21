@@ -169,23 +169,30 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                 use row = cmd.ExecuteReader()
                 while row.Read() do
 
-                    let udt = string row.["udt_name"]
+                    let udtName = string row.["udt_name"]
                     let schema = unbox row.["table_schema"] 
+
+                    let udt =                             
+                        customTypes
+                        |> Map.tryFind schema
+                        |> Option.bind (List.tryFind (fun t -> t.Name = udtName))
+                        |> Option.map (fun x -> x :> Type)
+
                     yield {
                         Name = unbox row.["column_name"]
                         DataType = 
                             {
-                                Name = udt
+                                Name = udtName
                                 Schema = schema
                                 ClrType = 
                                     match unbox row.["data_type"] with 
                                     | "ARRAY" -> 
-                                        let elemType = typesMapping.[udt.TrimStart('_')] |> fst              
+                                        let elemType = typesMapping.[udtName.TrimStart('_')] |> fst              
                                         elemType.MakeArrayType()
-                                    | "USER-DEFINED" -> 
-                                        typeof<obj>
+                                    | "USER-DEFINED" ->
+                                        if udt.IsSome then typeof<string> else typeof<obj>
                                     | _ -> 
-                                        typesMapping.[udt] |> fst
+                                        typesMapping.[udtName] |> fst
                             }
 
                         Nullable = unbox row.["is_nullable"] = "YES"
@@ -194,11 +201,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                         Identity = unbox row.["is_identity"] = "YES"
                         DefaultConstraint = row.GetValueOrDefault("column_default", "")
                         Description = row.GetValueOrDefault("description", "")
-                        UDT = 
-                            customTypes
-                            |> Map.tryFind schema
-                            |> Option.bind (List.tryFind (fun t -> t.Name = udt))
-                            |> Option.map (fun x -> upcast x)
+                        UDT = udt
                     }
                 ]
                 

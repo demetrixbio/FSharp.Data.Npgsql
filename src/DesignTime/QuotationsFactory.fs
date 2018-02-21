@@ -365,11 +365,12 @@ type internal QuotationsFactory private() =
                     ||> List.map2 (fun valueExpr c ->
                         if c.OptionalForInsert
                         then 
-                            typeof<QuotationsFactory>
-                                .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
-                                .MakeGenericMethod(c.ClrType)
-                                .Invoke(null, [| box valueExpr |])
-                                |> unbox
+                            let obj = 
+                                typeof<QuotationsFactory>
+                                    .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
+                                    .MakeGenericMethod(c.ClrType)
+                                    .Invoke(null, [| valueExpr |])
+                            unbox obj
                         else
                             valueExpr
                     )
