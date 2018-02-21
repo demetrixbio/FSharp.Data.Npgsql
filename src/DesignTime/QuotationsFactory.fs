@@ -152,6 +152,13 @@ type internal QuotationsFactory private() =
         <@ (%%exprArgs.[0] : DataRow).[name] <- %%Expr.Coerce(exprArgs.[1], typeof<obj>) @>
     
     static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Utils.DbNull @@>    
+    
+    static member internal GetMapperFromOptionToObj(t: Type, value: Expr) =
+        typeof<QuotationsFactory>
+            .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
+            .MakeGenericMethod(t)
+            .Invoke(null, [| box value|])
+            |> unbox        
 
     static member internal AddGeneratedMethod
         (sqlParameters: Parameter list, hasOutputParameters, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
@@ -164,11 +171,7 @@ type internal QuotationsFactory private() =
                     then 
                         if param.Optional 
                         then 
-                            typeof<QuotationsFactory>
-                                .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
-                                .MakeGenericMethod(param.DataType.ClrType)
-                                .Invoke(null, [| box expr|])
-                                |> unbox
+                            QuotationsFactory.GetMapperFromOptionToObj(param.DataType.ClrType, expr)
                         else
                             expr
                     else
@@ -340,7 +343,6 @@ type internal QuotationsFactory private() =
 
                             yield parameter, c
                 ] 
-                |> List.sortBy (fun (_, c) -> c.OptionalForInsert) //move non-nullable params in front
                 |> List.unzip
 
             let methodXmlDoc = 
