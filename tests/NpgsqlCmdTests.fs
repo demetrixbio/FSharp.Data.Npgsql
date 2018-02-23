@@ -299,3 +299,14 @@ let fsx() =
         why.Message
     )
 
+
+type EchoRatingsArrayWithVerification = NpgsqlCommand<"
+        SELECT 42 , ARRAY[1, 2, 3];
+    ", dvdRental, ResultType.Tuples, VerifyOutputAtRuntime = true>
+
+[<Fact>]
+let selectEnumWithArray2() =
+    use cmd = new EchoRatingsArrayWithVerification(dvdRental)
+
+    let actual = cmd.Execute() |> Seq.exactlyOne
+    Assert.Equal( (Some 42, Some [| 1..3 |]), actual)

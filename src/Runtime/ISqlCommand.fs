@@ -203,12 +203,13 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             for i = 0 to expectedColumns.Length - 1 do
                 let expectedName, expectedType = expectedColumns.[i].ColumnName, expectedColumns.[i].DataType
                 let actualName, actualType = cursor.GetName( i), cursor.GetFieldType( i)
-                let maybeEnum = 
-                    (expectedType = typeof<string> && actualType = typeof<obj>)
-                    || (expectedType = typeof<string[]> && actualType = typeof<Array>)
+                
+                //TO DO: add extended property on column to mark enums
+                let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
+                let maybeArray = expectedType.IsArray && actualType = typeof<Array>
                 let typeless = expectedType = typeof<obj> && actualType = typeof<string>
                 if (expectedName <> "" && actualName <> expectedName) 
-                    || (actualType <> expectedType && not maybeEnum && not typeless)
+                    || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless)
                 then 
                     let message = sprintf """Expected column "%s" of type "%A" at position %i (0-based indexing) but received column "%s" of type "%A".""" expectedName expectedType i actualName actualType
                     cursor.Close()
