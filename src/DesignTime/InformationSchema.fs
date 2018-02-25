@@ -144,7 +144,7 @@ type Column = {
 
     member this.ToDataColumnExpr() =
         let columnName = this.Name
-        let typeName = this.ClrType.FullName
+        let typeName = this.ClrType.AssemblyQualifiedName.Split(',') |> Array.take 2 |> String.concat ","
         let allowDBNull = this.Nullable || this.HasDefaultConstraint
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
 

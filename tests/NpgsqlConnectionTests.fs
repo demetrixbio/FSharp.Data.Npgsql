@@ -365,14 +365,15 @@ let ``AddRow/NewRow preserve order``() =
     actors.AddRow(actor_id = Some 42, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
     actors.AddRow(first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
     actors.AddRow(last_update = Some DateTime.Now, first_name = "Tom", last_name = "Hanks")
+
+    let films = new DvdRental.``public``.Tables.film()
+    films.AddRow(
+        title = "Inception", 
+        description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
+        language_id = 1s,
+        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+    )
+
+
+
     
-    try 
-        let films = new DvdRental.``public``.Tables.film()
-        films.AddRow(
-            title = "Inception", 
-            description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
-            language_id = 1s,
-            fulltext = null
-        )
-    with :? System.TypeLoadException ->
-        ()
