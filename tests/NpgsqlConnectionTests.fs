@@ -361,8 +361,11 @@ let fsx() =
 [<Fact>]
 let ``AddRow/NewRow preserve order``() =
     let actors = new DvdRental.``public``.Tables.actor()
-    actors.AddRow(Some 42, "Tom", "Hanks", Some DateTime.Now)
-    actors.AddRow(actor_id = Some 42, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+    let r = actors.NewRow(Some 42, "Tom", "Hanks", Some DateTime.Now)
+    actors.Rows.Add(r); actors.Rows.Remove(r) |> ignore
+    let r = actors.NewRow(actor_id = Some 42, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+    actors.Rows.Add(r); actors.Rows.Remove(r) |> ignore
+    
     actors.AddRow(first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
     actors.AddRow(last_update = Some DateTime.Now, first_name = "Tom", last_name = "Hanks")
 

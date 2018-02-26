@@ -86,7 +86,7 @@ type Utils private() =
 
         dataAdapter.Update(table)   
 
-//[<Sealed>]
+[<Sealed>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTimeout) = 
 
@@ -235,6 +235,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
         let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
         result.Columns.AddRange(expectedColumns)
+        //result.PrimaryKey <- expectedColumns |> Array.filter (fun c -> unbox c.ExtendedProperties.["IsKey"])
         result.Load(cursor)
         result
 

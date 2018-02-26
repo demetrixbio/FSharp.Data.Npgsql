@@ -60,11 +60,6 @@ let createRootType
 
     do  //ctors
         let designTimeConfig = 
-            let expectedColumns = 
-                if verifyOutputAtRuntime 
-                then [ for c in outputColumns -> c.ToDataColumnExpr() ]
-                else []
-                
 
             <@@ {
                 SqlStatement = sqlStatement
@@ -73,7 +68,7 @@ let createRootType
                 SingleRow = singleRow
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, expectedColumns)
+                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>
 
         do

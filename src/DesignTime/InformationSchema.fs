@@ -111,7 +111,7 @@ type Column = {
     Nullable: bool
     MaxLength: int
     ReadOnly: bool
-    Identity: bool
+    AutoIncrement: bool
     DefaultConstraint: string
     Description: string
     UDT: Type option
@@ -124,8 +124,8 @@ type Column = {
         then typedefof<_ option>.MakeGenericType this.DataType.ClrType
         else this.DataType.ClrType
 
-    member this.HasDefaultConstraint = this.DefaultConstraint <> ""
-    member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint
+    member this.HasDefaultConstraint = string this.DefaultConstraint <> ""
+    member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint || this.AutoIncrement
 
     member this.MakeProvidedType(?forceNullability: bool) = 
         let nullable = defaultArg forceNullability this.Nullable
@@ -140,18 +140,25 @@ type Column = {
 
     member this.ToDataColumnExpr() =
         let columnName = this.Name
-        let typeName = this.ClrType.AssemblyQualifiedName.Split(',') |> Array.take 2 |> String.concat ","
+        let typeName = 
+            let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
+            clrType.AssemblyQualifiedName.Split(',') |> Array.take 2 |> String.concat ","
+
         let allowDBNull = this.Nullable || this.HasDefaultConstraint
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
 
         <@@ 
             let x = new DataColumn( columnName, Type.GetType( typeName, throwOnError = true))
+
+            x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
+
             x.AllowDBNull <- allowDBNull
-            if x.DataType = typeof<string>
-            then 
-                x.MaxLength <- %%Expr.Value(this.MaxLength)
+            
+            //if x.DataType = typeof<string>
+            //then 
+            //    x.MaxLength <- %%Expr.Value(this.MaxLength)
+
             x.ReadOnly <- %%Expr.Value(this.ReadOnly)
-            x.AutoIncrement <- %%Expr.Value(this.Identity)
 
             if localDateTimeMode
             then 
@@ -167,7 +174,7 @@ type Column = {
             this.Nullable 
             this.MaxLength
             this.ReadOnly
-            this.Identity
+            this.AutoIncrement
 
 type Parameter = {
     Name: string
@@ -278,8 +285,8 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
             DataType = dataType
             Nullable = nullable
             MaxLength = c.ColumnSize.GetValueOrDefault()
-            ReadOnly = c.IsAutoIncrement.GetValueOrDefault() || c.IsReadOnly.GetValueOrDefault()
-            Identity = c.IsIdentity.GetValueOrDefault()
+            ReadOnly = c.IsReadOnly.GetValueOrDefault()
+            AutoIncrement = c.IsAutoIncrement.GetValueOrDefault()
             DefaultConstraint = c.DefaultValue
             Description = ""
             UDT = 

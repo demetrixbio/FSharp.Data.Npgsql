@@ -310,3 +310,25 @@ let selectEnumWithArray2() =
 
     let actual = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal( (Some 42, Some [| 1..3 |]), actual)
+
+[<Fact>]
+let ``AddRow/NewRow preserve order``() =
+    use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(dvdRental)
+    let actors = getActors.Execute("Tom", "Hankss")
+    let columnd = actors.Columns
+    let r = actors.NewRow(Some 42, "Tom", "Hanks", Some DateTime.Now) 
+    actors.Rows.Add(r); actors.Rows.Remove(r) |> ignore
+    let r = actors.NewRow(actor_id = Some 42, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now) 
+    actors.Rows.Add(r); actors.Rows.Remove(r) |> ignore
+
+    actors.AddRow(None, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now) 
+    actors.AddRow(last_update = Some DateTime.Now, first_name = "Tom", last_name = "Hanks")
+
+    let getFilms = new NpgsqlCommand<"SELECT * FROM public.film WHERE title = @title", dvdRental, ResultType.DataTable>(dvdRental)
+    let films = getFilms.Execute("Inception")
+    films.AddRow(
+        title = "Inception", 
+        description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
+        language_id = 1s,
+        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+    )

@@ -96,11 +96,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 returnType.Single |> cmdProvidedType.AddMember
 
             let designTimeConfig = 
-                let expectedColumns = 
-                    if verifyOutputAtRuntime 
-                    then [ for c in outputColumns -> c.ToDataColumnExpr() ]
-                    else []
-
                 <@@ {
                     SqlStatement = sqlStatement
                     Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
@@ -108,7 +103,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     SingleRow = singleRow
                     Row2ItemMapping = %%returnType.Row2ItemMapping
                     SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, expectedColumns)
+                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
                 } @@>
 
 
@@ -144,25 +139,25 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
             use conn = openConnection(connectionString)
             let cmd = conn.CreateCommand()
             cmd.CommandText <- sprintf """
-                SELECT 
-                    c.table_schema,
-                    c.column_name,
-                    c.data_type,
-                    c.udt_name,
-                    c.is_nullable,
-                    c.character_maximum_length,
-                    c.is_updatable,
-                    c.is_identity,
-                    c.column_default,
-                    pgd.description
+                SELECT
+                  c.table_schema,
+                  c.column_name,
+                  c.data_type,
+                  c.udt_name,
+                  c.is_nullable,
+                  c.character_maximum_length,
+                  c.is_updatable,
+                  c.is_identity,
+                  c.column_default,
+                  pgd.description
                 FROM information_schema.columns c
-                    LEFT JOIN pg_catalog.pg_statio_all_tables as st ON
-                        c.table_schema = st.schemaname
-                        AND c.table_name = st.relname
-                    LEFT JOIN pg_catalog.pg_description pgd ON
-                        pgd.objsubid = c.ordinal_position
-                        AND pgd.objoid = st.relid
-                    WHERE c.table_schema = '%s' AND c.table_name = '%s';
+                  LEFT JOIN pg_catalog.pg_statio_all_tables as st 
+                    ON c.table_schema = st.schemaname AND c.table_name = st.relname
+                  LEFT JOIN pg_catalog.pg_description pgd 
+                    ON pgd.objsubid = c.ordinal_position AND pgd.objoid = st.relid
+                WHERE 
+                    c.table_schema = '%s' 
+                    AND c.table_name = '%s' 
             """ baseSchemaName baseTableName
 
             let columns: Column list = [
@@ -198,7 +193,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                         Nullable = unbox row.["is_nullable"] = "YES"
                         MaxLength = row.GetValueOrDefault("character_maximum_length", -1)
                         ReadOnly = unbox row.["is_updatable"] = "NO"
-                        Identity = unbox row.["is_identity"] = "YES"
+                        AutoIncrement = unbox row.["is_identity"] = "YES"
                         DefaultConstraint = row.GetValueOrDefault("column_default", "")
                         Description = row.GetValueOrDefault("description", "")
                         UDT = udt
@@ -237,7 +232,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     @@>
 
                 let ctor = ProvidedConstructor([], invokeCode)
-                dataTableType.AddMember ctor
+                dataTableType.AddMember ctor    
                 
 
             dataTableType

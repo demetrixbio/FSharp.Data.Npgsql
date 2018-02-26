@@ -333,7 +333,7 @@ type internal QuotationsFactory private() =
             let parameters, updateableColumns = 
                 [ 
                     for c in outputColumns do 
-                        if not(c.Identity || c.ReadOnly)
+                        if not c.ReadOnly
                         then 
                             let dataType = c.MakeProvidedType(forceNullability = c.OptionalForInsert)
                             let parameter = 
@@ -365,12 +365,7 @@ type internal QuotationsFactory private() =
                     ||> List.map2 (fun valueExpr c ->
                         if c.OptionalForInsert
                         then 
-                            let obj = 
-                                typeof<QuotationsFactory>
-                                    .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
-                                    .MakeGenericMethod(c.ClrType)
-                                    .Invoke(null, [| valueExpr |])
-                            unbox obj
+                            QuotationsFactory.GetMapperFromOptionToObj(c.ClrType, valueExpr) |>unbox
                         else
                             valueExpr
                     )
@@ -381,10 +376,11 @@ type internal QuotationsFactory private() =
 
                     let values: obj[] = %%Expr.NewArray(typeof<obj>, [ for x in argsValuesConverted -> Expr.Coerce(x, typeof<obj>) ])
                     let namesOfUpdateableColumns: string[] = %%Expr.NewArray(typeof<string>, [ for c in updateableColumns -> Expr.Value(c.Name) ])
-                    let optionalParams: bool[] = %%Expr.NewArray(typeof<bool>, [ for c in updateableColumns -> Expr.Value(c.OptionalForInsert) ])
 
-                    for name, value, optional in Array.zip3 namesOfUpdateableColumns values optionalParams do 
-                        row.[name] <- if value = null && optional then Utils.DbNull else value
+                    for name, value in Array.zip namesOfUpdateableColumns values do 
+                        if not(Convert.IsDBNull(value)) 
+                        then 
+                            row.[name] <- value
                     row
                 @@>
 
