@@ -11,6 +11,7 @@ open Npgsql
 open Npgsql.PostgresTypes
 
 open ProviderImplementation.ProvidedTypes
+open System.Collections
 
 type internal NpgsqlDataReader with
 
@@ -37,19 +38,18 @@ let typesMapping =
         "xml", (typeof<string>, NpgsqlDbType.Xml)
         "point", (typeof<NpgsqlPoint>, NpgsqlDbType.Point)
         "lseg", (typeof<NpgsqlLSeg>, NpgsqlDbType.LSeg)
-        //path	NpgsqlPath		
-        //polygon	NpgsqlPolygon		
-        //line	NpgsqlLine		string
-        //circle	NpgsqlCircle		string
-        //box	NpgsqlBox		string
-            //bit(1)	bool		BitArray
-        //bit(n)	BitArray		
-        //varbit	BitArray		
-        //hstore	IDictionary		string
+        "path",  (typeof<NpgsqlPath>, NpgsqlDbType.Path)
+        "polygon", (typeof<NpgsqlPolygon>, NpgsqlDbType.Polygon)
+        "line", (typeof<NpgsqlLine>, NpgsqlDbType.Line)
+        "circle", (typeof<NpgsqlCircle>, NpgsqlDbType.Circle)
+        "box", (typeof<NpgsqlBox>, NpgsqlDbType.Box)
+        "bit", (typeof<BitArray>, NpgsqlDbType.Bit)
+        "varbit", (typeof<BitArray>, NpgsqlDbType.Bit)
+        "hstore", (typeof<IDictionary>, NpgsqlDbType.Hstore)
         "uuid", (typeof<Guid>, NpgsqlDbType.Uuid)
-        //cidr	NpgsqlInet		string
+        "cidr", (typeof<NpgsqlInet>, NpgsqlDbType.Inet)        
         "inet", (typeof<NpgsqlInet>, NpgsqlDbType.Inet)
-        //macaddr	PhysicalAddress		string
+        "macaddr", (typeof<System.Net.NetworkInformation.PhysicalAddress>, NpgsqlDbType.MacAddr)
         "tsquery", (typeof<NpgsqlTsQuery>, NpgsqlDbType.TsQuery)
         "tsvector", (typeof<NpgsqlTsVector>, NpgsqlDbType.TsVector)
 
@@ -63,16 +63,12 @@ let typesMapping =
         "bytea", (typeof<byte[]>, NpgsqlDbType.Bytea)
         "oid", (typeof<UInt32>, NpgsqlDbType.Oid)
         "xid", (typeof<UInt32>, NpgsqlDbType.Oid)
-        //cid	uint		
-        //oidvector	uint[]		
+        "cid", (typeof<UInt32>, NpgsqlDbType.Cid)
+        "oidvector",(typeof<UInt32[]>, NpgsqlDbType.Int2Vector)
         "name", (typeof<string>, NpgsqlDbType.Name)
         "char", (typeof<string>, NpgsqlDbType.Char)
-        //geometry (PostGIS)	PostgisGeometry		
-        //record	object[]		
-        //composite types	T		
-        //range subtypes	NpgsqlRange		
-        //enum types	TEnum		
-        //array types	Array (of child element type)		
+        "geometry",(typeof<PostgisGeometry>, NpgsqlDbType.Geometry)        
+        //"range", (typeof<NpgsqlRange>, NpgsqlDbType.Range)
     ]
 
 type PostgresType with    
