@@ -26,7 +26,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("TypeName", typeof<string>, "") 
-            ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
         ] @ [ 
             if not globalXCtor then yield xctorParam
         ]
@@ -36,12 +35,12 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, verifyOutputAtRuntime, xctor  = 
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor  = 
                 if not globalXCtor
                 then 
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
                 else
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true
                     
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
@@ -200,7 +199,6 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     }
                 ]
                 
-
             //type data row
             let dataRowType = QuotationsFactory.GetDataRowType(columns)
             //type data table

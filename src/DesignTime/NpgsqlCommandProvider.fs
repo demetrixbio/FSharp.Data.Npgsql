@@ -11,7 +11,7 @@ open FSharp.Data.Npgsql
 let createRootType
     (
         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
-        sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, verifyOutputAtRuntime, configType, config
+        sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, configType, config
     ) = 
 
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
@@ -108,7 +108,6 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
             ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
             ProvidedStaticParameter("Fsx", typeof<bool>, false) 
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
-            ProvidedStaticParameter("VerifyOutputAtRuntime", typeof<bool>, false) 
             ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
             ProvidedStaticParameter("Config", typeof<string>, "") 
         ],             
@@ -118,7 +117,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                 fun _ -> 
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
-                        unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
+                        unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7]
                     )
             )
         ) 

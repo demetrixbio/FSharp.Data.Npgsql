@@ -302,7 +302,7 @@ let fsx() =
 
 type EchoRatingsArrayWithVerification = NpgsqlCommand<"
         SELECT 42 , ARRAY[1, 2, 3];
-    ", dvdRental, ResultType.Tuples, VerifyOutputAtRuntime = true>
+    ", dvdRental, ResultType.Tuples>
 
 [<Fact>]
 let selectEnumWithArray2() =
