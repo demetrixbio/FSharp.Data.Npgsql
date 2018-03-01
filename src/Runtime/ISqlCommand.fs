@@ -23,6 +23,38 @@ type DesignTimeConfig = {
     ExpectedColumns: DataColumn[]
 }
 
+type internal CommandBuilder(source: DataTable<DataRow>) = 
+    inherit DbCommandBuilder(QuotePrefix = "\"", QuoteSuffix = "\"") 
+
+    let npgsql = new NpgsqlCommandBuilder()  
+    let rowUpdatingCleanUp = ref null
+
+    let schemaTable = 
+        use reader = new DataTableReader(source)
+        reader.GetSchemaTable()
+
+    override __.ApplyParameterInfo(p, row, _, _) = 
+        //let param: NpgsqlParameter = downcast p
+        //param.NpgsqlDbType <- unbox row.[SchemaTableColumn.ProviderType]
+        ()
+
+    override __.GetParameterName parameterName = sprintf "@%s" parameterName
+    override __.GetParameterName parameterOrdinal = sprintf "@p%i" parameterOrdinal
+    override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName(parameterOrdinal)
+    override __.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
+    override __.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier
+                
+    member private __.SqlRowUpdatingHandler eventArgs = base.RowUpdatingHandler(eventArgs)
+
+    override this.SetRowUpdatingHandler adapter = 
+        if (adapter <> this.DataAdapter)
+        then
+            rowUpdatingCleanUp := (adapter :?> NpgsqlDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
+        else
+            rowUpdatingCleanUp.Value.Dispose()
+
+    override __.GetSchemaTable(cmd) = schemaTable
+
 [<Extension>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type Utils private() =
@@ -60,8 +92,11 @@ type Utils private() =
 
         use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
 
-        use commandBuilder = new NpgsqlCommandBuilder(dataAdapter)
-        commandBuilder.ConflictOption <- conflictOption 
+        use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
+
+        dataAdapter.InsertCommand <- downcast commandBuilder.GetInsertCommand()
+        dataAdapter.DeleteCommand <- downcast commandBuilder.GetDeleteCommand()
+        dataAdapter.UpdateCommand <- downcast commandBuilder.GetUpdateCommand()
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
 

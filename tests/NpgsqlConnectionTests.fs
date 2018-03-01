@@ -377,6 +377,14 @@ let ``AddRow/NewRow preserve order``() =
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
     )
 
-
+[<Fact>]
+let Add2Rows() =
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    let actors = new DvdRental.``public``.Tables.actor()
+    actors.AddRow(first_name = "Tom", last_name = "Hanks")
+    actors.AddRow(first_name = "Tom", last_name ="Cruise", last_update = Some DateTime.Now)
+    let i = actors.Update(conn, tx)
+    Assert.Equal(actors.Rows.Count, i)
 
     

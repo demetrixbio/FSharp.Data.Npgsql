@@ -115,6 +115,7 @@ type Column = {
     DefaultConstraint: string
     Description: string
     UDT: Type option
+    //PartOfPrimaryKey: bool
 }   with
 
     member this.ClrType = this.DataType.ClrType
@@ -294,6 +295,7 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
                 | true, x ->
                     Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
                 | false, _ -> None 
+            //PartOfPrimaryKey = c.IsKey.GetValueOrDefault()
         } 
     )
  

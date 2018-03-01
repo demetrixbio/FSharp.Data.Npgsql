@@ -1,46 +1,26 @@
-﻿#I "../../src/Runtime/bin/Debug/netstandard2.0"
-#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.6\lib\netstandard2.0\Npgsql.dll"
+﻿#I "../../src/Runtime/bin/Debug/net461"
+//#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.6\lib\netstandard2.0\Npgsql.dll"
+#r @"C:\Users\dmorozov\Documents\GitHub\npgsql\src\Npgsql\bin\Debug\net451\Npgsql.dll"
 #r "FSharp.Data.Npgsql.dll"
-#r "netstandard.dll"
+//#r "netstandard.dll"
 
+open Npgsql.Logging
 open Npgsql
 
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 
-type DvdRental = FSharp.Data.NpgsqlConnection<dvdRental, Fsx = true>
+type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<dvdRental, Fsx = true>
 
-do
-    let rental_id = 2
-    
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>()
-    let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
-    printfn "%A" x    
-    use conn = new NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tran = conn.BeginTransaction()
-    use t = new DvdRental.``public``.Tables.rental()
-    let r = 
-        t.NewRow(
-            staff_id = x.staff_id, 
-            customer_id = x.customer_id, 
-            inventory_id = x.inventory_id, 
-            rental_date = x.rental_date.AddDays(1.), 
-            return_date = x.return_date
-        )
+NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
+NpgsqlLogManager.IsParameterLoggingEnabled <- true
 
-    t.Rows.Add(r)
-    assert(1 = t.Update(transaction = tran))
-    let y = 
-        use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true, Tx = true>(tran)
-        cmd.Execute(r.rental_id) |> Option.get
+let conn = new NpgsqlConnection(dvdRental)
+conn.Open()
 
-    assert(x.staff_id = y.staff_id)
-    assert(x.customer_id = y.customer_id)
-    assert(x.inventory_id = y.inventory_id)
-    assert(x.rental_date.AddDays(1.) = y.rental_date)
-    assert(x.return_date = y.return_date)
+let t = new  DvdRental.``public``.Tables.actor()
 
-    tran.Rollback()
+t.AddRow(first_name = "Tom", last_name = "Hanks")
 
-    assert(None = cmd.Execute(r.rental_id))
+t.Update(conn) |> printfn "records affected %i"
+conn.Close()
