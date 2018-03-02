@@ -1,7 +1,8 @@
 ﻿module internal FSharp.Data.Npgsql.DesignTime.InformationSchema 
 
-open System.Data
 open System
+open System.Data
+open System.Data.Common
 open System.Collections.Generic
 
 open FSharp.Quotations
@@ -115,7 +116,10 @@ type Column = {
     DefaultConstraint: string
     Description: string
     UDT: Type option
-    //PartOfPrimaryKey: bool
+    PartOfPrimaryKey: bool
+    BaseSchemaName: string
+    BaseTableName: string
+
 }   with
 
     member this.ClrType = this.DataType.ClrType
@@ -140,31 +144,29 @@ type Column = {
             else this.ClrType
 
     member this.ToDataColumnExpr() =
-        let columnName = this.Name
         let typeName = 
             let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
             clrType.AssemblyQualifiedName.Split(',') |> Array.take 2 |> String.concat ","
 
-        let allowDBNull = this.Nullable || this.HasDefaultConstraint
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
 
         <@@ 
-            let x = new DataColumn( columnName, Type.GetType( typeName, throwOnError = true))
+            let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType( typeName, throwOnError = true))
 
             x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
+            x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
+            x.ReadOnly <- %%Expr.Value(this.ReadOnly)
 
-            x.AllowDBNull <- allowDBNull
+            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.IsKey), %%Expr.Value(box this.PartOfPrimaryKey))
+            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
+            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseSchemaName), %%Expr.Value(box this.BaseSchemaName))
+            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
             
             //if x.DataType = typeof<string>
             //then 
             //    x.MaxLength <- %%Expr.Value(this.MaxLength)
 
-            x.ReadOnly <- %%Expr.Value(this.ReadOnly)
-
-            if localDateTimeMode
-            then 
-                x.DateTimeMode <- DataSetDateTime.Local
-
+            if localDateTimeMode then x.DateTimeMode <- DataSetDateTime.Local
             x
         @@>
     
@@ -278,16 +280,15 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
 
     cols
     |> List.map ( fun c -> 
-        let nullable = not c.AllowDBNull.HasValue || c.AllowDBNull.Value
         let dataType = DataType.Create(c.PostgresType)
 
         { 
             Name = c.ColumnName
             DataType = dataType
-            Nullable = nullable
+            Nullable = c.AllowDBNull.GetValueOrDefault(true)
             MaxLength = c.ColumnSize.GetValueOrDefault()
-            ReadOnly = c.IsReadOnly.GetValueOrDefault()
-            AutoIncrement = c.IsAutoIncrement.GetValueOrDefault()
+            ReadOnly = c.IsReadOnly.GetValueOrDefault(false)
+            AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
             DefaultConstraint = c.DefaultValue
             Description = ""
             UDT = 
@@ -295,7 +296,9 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
                 | true, x ->
                     Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
                 | false, _ -> None 
-            //PartOfPrimaryKey = c.IsKey.GetValueOrDefault()
+            PartOfPrimaryKey = c.IsKey.GetValueOrDefault(false)
+            BaseSchemaName = c.BaseSchemaName
+            BaseTableName = c.BaseTableName
         } 
     )
  

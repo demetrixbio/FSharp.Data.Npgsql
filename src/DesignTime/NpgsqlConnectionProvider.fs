@@ -138,27 +138,28 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
             let cmd = conn.CreateCommand()
             cmd.CommandText <- sprintf """
                 SELECT
-                  c.table_schema,
-                  c.column_name,
-                  c.data_type,
-                  c.udt_name,
-                  c.is_nullable,
-                  c.character_maximum_length,
-                  c.is_updatable,
-                  c.is_identity,
-                  c.column_default,
-                  pgd.description
-                  --constraint_column_usage.column_name IS NOT NULL AS part_of_primary_key
+                  c.table_schema
+                  ,c.column_name
+                  ,c.data_type
+                  ,c.udt_name
+                  ,c.is_nullable
+                  ,c.character_maximum_length
+                  ,c.is_updatable
+                  ,c.is_identity
+                  ,c.column_default
+                  ,pgd.description
+                  ,constraint_column_usage.column_name IS NOT NULL AS part_of_primary_key
                 FROM information_schema.columns c
                   LEFT JOIN pg_catalog.pg_statio_all_tables as st 
                     ON c.table_schema = st.schemaname AND c.table_name = st.relname
                   LEFT JOIN pg_catalog.pg_description pgd 
                     ON pgd.objsubid = c.ordinal_position AND pgd.objoid = st.relid
-                  --LEFT JOIN information_schema.table_constraints constraints USING (table_schema, table_name)
-                  --LEFT JOIN information_schema.constraint_column_usage USING (constraint_schema, constraint_name, column_name)
+                  LEFT JOIN information_schema.table_constraints constraints USING (table_schema, table_name)
+                  LEFT JOIN information_schema.constraint_column_usage USING (constraint_schema, constraint_name, column_name)
                 WHERE 
                     c.table_schema = '%s' 
                     AND c.table_name = '%s' 
+                    AND constraints.constraint_type = 'PRIMARY KEY'
             """ baseSchemaName baseTableName
 
             let columns: Column list = [
@@ -198,7 +199,9 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                         DefaultConstraint = row.GetValueOrDefault("column_default", "")
                         Description = row.GetValueOrDefault("description", "")
                         UDT = udt
-                        //PartOfPrimaryKey = unbox row.["part_of_primary_key"]
+                        PartOfPrimaryKey = unbox row.["part_of_primary_key"]
+                        BaseSchemaName = schema
+                        BaseTableName = tableName
                     }
                 ]
                 

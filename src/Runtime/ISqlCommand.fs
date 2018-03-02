@@ -24,14 +24,23 @@ type DesignTimeConfig = {
 }
 
 type internal CommandBuilder(source: DataTable<DataRow>) = 
-    inherit DbCommandBuilder(QuotePrefix = "\"", QuoteSuffix = "\"") 
+    inherit DbCommandBuilder(QuotePrefix = "\"", QuoteSuffix = "\"", SchemaSeparator = ".") 
 
     let npgsql = new NpgsqlCommandBuilder()  
     let rowUpdatingCleanUp = ref null
 
     let schemaTable = 
         use reader = new DataTableReader(source)
-        reader.GetSchemaTable()
+        let schema = reader.GetSchemaTable()
+
+        for row in schema.Rows do   
+            let col = source.Columns.[string row.[SchemaTableColumn.ColumnName]]
+            let xprop = col.ExtendedProperties
+            assert(xprop.Count = 4)
+            for k in xprop.Keys do
+                row.[string k] <- xprop.[k]
+
+        schema
 
     override __.ApplyParameterInfo(p, row, _, _) = 
         //let param: NpgsqlParameter = downcast p
@@ -53,7 +62,8 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         else
             rowUpdatingCleanUp.Value.Dispose()
 
-    override __.GetSchemaTable(cmd) = schemaTable
+    override __.GetSchemaTable _ = 
+        schemaTable
 
 [<Extension>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]

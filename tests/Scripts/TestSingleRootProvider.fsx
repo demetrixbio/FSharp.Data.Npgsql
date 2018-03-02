@@ -6,6 +6,7 @@
 
 open Npgsql.Logging
 open Npgsql
+open System
 
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
@@ -19,8 +20,9 @@ let conn = new NpgsqlConnection(dvdRental)
 conn.Open()
 
 let t = new  DvdRental.``public``.Tables.actor()
-
 t.AddRow(first_name = "Tom", last_name = "Hanks")
+t.Columns.last_name.AllowDBNull <- false
+t.Rows.[0].["last_update"] <- DBNull.Value
 
 t.Update(conn) |> printfn "records affected %i"
 conn.Close()
