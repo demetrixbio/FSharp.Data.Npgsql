@@ -157,16 +157,14 @@ type Column = {
             x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
             x.ReadOnly <- %%Expr.Value(this.ReadOnly)
 
+            if x.DataType = typeof<string> then x.MaxLength <- %%Expr.Value(this.MaxLength)
+            if localDateTimeMode then x.DateTimeMode <- DataSetDateTime.Local
+
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.IsKey), %%Expr.Value(box this.PartOfPrimaryKey))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseSchemaName), %%Expr.Value(box this.BaseSchemaName))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
-            
-            //if x.DataType = typeof<string>
-            //then 
-            //    x.MaxLength <- %%Expr.Value(this.MaxLength)
 
-            if localDateTimeMode then x.DateTimeMode <- DataSetDateTime.Local
             x
         @@>
     
@@ -286,7 +284,7 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
             Name = c.ColumnName
             DataType = dataType
             Nullable = c.AllowDBNull.GetValueOrDefault(true)
-            MaxLength = c.ColumnSize.GetValueOrDefault()
+            MaxLength = c.ColumnSize.GetValueOrDefault(-1)
             ReadOnly = c.IsReadOnly.GetValueOrDefault(false)
             AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
             DefaultConstraint = c.DefaultValue

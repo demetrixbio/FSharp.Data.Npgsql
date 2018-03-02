@@ -43,9 +43,10 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         schema
 
     override __.ApplyParameterInfo(p, row, _, _) = 
-        //let param: NpgsqlParameter = downcast p
-        //param.NpgsqlDbType <- unbox row.[SchemaTableColumn.ProviderType]
-        ()
+        match p, row.[SchemaTableColumn.ProviderType] with
+        | (:? NpgsqlParameter as param), (:? NpgsqlTypes.NpgsqlDbType as v) -> 
+            param.NpgsqlDbType <- v
+        | _ -> ()
 
     override __.GetParameterName parameterName = sprintf "@%s" parameterName
     override __.GetParameterName parameterOrdinal = sprintf "@p%i" parameterOrdinal
