@@ -3,9 +3,7 @@
 open System
 open System.Data
 open Npgsql
-open System.Data.Common
 open System.Reflection
-open System.Runtime.CompilerServices
 
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
 type ISqlCommand = 
@@ -22,115 +20,6 @@ type DesignTimeConfig = {
     SeqItemTypeName: string
     ExpectedColumns: DataColumn[]
 }
-
-type internal CommandBuilder(source: DataTable<DataRow>) = 
-    inherit DbCommandBuilder(QuotePrefix = "\"", QuoteSuffix = "\"", SchemaSeparator = ".") 
-
-    let npgsql = new NpgsqlCommandBuilder()  
-    let rowUpdatingCleanUp = ref null
-
-    let schemaTable = 
-        use reader = new DataTableReader(source)
-        let schema = reader.GetSchemaTable()
-
-        for row in schema.Rows do   
-            let col = source.Columns.[string row.[SchemaTableColumn.ColumnName]]
-            let xprop = col.ExtendedProperties
-            assert(xprop.Count = 4)
-            for k in xprop.Keys do
-                row.[string k] <- xprop.[k]
-
-        schema
-
-    override __.ApplyParameterInfo(p, row, _, _) = 
-        match p, row.[SchemaTableColumn.ProviderType] with
-        | (:? NpgsqlParameter as param), (:? NpgsqlTypes.NpgsqlDbType as v) -> 
-            param.NpgsqlDbType <- v
-        | _ -> ()
-
-    override __.GetParameterName parameterName = sprintf "@%s" parameterName
-    override __.GetParameterName parameterOrdinal = sprintf "@p%i" parameterOrdinal
-    override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName(parameterOrdinal)
-    override __.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
-    override __.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier
-                
-    member private __.SqlRowUpdatingHandler eventArgs = base.RowUpdatingHandler(eventArgs)
-
-    override this.SetRowUpdatingHandler adapter = 
-        if (adapter <> this.DataAdapter)
-        then
-            rowUpdatingCleanUp := (adapter :?> NpgsqlDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
-        else
-            rowUpdatingCleanUp.Value.Dispose()
-
-    override __.GetSchemaTable _ = 
-        schemaTable
-
-[<Extension>]
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-type Utils private() =
-
-    [<Extension>]
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
-        seq {
-            use _ = cursor
-            let values = Array.zeroCreate cursor.FieldCount
-            while cursor.Read() do
-                cursor.GetValues(values) |> ignore
-                yield values |> rowMapping |> unbox<'TItem>
-        }
-
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member DbNull = box DBNull.Value
-
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
-        fun values -> 
-            nullsToOptions values
-            mapper values
-
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
-
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
-    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, updateBatchSize, continueUpdateOnError, conflictOption) = 
-
-        let selectCommand = table.SelectCommand
-
-        if connection <> null then selectCommand.Connection <- connection
-        if transaction <> null then selectCommand.Transaction <- transaction
-
-        use dataAdapter = new NpgsqlDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
-
-        use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
-
-        dataAdapter.InsertCommand <- downcast commandBuilder.GetInsertCommand()
-        dataAdapter.DeleteCommand <- downcast commandBuilder.GetDeleteCommand()
-        dataAdapter.UpdateCommand <- downcast commandBuilder.GetUpdateCommand()
-
-        use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
-
-            if  args.Errors = null 
-                && args.StatementType = Data.StatementType.Insert 
-                && dataAdapter.UpdateBatchSize = 1
-            then 
-                let columnsToRefresh = ResizeArray()
-                for c in table.Columns do
-                    if c.AutoIncrement  
-                        || (c.AllowDBNull && args.Row.IsNull c.Ordinal)
-                    then 
-                        columnsToRefresh.Add( commandBuilder.QuoteIdentifier c.ColumnName)
-
-                if columnsToRefresh.Count > 0
-                then                        
-                    let returningClause = columnsToRefresh |> String.concat "," |> sprintf " RETURNING %s"
-                    let cmd = args.Command
-                    cmd.CommandText <- cmd.CommandText + returningClause
-                    cmd.UpdatedRowSource <- UpdateRowSource.FirstReturnedRecord
-        )
-
-        dataAdapter.Update(table)   
 
 [<Sealed>]
 [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]

@@ -18,6 +18,8 @@
 
   <ItemGroup>
     <Compile Include="DataTable.fs" />
+    <Compile Include="CommandBuilder.fs" />
+    <Compile Include="Utils.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="DesignTime.fs" />
   </ItemGroup>

@@ -12,7 +12,6 @@ open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
-open FSharp.Data.Npgsql
 
 type internal RowType = {
     Provided: Type

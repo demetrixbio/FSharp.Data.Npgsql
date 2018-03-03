@@ -131,8 +131,6 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
         
         getTables(connectionString, schema)
         |> List.map (fun (tableName, baseTableName, baseSchemaName, description) -> 
-
-            let twoPartTableName = sprintf "%s.%s" schema tableName
                 
             use conn = openConnection(connectionString)
             let cmd = conn.CreateCommand()
@@ -227,8 +225,18 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
 
                     let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
 
+                    let twoPartTableName = 
+                        let quoteIdentifier = (new NpgsqlCommandBuilder()).QuoteIdentifier
+                        sprintf "%s.%s" (quoteIdentifier schema) (quoteIdentifier tableName)
+
+                    let cmdText =  
+                        columns
+                        |> List.map(fun c ->  c.Name)
+                        |> String.concat " ,"
+                        |> sprintf "SELECT %s FROM %s" twoPartTableName
+
                     <@@ 
-                        let selectCommand = new NpgsqlCommand(twoPartTableName, CommandType = CommandType.TableDirect)
+                        let selectCommand = new NpgsqlCommand(cmdText)
                         let table = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand)
                         table.TableName <- twoPartTableName
                         table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))

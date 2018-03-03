@@ -16,12 +16,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Runtime\DataTable.fs">
-      <Link>DataTable.fs</Link>
-    </Compile>
-    <Compile Include="..\Runtime\ISqlCommand.fs">
-      <Link>ISqlCommand.fs</Link>
-    </Compile>
+    <Compile Include="..\Runtime\DataTable.fs" />
+    <Compile Include="..\Runtime\CommandBuilder.fs" />
+    <Compile Include="..\Runtime\Utils.fs" />
+    <Compile Include="..\Runtime\ISqlCommand.fs" />
     <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi" />
     <Compile Include="..\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs" />
     <Compile Include="Configuration.fs" />
