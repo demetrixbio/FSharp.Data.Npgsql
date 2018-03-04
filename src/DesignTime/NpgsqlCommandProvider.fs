@@ -41,10 +41,9 @@ let createRootType
             outputColumns, 
             resultType, 
             commandBehaviour, 
-            sqlStatement, 
             hasOutputParameters = false, 
             allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
-            ?connectionString = (if fsx then Some connectionString else None)
+            designTimeConnectionString = (if fsx then connectionString else null)
         )
 
     do

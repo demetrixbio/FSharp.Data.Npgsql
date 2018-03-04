@@ -32,33 +32,19 @@ type internal ReturnType = {
         | Some x -> Expr.Value( x.ErasedTo.AssemblyQualifiedName)
         | None -> <@@ null: string @@>
 
-[<AutoOpen>]
-module internal Quotations = 
-    let (|Arg1|) xs = 
-        assert (List.length xs = 1)
-        Arg1 xs.Head
+type internal QuotationsFactory private() = 
 
-    let (|Arg2|) xs = 
-        assert (List.length xs = 2)
-        Arg2(xs.[0], xs.[1])
-
-    let (|Arg3|) xs = 
+    static let (|Arg3|) xs = 
         assert (List.length xs = 3)
         Arg3(xs.[0], xs.[1], xs.[2])
 
-    let (|Arg4|) xs = 
-        assert (List.length xs = 4)
-        Arg4(xs.[0], xs.[1], xs.[2], xs.[3])
-
-    let (|Arg5|) xs = 
+    static let (|Arg5|) xs = 
         assert (List.length xs = 5)
         Arg5(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4])
 
-    let (|Arg6|) xs = 
+    static let (|Arg6|) xs = 
         assert (List.length xs = 6)
         Arg6(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5])
-
-type internal QuotationsFactory private() = 
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
 
@@ -307,7 +293,7 @@ type internal QuotationsFactory private() =
             dataRowType: ProvidedTypeDefinition, 
             outputColumns: Column list, 
             allowDesignTimeConnectionStringReUse: bool,
-            ?connectionString: string
+            designTimeConnectionString: string
         ) =
 
         let tableType = ProvidedTypeDefinition(typeName, Some( ProvidedTypeBuilder.MakeGenericType(typedefof<_ DataTable>, [ dataRowType ])))
@@ -408,13 +394,13 @@ type internal QuotationsFactory private() =
                 ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
             ]
 
-            let designTimeConnectionString = defaultArg connectionString ""
+            let connectionStringDefault = if string designTimeConnectionString <> "" then Some(box reuseDesignTimeConnectionString) else None
 
             tableType.AddMembers [
 
                 ProvidedMethod(
                     "Update", 
-                    ProvidedParameter("connectionString", typeof<string>, ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))) :: commonParams, 
+                    ProvidedParameter("connectionString", typeof<string>, ?optionalValue = connectionStringDefault) :: commonParams, 
                     typeof<int>,
                     fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
                         <@@ 
@@ -448,7 +434,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, commandText, hasOutputParameters, allowDesignTimeConnectionStringReUse, ?connectionString) =    
+    static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString) =    
          
         if resultType = ResultType.DataReader 
         then 
@@ -465,7 +451,7 @@ type internal QuotationsFactory private() =
                     dataRowType, 
                     outputColumns, 
                     allowDesignTimeConnectionStringReUse,
-                    ?connectionString = connectionString
+                    designTimeConnectionString
                 )
 
             dataTableType.AddMember dataRowType

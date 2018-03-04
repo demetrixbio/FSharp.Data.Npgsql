@@ -60,10 +60,9 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     outputColumns, 
                     resultType, 
                     commandBehaviour, 
-                    sqlStatement, 
                     hasOutputParameters = false, 
                     allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                    ?connectionString = (if fsx then Some connectionString else None)
+                    designTimeConnectionString = (if fsx then connectionString else null)
                 )
 
             let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
@@ -212,7 +211,7 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     dataRowType, 
                     columns, 
                     isHostedExecution && fsx,
-                    ?connectionString = if fsx then Some connectionString else None
+                    designTimeConnectionString = (if fsx then connectionString else null)
                 )
 
             dataTableType.AddMember dataRowType
