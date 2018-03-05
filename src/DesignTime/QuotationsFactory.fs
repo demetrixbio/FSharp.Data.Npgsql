@@ -38,6 +38,10 @@ type internal QuotationsFactory private() =
         assert (List.length xs = 3)
         Arg3(xs.[0], xs.[1], xs.[2])
 
+    static let (|Arg4|) xs = 
+        assert (List.length xs = 4)
+        Arg4(xs.[0], xs.[1], xs.[2], xs.[3])
+
     static let (|Arg5|) xs = 
         assert (List.length xs = 5)
         Arg5(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4])
@@ -389,7 +393,6 @@ type internal QuotationsFactory private() =
 
         do
             let commonParams = [
-                ProvidedParameter("updateBatchSize", typeof<int>, optionalValue = 1) 
                 ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
                 ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
             ]
@@ -402,7 +405,7 @@ type internal QuotationsFactory private() =
                     "Update", 
                     ProvidedParameter("connectionString", typeof<string>, ?optionalValue = connectionStringDefault) :: commonParams, 
                     typeof<int>,
-                    fun (Arg5(table, connectionString, updateBatchSize, continueUpdateOnError, conflictOption)) -> 
+                    fun (Arg4(table, connectionString, continueUpdateOnError, conflictOption)) -> 
                         <@@ 
                             let runTimeConnectionString = 
                                 if %%connectionString = reuseDesignTimeConnectionString
@@ -414,7 +417,7 @@ type internal QuotationsFactory private() =
                                     %%connectionString
 
                             let conn = new NpgsqlConnection(runTimeConnectionString)
-                            Utils.UpdateDataTable(%%table, conn, null, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, conn, null, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
@@ -424,9 +427,9 @@ type internal QuotationsFactory private() =
                     :: ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null) 
                     :: commonParams, 
                     typeof<int>,
-                    fun (Arg6(table, conn, tx, updateBatchSize, continueUpdateOnError,conflictOption)) -> 
+                    fun (Arg5(table, conn, tx, continueUpdateOnError,conflictOption)) -> 
                         <@@ 
-                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%updateBatchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 

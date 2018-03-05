@@ -225,8 +225,8 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
 
                     let twoPartTableName = 
-                        let quoteIdentifier = (new NpgsqlCommandBuilder()).QuoteIdentifier
-                        sprintf "%s.%s" (quoteIdentifier schema) (quoteIdentifier tableName)
+                        use x = new NpgsqlCommandBuilder()
+                        sprintf "%s.%s" (x.QuoteIdentifier schema) (x.QuoteIdentifier tableName)
 
                     let cmdText =  
                         columns

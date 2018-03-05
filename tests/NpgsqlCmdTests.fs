@@ -315,7 +315,6 @@ let selectEnumWithArray2() =
 let ``AddRow/NewRow preserve order``() =
     use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(dvdRental)
     let actors = getActors.Execute("Tom", "Hankss")
-    let columnd = actors.Columns
     let r = actors.NewRow(Some 42, "Tom", "Hanks", Some DateTime.Now) 
     actors.Rows.Add(r); actors.Rows.Remove(r) |> ignore
     let r = actors.NewRow(actor_id = Some 42, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now) 
@@ -332,3 +331,16 @@ let ``AddRow/NewRow preserve order``() =
         language_id = 1s,
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
     )
+
+//[<Fact>]
+//let batchSize() =
+//    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+//    conn.Open()
+//    use tx = conn.BeginTransaction()
+//    use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(conn, tx)
+//    let actors = getActors.Execute("Tom", "Hankss")
+//    if actors.Rows.Count = 0
+//    then 
+//        actors.AddRow(Some 42, "Tom", "Hanks", Some DateTime.Now) 
+//        let rowsAffected = actors.Update(conn, tx, updateBatchSize = 100)
+//        Assert.Equal( 1, rowsAffected)
