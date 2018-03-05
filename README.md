@@ -390,6 +390,7 @@ Re-using design time connection string allowed only for types evaluated in FSI. 
   ```
   will infer ```seq<Option<int>>``` as result although it's cleary should be ```seq<int>```. 
   - Custom enums and array types are supported but composite types not yet.
+  - Data modification batch processing is [not supported](https://github.com/npgsql/npgsql/issues/1830).
 
 ## Running tests
 - git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
