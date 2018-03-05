@@ -157,6 +157,8 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     c.table_schema = '%s' 
                     AND c.table_name = '%s' 
                     AND constraints.constraint_type = 'PRIMARY KEY'
+                ORDER BY 
+                    ordinal_position
             """ baseSchemaName baseTableName
 
             let columns: Column list = [
