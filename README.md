@@ -388,6 +388,7 @@ do
     use cmd = new NpgsqlCommand<"
         SELECT coalesce(@x, 'Empty') AS x
     ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
+    
     assert( cmd.Execute(Some "test") = Some( Some "test")) 
     assert( cmd.Execute() = Some( Some "Empty")) 
 ```
