@@ -228,7 +228,7 @@ let selectEnumWithArray() =
 
 [<Fact>]
 let allParametersOptional() =
-    let cmd = new NpgsqlCommand<"
+    use cmd = new NpgsqlCommand<"
         SELECT coalesce(@x, 'Empty') AS x
     ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 

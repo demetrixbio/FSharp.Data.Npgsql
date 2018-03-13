@@ -151,12 +151,12 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
                     ON c.table_schema = st.schemaname AND c.table_name = st.relname
                   LEFT JOIN pg_catalog.pg_description pgd 
                     ON pgd.objsubid = c.ordinal_position AND pgd.objoid = st.relid
-                  LEFT JOIN information_schema.table_constraints constraints USING (table_schema, table_name)
+                  LEFT JOIN information_schema.table_constraints tc 
+                    ON c.table_schema = tc.table_schema AND c.table_name = tc.table_name AND tc.constraint_type = 'PRIMARY KEY'
                   LEFT JOIN information_schema.constraint_column_usage USING (constraint_schema, constraint_name, column_name)
                 WHERE 
                     c.table_schema = '%s' 
                     AND c.table_name = '%s' 
-                    AND constraints.constraint_type = 'PRIMARY KEY'
                 ORDER BY 
                     ordinal_position
             """ baseSchemaName baseTableName
