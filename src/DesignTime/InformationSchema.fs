@@ -20,6 +20,10 @@ type internal NpgsqlDataReader with
         let i = cursor.GetOrdinal(name)
         if cursor.IsDBNull( i) then defaultValue else cursor.GetFieldValue( i)
 
+type internal Type with
+    member this.PartiallyQualifiedName = 
+        sprintf "%s, %s" this.FullName (this.Assembly.GetName().Name)
+
 let typesMapping = 
     Map.ofList [
         "bool", (typeof<bool>, NpgsqlDbType.Boolean)
@@ -146,7 +150,7 @@ type Column = {
     member this.ToDataColumnExpr() =
         let typeName = 
             let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
-            clrType.AssemblyQualifiedName.Split(',') |> Array.take 2 |> String.concat ","
+            clrType.PartiallyQualifiedName
 
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
 

@@ -29,7 +29,7 @@ type internal ReturnType = {
         | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> 
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> Expr.Value( x.ErasedTo.AssemblyQualifiedName)
+        | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
         | None -> <@@ null: string @@>
 
 type internal QuotationsFactory private() = 
@@ -95,7 +95,8 @@ type internal QuotationsFactory private() =
         @> 
 
     static member internal MapArrayNullableItems(outputColumns : Column list, mapper : string) = 
-        let columnTypes, isNullableColumn = outputColumns |> List.map (fun c -> c.ClrType.FullName, c.Nullable) |> List.unzip
+        let columnTypes, isNullableColumn = 
+            outputColumns |> List.map (fun c -> c.ClrType.PartiallyQualifiedName, c.Nullable) |> List.unzip
 
         QuotationsFactory.MapArrayNullableItems(columnTypes, isNullableColumn, mapper)            
 
@@ -490,7 +491,7 @@ type internal QuotationsFactory private() =
                         | [ x ] -> x.ClrTypeConsideringNullability
                         | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
 
-                    let clrTypeName = erasedToTupleType.FullName
+                    let clrTypeName = erasedToTupleType.PartiallyQualifiedName
                     let mapping = <@@ Reflection.FSharpValue.PreComputeTupleConstructor( Type.GetType( clrTypeName, throwOnError = true))  @@>
                     providedType, erasedToTupleType, mapping
             

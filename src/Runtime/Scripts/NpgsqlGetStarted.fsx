@@ -10,6 +10,8 @@ open System.Data
 open NpgsqlTypes
 open System
 
+printfn "%s" <| typeof<NpgsqlTypes.PostgisGeometry>.AssemblyQualifiedName
+
 do
     //NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
     //NpgsqlLogManager.IsParameterLoggingEnabled <- true
