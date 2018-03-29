@@ -4,14 +4,15 @@ open System
 open System.Data
 open System.Data.Common
 open System.Runtime.CompilerServices
+open System.ComponentModel
 open Npgsql
 
 [<Extension>]
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+[<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
 
     [<Extension>]
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
         seq {
             use _ = cursor
@@ -21,19 +22,19 @@ type Utils private() =
                 yield values |> rowMapping |> unbox<'TItem>
         }
 
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member DbNull = box DBNull.Value
 
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
         fun values -> 
             nullsToOptions values
             mapper values
 
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
-    [<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, continueUpdateOnError, conflictOption) = 
 
         let selectCommand = table.SelectCommand

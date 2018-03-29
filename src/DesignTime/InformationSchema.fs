@@ -7,9 +7,9 @@ open System.Collections.Generic
 
 open FSharp.Quotations
 
-open NpgsqlTypes
 open Npgsql
 open Npgsql.PostgresTypes
+open NpgsqlTypes
 
 open ProviderImplementation.ProvidedTypes
 open System.Collections
@@ -172,15 +172,6 @@ type Column = {
             x
         @@>
     
-    override this.ToString() = 
-        sprintf "%s\t%s\t%b\t%i\t%b\t%b" 
-            this.Name 
-            this.ClrType.FullName 
-            this.Nullable 
-            this.MaxLength
-            this.ReadOnly
-            this.AutoIncrement
-
 type Parameter = {
     Name: string
     NpgsqlDbType: NpgsqlTypes.NpgsqlDbType
@@ -303,15 +294,100 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
             BaseTableName = c.BaseTableName
         } 
     )
- 
 
 let getTables(connectionString, schema) = 
     use conn = openConnection(connectionString)
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- sprintf "SELECT table_name FROM information_schema.tables WHERE table_schema = '%s' AND table_type = 'BASE TABLE'" schema
+    cmd.CommandText <- sprintf "
+        SELECT 
+            table_name
+            --,obj_description('myschema.mytable'::regclass)
+        FROM 
+            information_schema.tables 
+        WHERE 
+            table_schema = '%s' 
+            AND table_type = 'BASE TABLE'
+    " schema
+
     [ 
         use cursor = cmd.ExecuteReader()
         while cursor.Read() do
             let tableName = unbox cursor.[0]
-            yield  tableName, tableName, schema, None
+            yield  tableName, None
     ]
+
+let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, ProvidedTypeDefinition list>) = 
+    use conn = openConnection(connectionString)
+    let cmd = conn.CreateCommand()
+    cmd.CommandText <- sprintf """
+        SELECT
+            c.table_schema
+            ,c.column_name
+            ,c.data_type
+            ,c.udt_name
+            ,c.is_nullable
+            ,c.character_maximum_length
+            ,c.is_updatable
+            ,c.is_identity
+            ,c.column_default
+            ,pgd.description
+            ,constraint_column_usage.column_name IS NOT NULL AS part_of_primary_key
+        FROM 
+            information_schema.columns c
+            LEFT JOIN pg_catalog.pg_statio_all_tables as st 
+            ON c.table_schema = st.schemaname AND c.table_name = st.relname
+            LEFT JOIN pg_catalog.pg_description pgd 
+            ON pgd.objsubid = c.ordinal_position AND pgd.objoid = st.relid
+            LEFT JOIN information_schema.table_constraints tc 
+            ON c.table_schema = tc.table_schema AND c.table_name = tc.table_name AND tc.constraint_type = 'PRIMARY KEY'
+            LEFT JOIN information_schema.constraint_column_usage USING (constraint_schema, constraint_name, column_name)
+        WHERE 
+            c.table_schema = '%s' 
+            AND c.table_name = '%s' 
+        ORDER BY 
+            ordinal_position
+    """ schema tableName
+
+    [
+        use row = cmd.ExecuteReader()
+        while row.Read() do
+
+            let udtName = string row.["udt_name"]
+            let schema = unbox row.["table_schema"] 
+
+            let udt =                             
+                customTypes
+                |> Map.tryFind schema
+                |> Option.bind (List.tryFind (fun t -> t.Name = udtName))
+                |> Option.map (fun x -> x :> Type)
+
+            yield {
+                Name = unbox row.["column_name"]
+                DataType = 
+                    {
+                        Name = udtName
+                        Schema = schema
+                        ClrType = 
+                            match unbox row.["data_type"] with 
+                            | "ARRAY" -> 
+                                let elemType = typesMapping.[udtName.TrimStart('_')] |> fst              
+                                elemType.MakeArrayType()
+                            | "USER-DEFINED" ->
+                                if udt.IsSome then typeof<string> else typeof<obj>
+                            | _ -> 
+                                typesMapping.[udtName] |> fst
+                    }
+
+                Nullable = unbox row.["is_nullable"] = "YES"
+                MaxLength = row.GetValueOrDefault("character_maximum_length", -1)
+                ReadOnly = unbox row.["is_updatable"] = "NO"
+                AutoIncrement = unbox row.["is_identity"] = "YES"
+                DefaultConstraint = row.GetValueOrDefault("column_default", "")
+                Description = row.GetValueOrDefault("description", "")
+                UDT = udt
+                PartOfPrimaryKey = unbox row.["part_of_primary_key"]
+                BaseSchemaName = schema
+                BaseTableName = tableName
+            }
+    ]
+

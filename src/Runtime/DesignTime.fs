@@ -1,5 +1,5 @@
 ﻿namespace FSharp.Data.Npgsql
 
-[<assembly:CompilerServices.TypeProviderAssembly(Const.designTimeComponent)>]
+[<assembly:CompilerServices.TypeProviderAssembly("FSharp.Data.Npgsql.DesignTime")>]
 do ()
 

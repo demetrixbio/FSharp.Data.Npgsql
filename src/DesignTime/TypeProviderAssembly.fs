@@ -7,12 +7,12 @@ open System.Collections.Concurrent
 open FSharp.Data.Npgsql.DesignTime
 open System.IO
 
-[<assembly:TypeProviderAssembly()>]
-do()
-
 [<TypeProvider>]
 type NpgsqlProviders(config) as this = 
-    inherit TypeProviderForNamespaces(config, assemblyReplacementMap = [(Const.designTimeComponent, Path.GetFileNameWithoutExtension(config.RuntimeAssembly))])
+    inherit TypeProviderForNamespaces(
+        config, 
+        assemblyReplacementMap = [("FSharp.Data.Npgsql.DesignTime", Path.GetFileNameWithoutExtension(config.RuntimeAssembly))]
+    )
     
     let cache = ConcurrentDictionary()
 

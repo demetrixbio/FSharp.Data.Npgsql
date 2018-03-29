@@ -2,6 +2,7 @@
 
 open System.Data
 open System.Collections.Generic
+open System.ComponentModel
 open Npgsql
 
 ///<summary>Enum describing output type</summary>
@@ -20,16 +21,8 @@ type ConfigType =
     | Environment = 2
     | UserStore = 3
 
-module internal Const = 
-    [<Literal>]
-    let infraMessage = "This API supports the FSharp.Data.Npgsql infrastructure and is not intended to be used directly from your code."
-    [<Literal>]
-    let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
-    [<Literal>]
-    let designTimeComponent = "FSharp.Data.Npgsql.DesignTime"
-
 [<Sealed>]
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+[<EditorBrowsable(EditorBrowsableState.Never)>]
 type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand) = 
     inherit DataTable() 
 

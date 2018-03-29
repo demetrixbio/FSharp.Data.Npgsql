@@ -3,14 +3,15 @@
 open System
 open System.Data
 open Npgsql
+open System.ComponentModel
 open System.Reflection
 
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+[<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommand = 
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
 
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+[<EditorBrowsable(EditorBrowsableState.Never)>]
 type DesignTimeConfig = {
     SqlStatement: string
     Parameters: NpgsqlParameter[]
@@ -22,7 +23,7 @@ type DesignTimeConfig = {
 }
 
 [<Sealed>]
-[<CompilerMessageAttribute(Const.infraMessage, 101, IsHidden = true)>]
+[<EditorBrowsable(EditorBrowsableState.Never)>]
 type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTimeout) = 
 
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)

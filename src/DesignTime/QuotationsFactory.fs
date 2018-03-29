@@ -52,7 +52,11 @@ type internal QuotationsFactory private() =
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
 
-    [<Literal>] static let reuseDesignTimeConnectionString = "reuse design-time connection string"
+    [<Literal>] 
+    static let reuseDesignTimeConnectionString = "reuse design-time connection string"
+    [<Literal>]
+    static let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
+
     
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
@@ -413,7 +417,7 @@ type internal QuotationsFactory private() =
                                 then 
                                     if allowDesignTimeConnectionStringReUse 
                                     then designTimeConnectionString
-                                    else failwith Const.prohibitDesignTimeConnStrReUse
+                                    else failwith prohibitDesignTimeConnStrReUse
                                 else
                                     %%connectionString
 
@@ -574,7 +578,7 @@ type internal QuotationsFactory private() =
                         then 
                             if allowDesignTimeConnectionStringReUse 
                             then designTimeConnectionString
-                            else failwith Const.prohibitDesignTimeConnStrReUse
+                            else failwith prohibitDesignTimeConnStrReUse
                         else
                             %%args.Head
                     @@>
