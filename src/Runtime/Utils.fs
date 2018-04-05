@@ -46,10 +46,6 @@ type Utils private() =
 
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 
-        dataAdapter.InsertCommand <- downcast commandBuilder.GetInsertCommand()
-        dataAdapter.DeleteCommand <- downcast commandBuilder.GetDeleteCommand()
-        dataAdapter.UpdateCommand <- downcast commandBuilder.GetUpdateCommand()
-
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
 
             if  args.Errors = null 

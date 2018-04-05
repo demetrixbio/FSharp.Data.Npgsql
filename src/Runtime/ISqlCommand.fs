@@ -176,6 +176,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         async {
             use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
             let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
+            result.Columns.AddRange(expectedColumns)
             result.Load(reader)
             return result
         }
