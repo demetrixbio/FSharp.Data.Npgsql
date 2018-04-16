@@ -332,6 +332,57 @@ let ``AddRow/NewRow preserve order``() =
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
     )
 
+
+[<Fact>]
+let asyncUpdateTable() =
+    
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+
+    use cmd =
+        new NpgsqlCommand<"
+            SELECT 
+                actor_id, first_name, last_name, last_update
+            FROM 
+                public.actor
+            WHERE 
+                first_name = @firstName 
+                AND last_name = @last_name
+        ", dvdRental, ResultType.DataTable>(conn, tx)
+
+    let (firstName, lastName) as name = "Tom", "Hanks"
+    let actors = cmd.AsyncExecute name |> Async.RunSynchronously
+
+    if actors.Rows.Count = 0 then
+        actors.AddRow(first_name = firstName, last_name = lastName)
+    else
+        actors.Rows.[0].last_update <- DateTime.UtcNow
+    
+    Assert.Equal(1, actors.Update(conn, tx))
+
+[<Fact>]
+let npPkTable() =
+    use cmd =
+        new NpgsqlCommand<"select * from table_name limit 1", dvdRental, ResultType.DataTable>(dvdRental)
+    let t = cmd.Execute()
+    //t.Rows.[0].column_1 <- Some -1
+    //t.Update(dvdRental.Value) |> ignore
+    ()
+
+//[<Fact>]
+//let ``timestamp with time zone params``() =
+//    do
+//        let now = 
+//            use cmd = new NpgsqlCommand<"SELECT current_timestamp", dvdRental, SingleRow = true>(dvdRental)
+//            cmd.Execute().Value.Value
+//        use cmd = new NpgsqlCommand<"SELECT current_timestamp < @p", dvdRental, SingleRow = true>(dvdRental)
+//        Assert.True( cmd.Execute( now).Value.Value)
+    
+//    do
+//        use cmd = new NpgsqlCommand<"SELECT current_timestamp > @p", dvdRental, SingleRow = true>(dvdRental)
+//        Assert.True( cmd.Execute( DateTime.UtcNow.AddMinutes(-1.)).Value.Value)
+
+
 //[<Fact>]
 //let batchSize() =
 //    use conn = new Npgsql.NpgsqlConnection(dvdRental)

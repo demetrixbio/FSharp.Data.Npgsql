@@ -10,8 +10,6 @@ open System.Data
 open NpgsqlTypes
 open System
 
-printfn "%s" <| typeof<NpgsqlTypes.PostgisGeometry>.AssemblyQualifiedName
-
 do
     //NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
     //NpgsqlLogManager.IsParameterLoggingEnabled <- true
@@ -19,48 +17,18 @@ do
     use conn = new NpgsqlConnection("Host=localhost;Username=postgres;Database=dvdrental;Port=32768")
     conn.Open()
     use cmd =  conn.CreateCommand()
-    cmd.CommandText <- 
-        sprintf "select * from public.actor where first_name  = '%s' and last_name =  '%s'" "Tom" "Hanks"
 
-    //do 
-    //    use reader = cmd.ExecuteReader(CommandBehavior.KeyInfo ||| CommandBehavior.SchemaOnly)
-    //    [ for  c in reader.GetColumnSchema() ->  c.ColumnName, c.DataType, c.AllowDBNull, c.IsKey, c.IsAutoIncrement ] |> printfn "\nCols 1:\n%A"
+    //cmd.CommandText <- "select now()"
+    //let now = cmd.ExecuteScalar() |> unbox<DateTime>
+    //printfn "Now: %A" now
 
-    let t = new DataTable()
-    
-    use adapter = new NpgsqlDataAdapter(cmd)
+    let now = DateTime.Now.AddMinutes(10.)
+    cmd.CommandText <- "select now() < @p"
+    cmd.Parameters.AddWithValue("p", NpgsqlDbType.TimestampTZ, now) |> ignore
+    cmd.ExecuteScalar() |> printfn "Result: %A"
 
-    //adapter.FillSchema(t, SchemaType.Source) |>  ignore
-
-
-    //for c in t.Columns do 
-    //    if c.DataType = typeof<DateTime> 
-    //    then c.DateTimeMode <- System.Data.DataSetDateTime.Local
-
-    do 
-        use reader = cmd.ExecuteReader(CommandBehavior.KeyInfo ||| CommandBehavior.SchemaOnly)
-        t.Load(reader)
-        t.Columns.["last_update"].AllowDBNull <- true
-    [ for c in t.Columns -> c.ColumnName, c.DataType, c.AllowDBNull, c.AutoIncrement] |> printfn "\nCols 2:\n %A"
-
-
-    let meta = new DataTableReader(t)
-    [ for c in meta.GetSchemaTable().Columns -> c.ColumnName] |> printfn "\nCols 2:\n %A"
-
-    //[ for r in meta.GetSchemaTable().Rows -> r.["ColumnName"], r.["DataType"], r.["AllowDBNull"], r.["AutoIncrement"]] |> printfn "\nCols 2:\n %A"
-
-
-    //do
-    //    let r = t.NewRow()
-    //    r.["actor_id"] <- 4444
-    //    r.["first_name"] <- "Tom"
-    //    r.["last_name"] <- "Hanks"
-    //    t.Rows.Add(r)
-
-    //use b = new NpgsqlCommandBuilder(adapter)
-
-    //let i = adapter.Update(t) 
-    //printfn "Records affected %i" i
-
+    cmd.CommandText <- "select concat(now(), '/ - /', @p)"
+    cmd.Parameters.AddWithValue("p", NpgsqlDbType.TimestampTZ, now) |> ignore
+    cmd.ExecuteScalar() |> printfn "Result: %A"
 
 

@@ -3,6 +3,7 @@ module NpgsqlConnectionTests
 open System
 open Xunit
 open Microsoft.Extensions.Configuration
+open Npgsql
 open FSharp.Data.Npgsql
 
 [<Literal>]
@@ -387,4 +388,37 @@ let Add2Rows() =
     let i = actors.Update(conn, tx)
     Assert.Equal(actors.Rows.Count, i)
 
+[<Fact>]
+let asyncUpdateTable() =
+
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    use cmd =
+        DvdRental.CreateCommand<"
+            SELECT 
+                actor_id, first_name, last_name, last_update
+            FROM 
+                public.actor
+            WHERE 
+                first_name = @firstName 
+                AND last_name = @last_name
+        ", ResultType.DataTable, XCtor = true>(conn, tx)
+    let (firstName, lastName) as name = "Tom", "Hanks"
+    let actors = cmd.AsyncExecute name |> Async.RunSynchronously
+
+    if actors.Rows.Count = 0 then
+        actors.AddRow(first_name = firstName, last_name = lastName)
+    else
+        actors.Rows.[0].last_update <- DateTime.UtcNow
     
+    Assert.Equal(1, actors.Update(conn, tx))
+
+[<Fact>]
+let npPkTable() =
+    //use cmd =
+    //    DvdRental.CreateCommand<"select * from table_name limit 1", ResultType.DataTable>(dvdRental.Value)
+    //let t = cmd.Execute()
+    //t.Rows.[0].column_1 <- Some -1
+    //t.Update(dvdRental.Value) |> ignore
+    ()
+

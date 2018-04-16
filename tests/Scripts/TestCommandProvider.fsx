@@ -1,6 +1,6 @@
-﻿#I "../../src/Runtime/bin/Debug/net461"
+﻿#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.7\lib\net451\Npgsql.dll"
+#I "../../src/Runtime/bin/Debug/net461"
 #r "FSharp.Data.Npgsql.dll"
-#r "Npgsql.dll"
 #r "netstandard.dll"
 
 open FSharp.Data.Npgsql
