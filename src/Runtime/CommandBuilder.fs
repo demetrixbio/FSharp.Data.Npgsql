@@ -17,7 +17,7 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         for row in schema.Rows do   
             let col = source.Columns.[string row.[SchemaTableColumn.ColumnName]]
             let xprop = col.ExtendedProperties
-            assert(xprop.Count = 4)
+            assert(xprop.Count = 4 || xprop.Count = 5 (* for enums SchemaTableColumn.ProviderType set to NpgsqlDbType.Unknown*))
             for k in xprop.Keys do
                 row.[string k] <- xprop.[k]
 
@@ -25,8 +25,8 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
 
     override __.ApplyParameterInfo(p, row, _, _) = 
         match p, row.[SchemaTableColumn.ProviderType] with
-        | (:? NpgsqlParameter as param), (:? NpgsqlTypes.NpgsqlDbType as v) -> 
-            param.NpgsqlDbType <- v
+        | (:? NpgsqlParameter as param), (:? int as providerType) -> 
+            param.NpgsqlDbType <- enum providerType
         | _ -> ()
 
     override __.GetParameterName parameterName = sprintf "@%s" parameterName

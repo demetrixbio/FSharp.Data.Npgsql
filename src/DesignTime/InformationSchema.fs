@@ -153,6 +153,7 @@ type Column = {
             clrType.PartiallyQualifiedName
 
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
+        let isEnum = this.UDT |> Option.exists (fun x -> not x.IsArray)
 
         <@@ 
             let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType( typeName, throwOnError = true))
@@ -168,6 +169,9 @@ type Column = {
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseSchemaName), %%Expr.Value(box this.BaseSchemaName))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
+            if isEnum
+            then
+                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Unknown))
 
             x
         @@>

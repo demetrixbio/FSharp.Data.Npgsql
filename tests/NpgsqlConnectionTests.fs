@@ -375,8 +375,12 @@ let ``AddRow/NewRow preserve order``() =
         title = "Inception", 
         description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
         language_id = 1s,
+        rating = Some Rating.``PG-13``,
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
     )
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    Assert.Equal(1, films.Update(conn, tx))
 
 [<Fact>]
 let Add2Rows() =
