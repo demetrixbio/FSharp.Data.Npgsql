@@ -25,26 +25,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Scripts\NpgsqlCustomEnums.fsx">
-      <Pack>false</Pack>
-    </Content>
     <Content Include="Scripts\NpgsqlGetStarted.fsx">
       <Pack>false</Pack>
-    </Content>
-    <Content Include="Scripts\NpgsqlTypeMapping.fsx">
-      <Pack>false</Pack>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <Content Include="netstandard.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="System.Reflection.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="System.Runtime.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
 
@@ -53,7 +35,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npgsql" Version="3.2.7" />
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+    <PackageReference Include="Npgsql" Version="4.0.0" />
+    <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
   </ItemGroup>
   
   <Target Name="BeforeBuild">

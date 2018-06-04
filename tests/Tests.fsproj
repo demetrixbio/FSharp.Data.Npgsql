@@ -1,8 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
-    <TargetFrameworks Condition="'$(Configuration)'=='Release'">net461;netcoreapp2.0</TargetFrameworks>
+    <TargetFramework Condition="'$(Configuration)'=='Release'">netcoreapp2.0</TargetFramework>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
   </PropertyGroup>
   
@@ -26,18 +26,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.5.0-preview-20170810-02" />
-    <PackageReference Include="Npgsql" Version="3.2.7" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.7.2" />
+    <PackageReference Include="Npgsql" Version="4.0.0" />
     <PackageReference Include="xunit" Version="2.3.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.3.1" />
-    <DotNetCliToolReference Include="dotnet-xunit" Version="2.3.1" />
-    <DotNetCliToolReference Include="Microsoft.Extensions.SecretManager.Tools" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="FSharp.Data.Npgsql">
-      <HintPath>..\src\Runtime\bin\Debug\$(TargetFramework)\FSharp.Data.Npgsql.dll</HintPath>
+      <HintPath Condition="'$(Configuration)'=='Debug'">..\src\Runtime\bin\Debug\$(TargetFramework)\FSharp.Data.Npgsql.dll</HintPath>
+      <HintPath Condition="'$(Configuration)'=='Release'">..\src\Runtime\bin\Release\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="System.Transactions" />

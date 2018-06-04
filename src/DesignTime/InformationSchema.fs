@@ -13,6 +13,7 @@ open NpgsqlTypes
 
 open ProviderImplementation.ProvidedTypes
 open System.Collections
+open System.Net
 
 type internal NpgsqlDataReader with
 
@@ -24,63 +25,70 @@ type internal Type with
     member this.PartiallyQualifiedName = 
         sprintf "%s, %s" this.FullName (this.Assembly.GetName().Name)
 
+//https://www.postgresql.org/docs/current/static/datatype.html#DATATYPE-TABLE
 let typesMapping = 
     Map.ofList [
-        "bool", (typeof<bool>, NpgsqlDbType.Boolean)
-        "int2", (typeof<int16>, NpgsqlDbType.Smallint)
-        "int4", (typeof<int32>, NpgsqlDbType.Integer)
-        "int8", (typeof<int64>, NpgsqlDbType.Bigint)
-        "float4", (typeof<single>, NpgsqlDbType.Real)
-        "float8", (typeof<double>, NpgsqlDbType.Double)
-        "numeric", (typeof<decimal>, NpgsqlDbType.Numeric)
-        "money", (typeof<decimal>, NpgsqlDbType.Money)
-        "text", (typeof<string>, NpgsqlDbType.Text)
-        "varchar", (typeof<string>, NpgsqlDbType.Varchar)
-        "bpchar", (typeof<string>, NpgsqlDbType.Unknown)
-        "citext", (typeof<string>, NpgsqlDbType.Citext)
-        "jsonb", (typeof<string>, NpgsqlDbType.Jsonb)
-        "json", (typeof<string>, NpgsqlDbType.Json)
-        "xml", (typeof<string>, NpgsqlDbType.Xml)
-        "point", (typeof<NpgsqlPoint>, NpgsqlDbType.Point)
-        "lseg", (typeof<NpgsqlLSeg>, NpgsqlDbType.LSeg)
-        "path",  (typeof<NpgsqlPath>, NpgsqlDbType.Path)
-        "polygon", (typeof<NpgsqlPolygon>, NpgsqlDbType.Polygon)
-        "line", (typeof<NpgsqlLine>, NpgsqlDbType.Line)
-        "circle", (typeof<NpgsqlCircle>, NpgsqlDbType.Circle)
-        "box", (typeof<NpgsqlBox>, NpgsqlDbType.Box)
-        "bit", (typeof<BitArray>, NpgsqlDbType.Bit)
-        "varbit", (typeof<BitArray>, NpgsqlDbType.Bit)
-        "hstore", (typeof<IDictionary>, NpgsqlDbType.Hstore)
-        "uuid", (typeof<Guid>, NpgsqlDbType.Uuid)
-        "cidr", (typeof<NpgsqlInet>, NpgsqlDbType.Inet)        
-        "inet", (typeof<NpgsqlInet>, NpgsqlDbType.Inet)
-        "macaddr", (typeof<System.Net.NetworkInformation.PhysicalAddress>, NpgsqlDbType.MacAddr)
-        "tsquery", (typeof<NpgsqlTsQuery>, NpgsqlDbType.TsQuery)
-        "tsvector", (typeof<NpgsqlTsVector>, NpgsqlDbType.TsVector)
+        "boolean", typeof<bool>; "bool", typeof<bool>
 
-        "date", (typeof<DateTime>, NpgsqlDbType.Date)
-        "interval", (typeof<TimeSpan>, NpgsqlDbType.Interval)
-        "timestamp", (typeof<DateTime>, NpgsqlDbType.Timestamp)
-        "timestamptz", (typeof<DateTime>, NpgsqlDbType.TimestampTz)
-        "time", (typeof<TimeSpan>, NpgsqlDbType.Time)
-        "timetz", (typeof<DateTimeOffset>, NpgsqlDbType.TimeTz)
+        "smallint", typeof<int16>; "int2", typeof<int16>
+        "integer", typeof<int32>; "int", typeof<int32>; "int4", typeof<int32>
+        "bigint", typeof<int64>; "int8", typeof<int64>
 
-        "bytea", (typeof<byte[]>, NpgsqlDbType.Bytea)
-        "oid", (typeof<UInt32>, NpgsqlDbType.Oid)
-        "xid", (typeof<UInt32>, NpgsqlDbType.Oid)
-        "cid", (typeof<UInt32>, NpgsqlDbType.Cid)
-        "oidvector",(typeof<UInt32[]>, NpgsqlDbType.Int2Vector)
-        "name", (typeof<string>, NpgsqlDbType.Name)
-        "char", (typeof<string>, NpgsqlDbType.Char)
-        "geometry",(typeof<PostgisGeometry>, NpgsqlDbType.Geometry)        
-        //"range", (typeof<NpgsqlRange>, NpgsqlDbType.Range)
+        "real", typeof<single>; "float4", typeof<single>
+        "double precision", typeof<double>; "float8", typeof<double>
+
+        "numeric", typeof<decimal>; "decimal", typeof<decimal>
+        "money", typeof<decimal>
+        "text", typeof<string>
+
+        "character varying", typeof<string>; "varchar", typeof<string>
+        "character", typeof<string>; "char", typeof<string>
+
+        "citext", typeof<string>
+        "jsonb", typeof<string>
+        "json", typeof<string>
+        "xml", typeof<string>
+        "point", typeof<NpgsqlPoint>
+        "lseg", typeof<NpgsqlLSeg>
+        "path", typeof<NpgsqlPath>
+        "polygon", typeof<NpgsqlPolygon>
+        "line", typeof<NpgsqlLine>
+        "circle", typeof<NpgsqlCircle>
+        "box", typeof<bool>
+
+        "bit", typeof<BitArray>; "bit(n)", typeof<BitArray>; "bit varying", typeof<BitArray>; "varbit", typeof<BitArray>
+
+        "hstore", typeof<IDictionary>
+        "uuid", typeof<Guid>
+        "cidr", typeof<ValueTuple<IPAddress, int>>
+        "inet", typeof<IPAddress>
+        "macaddr", typeof<NetworkInformation.PhysicalAddress>
+        "tsquery", typeof<NpgsqlTsQuery>
+        "tsvector", typeof<NpgsqlTsVector>
+
+        "date", typeof<DateTime>
+        "interval", typeof<TimeSpan>
+        "timestamp without time zone", typeof<DateTime>; "timestamp", typeof<DateTime>   
+        "timestamp with time zone", typeof<DateTime>; "timestamptz", typeof<DateTime>
+        "time without time zone", typeof<TimeSpan>; "time", typeof<TimeSpan>
+        "time with time zone", typeof<DateTimeOffset>; "timetz", typeof<DateTimeOffset>
+
+        "bytea", typeof<byte[]>
+        "oid", typeof<UInt32>
+        "xid", typeof<UInt32>
+        "cid", typeof<UInt32>
+        "oidvector", typeof<UInt32[]>
+        "name", typeof<string>
+        "char", typeof<string>
+        "geometry", typeof<LegacyPostgis.PostgisGeometry>
+        //"range", typeof<NpgsqlRange>, NpgsqlDbType.Range)
     ]
 
 type PostgresType with    
     member this.ToClrType() = 
         match this with
-        | :? PostgresBaseType as x when typesMapping.ContainsKey(x.Name) -> 
-            typesMapping |> Map.find x.Name |> fst
+        | :? PostgresBaseType as x -> 
+            typesMapping.[x.Name]
         | :? PostgresEnumType ->
             typeof<string>
         | :? PostgresDomainType as x -> 
@@ -100,7 +108,9 @@ type DataType = {
     member this.IsFixedLength = this.ClrType.IsValueType
     member this.UdtTypeName = 
         if this.ClrType.IsArray 
-        then sprintf "%s.%s" this.Schema (this.Name.TrimStart('_'))
+        then
+            let withoutTrailingBrackets = this.Name.Substring(0, this.Name.Length - 2) // my_enum[] -> my_enum
+            sprintf "%s.%s" this.Schema withoutTrailingBrackets
         else this.FullName
 
     static member Create(x: PostgresTypes.PostgresType) = 
@@ -365,6 +375,8 @@ let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, Pro
                 |> Option.bind (List.tryFind (fun t -> t.Name = udtName))
                 |> Option.map (fun x -> x :> Type)
 
+            let values = [|  for i = 0 to row.FieldCount-1 do yield row.GetName(i), row.GetValue(i) |]
+
             yield {
                 Name = unbox row.["column_name"]
                 DataType = 
@@ -374,12 +386,16 @@ let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, Pro
                         ClrType = 
                             match unbox row.["data_type"] with 
                             | "ARRAY" -> 
-                                let elemType = typesMapping.[udtName.TrimStart('_')] |> fst              
+                                let elemType = typesMapping.[udtName.TrimStart('_')] 
                                 elemType.MakeArrayType()
                             | "USER-DEFINED" ->
-                                if udt.IsSome then typeof<string> else typeof<obj>
-                            | _ -> 
-                                typesMapping.[udtName] |> fst
+                                if udt.IsSome 
+                                then 
+                                    typeof<string> 
+                                else 
+                                    typeof<obj>
+                            | dataType -> 
+                                typesMapping.[dataType] 
                     }
 
                 Nullable = unbox row.["is_nullable"] = "YES"
