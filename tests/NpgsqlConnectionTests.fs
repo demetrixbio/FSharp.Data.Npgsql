@@ -3,8 +3,8 @@ module NpgsqlConnectionTests
 open System
 open Xunit
 open Microsoft.Extensions.Configuration
-open Npgsql
 open FSharp.Data.Npgsql
+open NpgsqlCmdTests
 
 [<Literal>]
 let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
@@ -12,10 +12,10 @@ let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
 [<Literal>]
 let connectionStringName ="dvdRental"
 
-let dvdRental = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
+let dvdRentalRuntime = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
 
 let openConnection() = 
-    let conn = new Npgsql.NpgsqlConnection(dvdRental.Value)
+    let conn = new Npgsql.NpgsqlConnection(dvdRentalRuntime.Value)
     conn.Open()
     conn
 
@@ -26,7 +26,7 @@ let selectLiterals() =
     use cmd = 
         DvdRental.CreateCommand<"        
             SELECT 42 AS Answer, current_date as today
-        ">(dvdRental.Value)
+        ">(dvdRentalRuntime.Value)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
@@ -36,7 +36,7 @@ let selectLiterals() =
 let selectSingleRow() =
     use cmd = DvdRental.CreateCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", SingleRow = true>(dvdRental.Value)
+    ", SingleRow = true>(dvdRentalRuntime.Value)
 
     Assert.Equal(
         Some( Some 42, Some DateTime.UtcNow.Date), 
@@ -47,7 +47,7 @@ let selectSingleRow() =
 let selectTuple() =
     use cmd = DvdRental.CreateCommand<"    
         SELECT 42 AS Answer, current_date as today
-    ", ResultType.Tuples>(dvdRental.Value)
+    ", ResultType.Tuples>(dvdRentalRuntime.Value)
 
     Assert.Equal<_ list>(
         [ Some 42, Some DateTime.UtcNow.Date ],
@@ -56,12 +56,12 @@ let selectTuple() =
 
 [<Fact>]
 let selectSingleNull() =
-    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRental.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRentalRuntime.Value)
     Assert.Equal(Some None, cmd.Execute())
 
 [<Fact>]
 let selectSingleColumn() =
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRental.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRentalRuntime.Value)
 
     Assert.Equal<_ seq>(
         { 0 .. 10 }, 
@@ -73,7 +73,7 @@ let paramInFilter() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
-        ">(dvdRental.Value)
+        ">(dvdRentalRuntime.Value)
 
     Assert.Equal<_ seq>(
         { 0 .. 2 .. 10 }, 
@@ -85,7 +85,7 @@ let paramInLimit() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) LIMIT @limit
-        ">(dvdRental.Value)
+        ">(dvdRentalRuntime.Value)
 
     let limit = 5
     Assert.Equal<_ seq>(
@@ -104,7 +104,7 @@ let dateTableWithUpdate() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM rental WHERE rental_id = @rental_id
-        ", ResultType.DataTable>(dvdRental.Value) 
+        ", ResultType.DataTable>(dvdRentalRuntime.Value) 
         
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
@@ -114,17 +114,17 @@ let dateTableWithUpdate() =
     try
         let new_return_date = Some DateTime.Now.Date
         r.return_date <- new_return_date
-        rowsAffected := t.Update(dvdRental.Value)
+        rowsAffected := t.Update(dvdRentalRuntime.Value)
         Assert.Equal(1, !rowsAffected)
 
-        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental.Value)
+        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value)
         Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
         if !rowsAffected = 1
         then 
             r.return_date <- return_date
-            t.Update(dvdRental.Value) |>  ignore      
+            t.Update(dvdRentalRuntime.Value) |>  ignore      
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
@@ -155,7 +155,7 @@ let dateTableWithUpdateAndTx() =
 
     Assert.Equal(
         return_date, 
-        DvdRental.CreateCommand<getRentalById>(dvdRental.Value).Execute( rental_id) |> Seq.exactlyOne
+        DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
 [<Fact>]
@@ -191,7 +191,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 let deleteWithTx() =
     let rental_id = 2
 
-    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRental.Value)
+    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value)
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
@@ -217,7 +217,7 @@ let selectEnum() =
             SELECT * 
             FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
             WHERE X <> @exclude;          
-        ">(dvdRental.Value)
+        ">(dvdRentalRuntime.Value)
     Assert.Equal<_ list>(
         [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
         [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
@@ -229,7 +229,7 @@ let selectEnum() =
 let selectEnumWithArray() =
     use cmd = DvdRental.CreateCommand<"
         SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-    ", SingleRow = true>(dvdRental.Value)
+    ", SingleRow = true>(dvdRentalRuntime.Value)
 
     Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
 
@@ -238,7 +238,7 @@ let allParametersOptional() =
     let cmd = 
         DvdRental.CreateCommand<"
             SELECT coalesce(@x, 'Empty') AS x
-        ", AllParametersOptional = true, SingleRow = true>(dvdRental.Value)
+        ", AllParametersOptional = true, SingleRow = true>(dvdRentalRuntime.Value)
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
     Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
 
@@ -247,7 +247,7 @@ let tableInsert() =
     
     let rental_id = 2
     
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRentalRuntime.Value)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
     use conn = openConnection()
@@ -283,7 +283,7 @@ let tableInsertViaAddRow() =
     
     let rental_id = 2
     
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRental.Value)  
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRentalRuntime.Value)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
     use conn = openConnection()
@@ -316,7 +316,7 @@ let tableInsertViaAddRow() =
     Assert.Equal(None, cmd.Execute(r.rental_id))
 [<Fact>]
 let selectEnumWithArray2() =
-    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRental.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRentalRuntime.Value)
 
     let ratings = [| 
         DvdRental.``public``.Types.mpaa_rating.``PG-13``
@@ -328,7 +328,7 @@ let selectEnumWithArray2() =
 [<Fact>]
 let selectLiteralsWithConnObject() =
     use cmd = 
-        DvdRental.CreateCommand<"SELECT 42 AS Answer, current_date as today", XCtor = true>( NpgsqlCmdTests.openConnection())
+        DvdRental.CreateCommand<"SELECT 42 AS Answer, current_date as today", XCtor = true>( Connection.get())
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
@@ -340,7 +340,7 @@ type DvdRentalWithConn = NpgsqlConnection<NpgsqlCmdTests.dvdRental, XCtor = true
 [<Fact>]
 let selectLiteralsWithConnObjectGlobalSet() =
     use cmd = 
-        DvdRentalWithConn.CreateCommand<"SELECT 42 AS Answer, current_date as today">( NpgsqlCmdTests.openConnection())
+        DvdRentalWithConn.CreateCommand<"SELECT 42 AS Answer, current_date as today">( Connection.get())
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 

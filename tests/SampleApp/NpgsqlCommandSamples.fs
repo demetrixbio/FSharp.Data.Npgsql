@@ -1,9 +1,8 @@
 module NpgsqlCommandSamples 
 
 open Connection
+open Npgsql
 open FSharp.Data.Npgsql
-open System
-open System.Data
 
 let basicQuery() = 
     use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
@@ -97,5 +96,11 @@ let resultTypeDataTable() =
     //Commit to persist changes
     //tx.Commit() 
 
+let postGisSimpleSelectPoint() =
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    conn.TypeMapper.UseLegacyPostgis() |> ignore    
+    use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(1 1)'::geometry", dvdRental, SingleRow = true>(conn)
 
-     
+    let actual: LegacyPostgis.PostgisPoint = downcast cmd.Execute().Value.Value
+    printfn "x = %f, y = %f, SRID = %u" actual.X actual.Y actual.SRID

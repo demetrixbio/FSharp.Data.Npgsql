@@ -6,12 +6,21 @@ open Xunit
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
 
-let openConnection() = 
-    let conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    conn
+module Connection = 
+    open Npgsql
+
+    let get() = 
+        let conn = new NpgsqlConnection(dvdRental)
+        conn.Open()
+        conn
+
+    let getWithPostGis() = 
+        let conn = get()
+        conn.TypeMapper.UseLegacyPostgis() |> ignore
+        conn
 
 open FSharp.Data.Npgsql
+open Npgsql.LegacyPostgis
 
 [<Fact>]
 let selectLiterals() =
@@ -181,7 +190,7 @@ let deleteWithTx() =
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
-        use conn = openConnection()
+        use conn = Connection.get()
         use tran = conn.BeginTransaction()
 
         use del = new NpgsqlCommand<"
@@ -282,7 +291,7 @@ let selectLiteralsConnStrFromUserSecretStore() =
 let selectLiteralsWithConnObject() =
     use cmd = new NpgsqlCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", dvdRental>(connection = openConnection())
+    ", dvdRental>(connection = Connection.get())
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
@@ -336,7 +345,7 @@ let ``AddRow/NewRow preserve order``() =
 [<Fact>]
 let asyncUpdateTable() =
     
-    use conn = openConnection()
+    use conn = Connection.get()
     use tx = conn.BeginTransaction()
 
     use cmd =
@@ -361,13 +370,22 @@ let asyncUpdateTable() =
     Assert.Equal(1, actors.Update(conn, tx))
 
 [<Fact>]
-let npPkTable() =
-    use cmd =
-        new NpgsqlCommand<"select * from table_name limit 1", dvdRental, ResultType.DataTable>(dvdRental)
-    let t = cmd.Execute()
-    //t.Rows.[0].column_1 <- Some -1
-    //t.Update(dvdRental.Value) |> ignore
-    ()
+let postGisSimpleSelectPoint() =
+    use conn = Connection.getWithPostGis()
+    use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(0 0)'::geometry", dvdRental, SingleRow = true>(conn)
+
+    let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
+    let actual = cmd.Execute().Value.Value
+    Assert.Equal(expected, downcast actual)
+ 
+//[<Fact>]
+//let npPkTable() =
+//    use cmd =
+//        new NpgsqlCommand<"select * from table_name limit 1", dvdRental, ResultType.DataTable>(dvdRental)
+//    let t = cmd.Execute()
+//    //t.Rows.[0].column_1 <- Some -1
+//    //t.Update(dvdRental.Value) |> ignore
+//    ()
 
 //[<Fact>]
 //let ``timestamp with time zone params``() =

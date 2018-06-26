@@ -27,6 +27,8 @@ let main _ =
     //NpgsqlCommandSamples.resultTypeDataTable()
 
     //System.Diagnostics.Debugger.Break()
-    NpgsqlConnectionSamples.insertOnly()
+    //NpgsqlConnectionSamples.insertOnly()
+
+    NpgsqlCommandSamples.postGisSimpleSelectPoint()
 
     0 

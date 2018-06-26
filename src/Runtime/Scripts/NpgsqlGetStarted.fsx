@@ -2,13 +2,15 @@
 #I @"..\bin\Debug\net461"
 #r "System.Transactions"
 #r @"Npgsql.dll"
+#r @"Npgsql.LegacyPostgis.dll"
 #r @"System.Threading.Tasks.Extensions.dll"
 //#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.6\lib\net451\Npgsql.dll"
 
 open Npgsql
-open System.Data
 open NpgsqlTypes
 open System
+
+typeof<Npgsql.LegacyPostgis.PostgisGeometry>.AssemblyQualifiedName
 
 do
     //NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);

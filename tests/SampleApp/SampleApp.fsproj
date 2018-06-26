@@ -13,14 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Data.Npgsql" Version="0.1.36-beta" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
-    <PackageReference Include="Npgsql" Version="3.2.6" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="FSharp.Data.Npgsql">
-      <HintPath>..\..\src\Runtime\bin\Release\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
-    </Reference>
   </ItemGroup>
   
 </Project>
