@@ -393,6 +393,36 @@ do
     assert( cmd.Execute() = Some( Some "Empty")) 
 ```
 
+## Bulk Copy
+To upload fast large amount of data use `BinaryImport` method on statically typed data tables:
+```fsharp
+    let firstName, lastName = "Tom", "Hanks"
+    use conn = new Npgsql.NpgsqlConnection(dvdRental)
+    conn.Open()
+    use tx = conn.BeginTransaction()
+
+    let actors = new DvdRental.``public``.Tables.actor()
+        
+    let actor_id = 
+        use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
+        cmd.Execute() |> Option.flatten 
+    
+    //Binary copy operation expects all columns including auto-generated and having defaults to be populated. 
+    //Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method. 
+    actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+    
+    actors.BinaryImport(conn)
+
+    use cmd = 
+        DvdRental.CreateCommand<
+            "SELECT COUNT(*) FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", 
+            SingleRow = true, 
+            XCtor = true>(conn, tx)
+
+    assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
+```
+Worth noting that `BinaryImport` operation expects _all_ columns including auto-generated and having defaults to be populated with values. 
+`BinaryImport` implementation uses Npgsql [Binary COPY](http://www.npgsql.org/doc/copy.html#binary-copy).
 
 ## Limitations
 
@@ -406,8 +436,6 @@ do
   - Data modification batch processing is [not supported](https://github.com/npgsql/npgsql/issues/1830).
 
 ## Running tests
-- git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
-
 From the repo root folder
 - dotnet build .\src\DesignTime\
 - dotnet build .\src\Runtime\
