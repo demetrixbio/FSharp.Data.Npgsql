@@ -408,7 +408,9 @@ To upload fast large amount of data use `BinaryImport` method on statically type
         cmd.Execute() |> Option.flatten 
     
     //Binary copy operation expects all columns including auto-generated and having defaults to be populated. 
+    //Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method. 
     actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+    
     actors.BinaryImport(conn)
 
     use cmd = 
