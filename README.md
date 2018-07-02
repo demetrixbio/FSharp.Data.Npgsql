@@ -407,7 +407,7 @@ To upload fast large amount of data use `BinaryImport` method on statically type
         use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
         cmd.Execute() |> Option.flatten 
     
-    //Binary copy operation expects all columns including auto-generated and having defaults must be populated. 
+    //Binary copy operation expects all columns including auto-generated and having defaults to be populated. 
     actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
     actors.BinaryImport(conn)
 
@@ -419,7 +419,7 @@ To upload fast large amount of data use `BinaryImport` method on statically type
 
     assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
 ```
-
+Worth noting that `BinaryImport` operation expects _all_ columns including auto-generated and having defaults to be populated with values. 
 `BinaryImport` implementation uses Npgsql [Binary COPY](http://www.npgsql.org/doc/copy.html#binary-copy).
 
 ## Limitations
