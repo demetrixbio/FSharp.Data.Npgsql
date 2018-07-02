@@ -57,6 +57,12 @@ let createRootType
         then
             returnType.Single |> cmdProvidedType.AddMember
 
+    let useLegacyPostgis = 
+        (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+        ||
+        (outputColumns |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+
+
     do  //ctors
         let designTimeConfig = 
 
@@ -68,6 +74,7 @@ let createRootType
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                UseLegacyPostgis = useLegacyPostgis
             } @@>
 
         do

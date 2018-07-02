@@ -104,3 +104,9 @@ let postGisSimpleSelectPoint() =
 
     let actual: LegacyPostgis.PostgisPoint = downcast cmd.Execute().Value.Value
     printfn "x = %f, y = %f, SRID = %u" actual.X actual.Y actual.SRID
+
+let postGisSimpleSelectPointConnStr() =
+    use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(1 1)'::geometry", dvdRental, SingleRow = true>(dvdRental)
+
+    let actual: LegacyPostgis.PostgisPoint = downcast cmd.Execute().Value.Value
+    printfn "x = %f, y = %f, SRID = %u" actual.X actual.Y actual.SRID

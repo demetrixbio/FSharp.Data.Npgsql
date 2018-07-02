@@ -20,6 +20,7 @@ type DesignTimeConfig = {
     Row2ItemMapping: (obj[] -> obj)
     SeqItemTypeName: string
     ExpectedColumns: DataColumn[]
+    UseLegacyPostgis: bool
 }
 
 [<Sealed>]
@@ -45,6 +46,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | Choice1Of2 connectionString -> 
             cmd.Connection <- new NpgsqlConnection(connectionString)
             cmd.Connection.Open()
+            if cfg.UseLegacyPostgis then cmd.Connection.TypeMapper.UseLegacyPostgis() |> ignore
             upcast cmd.Connection
         
     let asyncSetupConnection() = 
@@ -55,6 +57,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             | Choice1Of2 connectionString -> 
                 cmd.Connection <- new NpgsqlConnection(connectionString)
                 do! cmd.Connection.OpenAsync() |> Async.AwaitTask
+                if cfg.UseLegacyPostgis then cmd.Connection.TypeMapper.UseLegacyPostgis() |> ignore
                 return upcast cmd.Connection
         }
 

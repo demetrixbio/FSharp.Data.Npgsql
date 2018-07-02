@@ -20,7 +20,6 @@ module Connection =
         conn
 
 open FSharp.Data.Npgsql
-//open Npgsql.LegacyPostgis
 
 [<Fact>]
 let selectLiterals() =
@@ -373,11 +372,16 @@ let asyncUpdateTable() =
 let postGisSimpleSelectPoint() =
     use conn = Connection.getWithPostGis()
     use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(0 0)'::geometry", dvdRental, SingleRow = true>(conn)
-
     let actual = cmd.Execute().Value.Value
     let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
     Assert.Equal(expected, downcast actual)
-    ()
+
+[<Fact>]
+let postGisSimpleSelectPointConnStr() =
+    use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(0 0)'::geometry", dvdRental, SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value.Value
+    let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
+    Assert.Equal(expected, downcast actual)
  
 //[<Fact>]
 //let npPkTable() =

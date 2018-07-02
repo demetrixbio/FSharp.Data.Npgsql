@@ -44,6 +44,5 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         else
             rowUpdatingCleanUp.Value.Dispose()
 
-    override __.GetSchemaTable _ = 
-        schemaTable
+    override __.GetSchemaTable _ = schemaTable
 
