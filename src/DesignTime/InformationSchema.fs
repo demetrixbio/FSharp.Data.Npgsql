@@ -26,69 +26,77 @@ type internal Type with
         sprintf "%s, %s" this.FullName (this.Assembly.GetName().Name)
 
 //https://www.postgresql.org/docs/current/static/datatype.html#DATATYPE-TABLE
-let typesMapping = 
-    Map.ofList [
-        "boolean", typeof<bool>; "bool", typeof<bool>
+let private builtins = [
+    "boolean", typeof<bool>; "bool", typeof<bool>
 
-        "smallint", typeof<int16>; "int2", typeof<int16>
-        "integer", typeof<int32>; "int", typeof<int32>; "int4", typeof<int32>
-        "bigint", typeof<int64>; "int8", typeof<int64>
+    "smallint", typeof<int16>; "int2", typeof<int16>
+    "integer", typeof<int32>; "int", typeof<int32>; "int4", typeof<int32>
+    "bigint", typeof<int64>; "int8", typeof<int64>
 
-        "real", typeof<single>; "float4", typeof<single>
-        "double precision", typeof<double>; "float8", typeof<double>
+    "real", typeof<single>; "float4", typeof<single>
+    "double precision", typeof<double>; "float8", typeof<double>
 
-        "numeric", typeof<decimal>; "decimal", typeof<decimal>
-        "money", typeof<decimal>
-        "text", typeof<string>
+    "numeric", typeof<decimal>; "decimal", typeof<decimal>
+    "money", typeof<decimal>
+    "text", typeof<string>
 
-        "character varying", typeof<string>; "varchar", typeof<string>
-        "character", typeof<string>; "char", typeof<string>
+    "character varying", typeof<string>; "varchar", typeof<string>
+    "character", typeof<string>; "char", typeof<string>
 
-        "citext", typeof<string>
-        "jsonb", typeof<string>
-        "json", typeof<string>
-        "xml", typeof<string>
-        "point", typeof<NpgsqlPoint>
-        "lseg", typeof<NpgsqlLSeg>
-        "path", typeof<NpgsqlPath>
-        "polygon", typeof<NpgsqlPolygon>
-        "line", typeof<NpgsqlLine>
-        "circle", typeof<NpgsqlCircle>
-        "box", typeof<bool>
+    "citext", typeof<string>
+    "jsonb", typeof<string>
+    "json", typeof<string>
+    "xml", typeof<string>
+    "point", typeof<NpgsqlPoint>
+    "lseg", typeof<NpgsqlLSeg>
+    "path", typeof<NpgsqlPath>
+    "polygon", typeof<NpgsqlPolygon>
+    "line", typeof<NpgsqlLine>
+    "circle", typeof<NpgsqlCircle>
+    "box", typeof<bool>
 
-        "bit", typeof<BitArray>; "bit(n)", typeof<BitArray>; "bit varying", typeof<BitArray>; "varbit", typeof<BitArray>
+    "bit", typeof<BitArray>; "bit(n)", typeof<BitArray>; "bit varying", typeof<BitArray>; "varbit", typeof<BitArray>
 
-        "hstore", typeof<IDictionary>
-        "uuid", typeof<Guid>
-        "cidr", typeof<ValueTuple<IPAddress, int>>
-        "inet", typeof<IPAddress>
-        "macaddr", typeof<NetworkInformation.PhysicalAddress>
-        "tsquery", typeof<NpgsqlTsQuery>
-        "tsvector", typeof<NpgsqlTsVector>
+    "hstore", typeof<IDictionary>
+    "uuid", typeof<Guid>
+    "cidr", typeof<ValueTuple<IPAddress, int>>
+    "inet", typeof<IPAddress>
+    "macaddr", typeof<NetworkInformation.PhysicalAddress>
+    "tsquery", typeof<NpgsqlTsQuery>
+    "tsvector", typeof<NpgsqlTsVector>
 
-        "date", typeof<DateTime>
-        "interval", typeof<TimeSpan>
-        "timestamp without time zone", typeof<DateTime>; "timestamp", typeof<DateTime>   
-        "timestamp with time zone", typeof<DateTime>; "timestamptz", typeof<DateTime>
-        "time without time zone", typeof<TimeSpan>; "time", typeof<TimeSpan>
-        "time with time zone", typeof<DateTimeOffset>; "timetz", typeof<DateTimeOffset>
+    "date", typeof<DateTime>
+    "interval", typeof<TimeSpan>
+    "timestamp without time zone", typeof<DateTime>; "timestamp", typeof<DateTime>   
+    "timestamp with time zone", typeof<DateTime>; "timestamptz", typeof<DateTime>
+    "time without time zone", typeof<TimeSpan>; "time", typeof<TimeSpan>
+    "time with time zone", typeof<DateTimeOffset>; "timetz", typeof<DateTimeOffset>
 
-        "bytea", typeof<byte[]>
-        "oid", typeof<UInt32>
-        "xid", typeof<UInt32>
-        "cid", typeof<UInt32>
-        "oidvector", typeof<UInt32[]>
-        "name", typeof<string>
-        "char", typeof<string>
-        "geometry", typeof<LegacyPostgis.PostgisGeometry>
-        //"range", typeof<NpgsqlRange>, NpgsqlDbType.Range)
-    ]
+    "bytea", typeof<byte[]>
+    "oid", typeof<UInt32>
+    "xid", typeof<UInt32>
+    "cid", typeof<UInt32>
+    "oidvector", typeof<UInt32[]>
+    "name", typeof<string>
+    "char", typeof<string>
+    //"range", typeof<NpgsqlRange>, NpgsqlDbType.Range)
+]
+
+let mutable private spatialTypesMapping = [
+    "geometry", typeof<LegacyPostgis.PostgisGeometry>
+]
+
+let getTypeMapping = 
+    let allMappings = dict (builtins @ spatialTypesMapping)
+    fun datatype -> 
+        let exists, value = allMappings.TryGetValue(datatype)
+        if exists then value else failwithf "Unsupported datatype %s." datatype 
 
 type PostgresType with    
     member this.ToClrType() = 
         match this with
         | :? PostgresBaseType as x -> 
-            typesMapping.[x.Name]
+            getTypeMapping x.Name
         | :? PostgresEnumType ->
             typeof<string>
         | :? PostgresDomainType as x -> 
@@ -375,8 +383,6 @@ let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, Pro
                 |> Option.bind (List.tryFind (fun t -> t.Name = udtName))
                 |> Option.map (fun x -> x :> Type)
 
-            let values = [|  for i = 0 to row.FieldCount-1 do yield row.GetName(i), row.GetValue(i) |]
-
             yield {
                 Name = unbox row.["column_name"]
                 DataType = 
@@ -386,7 +392,7 @@ let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, Pro
                         ClrType = 
                             match unbox row.["data_type"] with 
                             | "ARRAY" -> 
-                                let elemType = typesMapping.[udtName.TrimStart('_')] 
+                                let elemType = getTypeMapping( udtName.TrimStart('_') ) 
                                 elemType.MakeArrayType()
                             | "USER-DEFINED" ->
                                 if udt.IsSome 
@@ -395,7 +401,7 @@ let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, Pro
                                 else 
                                     typeof<obj>
                             | dataType -> 
-                                typesMapping.[dataType] 
+                                getTypeMapping( dataType)
                     }
 
                 Nullable = unbox row.["is_nullable"] = "YES"

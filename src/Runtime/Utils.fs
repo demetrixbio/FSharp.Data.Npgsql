@@ -68,3 +68,17 @@ type Utils private() =
         )
 
         dataAdapter.Update(table)   
+
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
+    static member BinaryImport(table: DataTable<DataRow>, connection: NpgsqlConnection) = 
+        let copyFromCommand = 
+            [ for c in table.Columns -> c.ColumnName ]
+            |> String.concat ", "
+            |> sprintf "COPY %s (%s) FROM STDIN (FORMAT BINARY)" table.TableName
+
+        use writer = connection.BeginBinaryImport(copyFromCommand)
+
+        for row in table.Rows do
+            writer.WriteRow(row.ItemArray)
+
+        writer.Complete()

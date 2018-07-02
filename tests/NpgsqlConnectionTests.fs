@@ -426,3 +426,30 @@ let npPkTable() =
     //t.Update(dvdRental.Value) |> ignore
     ()
 
+[<Literal>]
+let getActorByName = "
+    SELECT COUNT(*)
+    FROM public.actor 
+    WHERE first_name = @firstName AND last_name = @lastName
+"
+
+[<Fact>]
+let binaryImport() =
+    let firstName, lastName = "Tom", "Hanks"
+    do 
+        use conn = openConnection()
+        use tx = conn.BeginTransaction()
+        let actors = new DvdRental.``public``.Tables.actor()
+        
+        let actor_id = 
+            use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
+            cmd.Execute() |> Option.flatten 
+        
+        actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+        actors.BinaryImport(conn)
+
+        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true, XCtor = true>(conn, tx)
+        Assert.Equal(Some( Some 1L), cmd.Execute(firstName, lastName))
+    do 
+        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true>(dvdRentalRuntime.Value)
+        Assert.Equal(Some( Some 0L), cmd.Execute(firstName, lastName))

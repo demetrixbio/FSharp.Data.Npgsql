@@ -12,6 +12,7 @@ open Npgsql
 
 open FSharp.Data.Npgsql
 open InformationSchema
+open FSharp.Data.Npgsql
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
@@ -175,7 +176,15 @@ let getTableTypes(connectionString: string, schema, customTypes: Map<_, Provided
 
                 let ctor = ProvidedConstructor([], invokeCode)
                 dataTableType.AddMember ctor    
-                
+
+                let binaryImport = 
+                    ProvidedMethod(
+                        "BinaryImport", 
+                        [ ProvidedParameter("connection", typeof<NpgsqlConnection> ) ],
+                        typeof<Void>,
+                        invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
+                    )
+                dataTableType.AddMember binaryImport
 
             dataTableType
         )
