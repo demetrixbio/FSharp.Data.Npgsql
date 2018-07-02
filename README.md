@@ -406,8 +406,6 @@ do
   - Data modification batch processing is [not supported](https://github.com/npgsql/npgsql/issues/1830).
 
 ## Running tests
-- git clone _--recurse-submodules_ https://github.com/demetrixbio/FSharp.Data.Npgsql.git
-
 From the repo root folder
 - dotnet build .\src\DesignTime\
 - dotnet build .\src\Runtime\
