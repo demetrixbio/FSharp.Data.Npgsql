@@ -398,6 +398,7 @@ type internal QuotationsFactory private() =
 
         do
             let commonParams = [
+                ProvidedParameter("batchSize", typeof<int>, optionalValue = 1)
                 ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
                 ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
             ]
@@ -410,7 +411,7 @@ type internal QuotationsFactory private() =
                     "Update", 
                     ProvidedParameter("connectionString", typeof<string>, ?optionalValue = connectionStringDefault) :: commonParams, 
                     typeof<int>,
-                    fun (Arg4(table, connectionString, continueUpdateOnError, conflictOption)) -> 
+                    fun (Arg5(table, connectionString, batchSize, continueUpdateOnError, conflictOption)) -> 
                         <@@ 
                             let runTimeConnectionString = 
                                 if %%connectionString = reuseDesignTimeConnectionString
@@ -422,7 +423,7 @@ type internal QuotationsFactory private() =
                                     %%connectionString
 
                             let conn = new NpgsqlConnection(runTimeConnectionString)
-                            Utils.UpdateDataTable(%%table, conn, null, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, conn, null, %%batchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 
@@ -432,9 +433,9 @@ type internal QuotationsFactory private() =
                     :: ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null) 
                     :: commonParams, 
                     typeof<int>,
-                    fun (Arg5(table, conn, tx, continueUpdateOnError,conflictOption)) -> 
+                    fun (Arg6(table, conn, tx, batchSize, continueUpdateOnError,conflictOption)) -> 
                         <@@ 
-                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%batchSize, %%continueUpdateOnError, %%conflictOption)
                         @@>
                 )
 

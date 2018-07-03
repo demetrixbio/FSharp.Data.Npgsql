@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <Compile Include="DataTable.fs" />
+    <Compile Include="BatchDataAdapter.fs" />
     <Compile Include="CommandBuilder.fs" />
     <Compile Include="Utils.fs" />
     <Compile Include="ISqlCommand.fs" />

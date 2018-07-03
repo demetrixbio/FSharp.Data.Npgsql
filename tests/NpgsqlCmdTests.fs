@@ -405,16 +405,3 @@ let postGisSimpleSelectPointConnStr() =
 //        use cmd = new NpgsqlCommand<"SELECT current_timestamp > @p", dvdRental, SingleRow = true>(dvdRental)
 //        Assert.True( cmd.Execute( DateTime.UtcNow.AddMinutes(-1.)).Value.Value)
 
-
-//[<Fact>]
-//let batchSize() =
-//    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-//    conn.Open()
-//    use tx = conn.BeginTransaction()
-//    use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(conn, tx)
-//    let actors = getActors.Execute("Tom", "Hankss")
-//    if actors.Rows.Count = 0
-//    then 
-//        actors.AddRow(Some 42, "Tom", "Hanks", Some DateTime.Now) 
-//        let rowsAffected = actors.Update(conn, tx, updateBatchSize = 100)
-//        Assert.Equal( 1, rowsAffected)

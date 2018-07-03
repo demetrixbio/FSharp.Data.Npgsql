@@ -428,7 +428,7 @@ let npPkTable() =
 
 [<Literal>]
 let getActorByName = "
-    SELECT COUNT(*)
+    SELECT first_name, last_name
     FROM public.actor 
     WHERE first_name = @firstName AND last_name = @lastName
 "
@@ -448,8 +448,23 @@ let binaryImport() =
         actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
         actors.BinaryImport(conn)
 
-        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true, XCtor = true>(conn, tx)
-        Assert.Equal(Some( Some 1L), cmd.Execute(firstName, lastName))
+        use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true>(conn, tx)
+        Assert.Equal(1, cmd.Execute(firstName, lastName) |> Seq.length)
     do 
-        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true>(dvdRentalRuntime.Value)
-        Assert.Equal(Some( Some 0L), cmd.Execute(firstName, lastName))
+        use cmd = DvdRental.CreateCommand<getActorByName>(dvdRentalRuntime.Value)
+        Assert.Equal(0, cmd.Execute(firstName, lastName) |> Seq.length)
+
+[<Fact>]
+let batchSize() =
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    let actors = new DvdRental.``public``.Tables.actor()
+    actors.AddRow(first_name = "Tom", last_name = "Hanks")
+    actors.AddRow(first_name = "Tom", last_name ="Cruise", last_update = Some DateTime.Now)
+    let i = actors.Update(conn, tx, batchSize = 100)
+    Assert.Equal(actors.Rows.Count, i)
+
+    for row in actors.Rows do 
+        use cmd = DvdRental.CreateCommand<getActorByName, ResultType.Tuples, SingleRow = true, XCtor = true>(conn, tx)
+        Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
+

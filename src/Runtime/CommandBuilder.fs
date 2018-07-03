@@ -40,7 +40,7 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
     override this.SetRowUpdatingHandler adapter = 
         if (adapter <> this.DataAdapter)
         then
-            rowUpdatingCleanUp := (adapter :?> NpgsqlDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
+            rowUpdatingCleanUp := (adapter :?> BatchDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
         else
             rowUpdatingCleanUp.Value.Dispose()
 

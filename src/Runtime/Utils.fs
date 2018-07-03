@@ -35,14 +35,15 @@ type Utils private() =
     static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, continueUpdateOnError, conflictOption) = 
+    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, updateBatchSize, continueUpdateOnError, conflictOption) = 
 
         let selectCommand = table.SelectCommand
 
         if connection <> null then selectCommand.Connection <- connection
         if transaction <> null then selectCommand.Transaction <- transaction
 
-        use dataAdapter = new NpgsqlDataAdapter(selectCommand, ContinueUpdateOnError = continueUpdateOnError)
+        use dataAdapter = new BatchDataAdapter(selectCommand, UpdateBatchSize = updateBatchSize, ContinueUpdateOnError = continueUpdateOnError)
+        //use dataAdapter = new NpgsqlDataAdapter(selectCommand, ContinueUpdateOnError = continueUpdateOnError)
 
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 
