@@ -2,7 +2,6 @@
 
 open System.Data.Common
 open Npgsql
-open System.Data
 
 type internal BatchDataAdapter(selectCommand: NpgsqlCommand) = 
     inherit DbDataAdapter(SelectCommand = selectCommand) 
@@ -15,7 +14,6 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand) =
 
     [<CLIEvent>] member this.RowUpdating = rowUpdating.Publish
     [<CLIEvent>] member this.RowUpdated = rowUpdated.Publish
-
     override __.OnRowUpdating( value) = rowUpdating.Trigger(value)
     override __.OnRowUpdated( value) = rowUpdated.Trigger(value)
 
@@ -33,13 +31,13 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand) =
 
         batch.CommandText <- sprintf "%s\n%s;" batch.CommandText commandText
         count
-        
+
     override __.ExecuteBatch() = batch.ExecuteNonQuery()
-    override __.TerminateBatching() = batch.Dispose()    
-    override __.ClearBatch() = batch.Dispose()
 
     override __.GetBatchedRecordsAffected(commandIdentifier, recordsAffected, error) = 
         recordsAffected <- int batch.Statements.[commandIdentifier].Rows
         error <- null
         true
 
+    override __.ClearBatch() = batch.Parameters.Clear()
+    override __.TerminateBatching() = batch.Dispose()    
