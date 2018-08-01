@@ -4,7 +4,6 @@
     <TargetFramework Condition="'$(Configuration)'=='Debug'">net461</TargetFramework>
     <TargetFramework Condition="'$(Configuration)'=='Release'">netcoreapp2.1</TargetFramework>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
-    <TargetFramework>net47</TargetFramework>
   </PropertyGroup>
 
   <!--<Import Project="fsc.props" />-->
