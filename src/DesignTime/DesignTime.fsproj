@@ -33,7 +33,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.0.0" />
+    <PackageReference Include="Npgsql" Version="4.0.2" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.0.0" />

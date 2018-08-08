@@ -24,10 +24,14 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand) =
     override __.AddToBatch( command) = 
         count <- count + 1
         let mutable commandText = command.CommandText
-        for p in (command :?> NpgsqlCommand).Parameters do 
+        let ps = (command :?> NpgsqlCommand).Parameters
+        for p in ps do 
             let clone = batch.Parameters.Add(p.Clone())
             clone.ParameterName <- sprintf "%s_%i" clone.ParameterName count
-            commandText <- commandText.Replace(p.ParameterName, clone.ParameterName)
+            let trailingChar = 
+                let isLast = ps.IndexOf(p) = ps.Count - 1
+                if isLast then ")" else ","
+            commandText <- commandText.Replace(p.ParameterName + trailingChar, clone.ParameterName + trailingChar)
 
         batch.CommandText <- sprintf "%s\n%s;" batch.CommandText commandText
         count

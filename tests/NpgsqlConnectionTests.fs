@@ -468,3 +468,46 @@ let batchSize() =
         use cmd = DvdRental.CreateCommand<getActorByName, ResultType.Tuples, SingleRow = true, XCtor = true>(conn, tx)
         Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
 
+[<Fact>]
+let ``column "p1_00" does not exist``() =
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    let nextFildId = 
+        use cmd =  DvdRental.CreateCommand<"select nextval('film_film_id_seq' :: regclass)", SingleRow = true, XCtor = true>(conn, tx)
+        cmd.Execute() |> Option.flatten |> Option.map int
+    
+    let actors = new DvdRental.``public``.Tables.film()
+    actors.AddRow(
+        film_id = nextFildId, 
+        title = "title 1", 
+        description = Some "description 1", 
+        release_year = Some 2018, 
+        language_id = 1s, 
+        rental_duration = Some 6s, 
+        rental_rate = Some 0.9M, 
+        length = Some 100s, 
+        replacement_cost = Some 12M, 
+        rating = Some Rating.PG, 
+        last_update = Some DateTime.Now, 
+        special_features = Some [| "Deleted Scenes" |] , 
+        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+    )
+
+    actors.AddRow(
+        film_id = (nextFildId |> Option.map ((+) 1)), 
+        title = "title 2", 
+        description = Some "description 2", 
+        release_year = Some 2019, 
+        language_id = 2s, 
+        rental_duration = Some 7s, 
+        rental_rate = Some 1.9M, 
+        length = Some 200s, 
+        replacement_cost = Some 13M, 
+        rating = Some Rating.R, 
+        last_update = Some( DateTime.Now.AddDays(1.)), 
+        special_features = Some [| "Behind the Scenes" |] , 
+        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+    )
+
+    let i = actors.Update(conn, tx, batchSize = 100)
+    Assert.Equal(actors.Rows.Count, i)
