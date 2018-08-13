@@ -3,12 +3,14 @@ namespace FSharp.Data.Npgsql
 open System.Data
 open System.Data.Common
 open Npgsql
+open System
 
 type internal CommandBuilder(source: DataTable<DataRow>) = 
     inherit DbCommandBuilder(QuotePrefix = "\"", QuoteSuffix = "\"", SchemaSeparator = ".") 
 
     let npgsql = new NpgsqlCommandBuilder()  
-    let rowUpdatingCleanUp = ref null
+    let mutable rowUpdatingCleanUp = null
+    let mutable updatingRowNumber = -1
 
     let schemaTable = 
         use reader = new DataTableReader(source)
@@ -29,20 +31,24 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
             param.NpgsqlDbType <- enum providerType
         | _ -> ()
 
-    override __.GetParameterName parameterName = sprintf "@%s" parameterName
-    override __.GetParameterName parameterOrdinal = sprintf "@p%i" parameterOrdinal
-    override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName(parameterOrdinal)
+    override __.GetParameterName(parameterName: string): string = raise( NotImplementedException())
+    override this.GetParameterName parameterOrdinal = 
+        if updatingRowNumber > 0 
+        then sprintf "@p%i_%i" parameterOrdinal updatingRowNumber
+        else sprintf "@p%i" parameterOrdinal 
+    override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName parameterOrdinal
     override __.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
     override __.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier
                 
-    member private __.SqlRowUpdatingHandler eventArgs = base.RowUpdatingHandler(eventArgs)
+    member private __.SqlRowUpdatingHandler eventArgs = 
+        updatingRowNumber <- updatingRowNumber + 1
+        base.RowUpdatingHandler(eventArgs)
 
     override this.SetRowUpdatingHandler adapter = 
-        if (adapter <> this.DataAdapter)
-        then
-            rowUpdatingCleanUp := (adapter :?> BatchDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
-        else
-            rowUpdatingCleanUp.Value.Dispose()
+        let cleaningUp = (adapter = this.DataAdapter)
+        if not cleaningUp
+        then rowUpdatingCleanUp <- (adapter :?> BatchDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
+        else rowUpdatingCleanUp.Dispose()
 
     override __.GetSchemaTable _ = schemaTable
 

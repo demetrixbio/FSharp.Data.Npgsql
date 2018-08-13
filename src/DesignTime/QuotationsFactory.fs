@@ -50,6 +50,10 @@ type internal QuotationsFactory private() =
         assert (List.length xs = 6)
         Arg6(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5])
 
+    static let (|Arg7|) xs = 
+        assert (List.length xs = 7)
+        Arg7(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5], xs.[6])
+
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
 
     [<Literal>] 
@@ -400,7 +404,8 @@ type internal QuotationsFactory private() =
             let commonParams = [
                 ProvidedParameter("batchSize", typeof<int>, optionalValue = 1)
                 ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
-                ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.CompareAllSearchableValues) 
+                ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.OverwriteChanges) 
+                ProvidedParameter("batchTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
             let connectionStringDefault = if string designTimeConnectionString <> "" then Some(box reuseDesignTimeConnectionString) else None
@@ -411,7 +416,7 @@ type internal QuotationsFactory private() =
                     "Update", 
                     ProvidedParameter("connectionString", typeof<string>, ?optionalValue = connectionStringDefault) :: commonParams, 
                     typeof<int>,
-                    fun (Arg5(table, connectionString, batchSize, continueUpdateOnError, conflictOption)) -> 
+                    fun (Arg6(table, connectionString, batchSize, continueUpdateOnError, conflictOption, batchTimeout)) -> 
                         <@@ 
                             let runTimeConnectionString = 
                                 if %%connectionString = reuseDesignTimeConnectionString
@@ -423,7 +428,7 @@ type internal QuotationsFactory private() =
                                     %%connectionString
 
                             let conn = new NpgsqlConnection(runTimeConnectionString)
-                            Utils.UpdateDataTable(%%table, conn, null, %%batchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, conn, null, %%batchSize, %%continueUpdateOnError, %%conflictOption, %%batchTimeout)
                         @@>
                 )
 
@@ -433,9 +438,9 @@ type internal QuotationsFactory private() =
                     :: ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null) 
                     :: commonParams, 
                     typeof<int>,
-                    fun (Arg6(table, conn, tx, batchSize, continueUpdateOnError,conflictOption)) -> 
+                    fun (Arg7(table, conn, tx, batchSize, continueUpdateOnError, conflictOption, batchTimeout)) -> 
                         <@@ 
-                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%batchSize, %%continueUpdateOnError, %%conflictOption)
+                            Utils.UpdateDataTable(%%table, %%conn, %%tx, %%batchSize, %%continueUpdateOnError, %%conflictOption, %%batchTimeout)
                         @@>
                 )
 

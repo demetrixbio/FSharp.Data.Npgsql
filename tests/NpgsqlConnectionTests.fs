@@ -5,6 +5,7 @@ open Xunit
 open Microsoft.Extensions.Configuration
 open FSharp.Data.Npgsql
 open NpgsqlCmdTests
+open System.Data
 
 [<Literal>]
 let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
@@ -469,6 +470,20 @@ let batchSize() =
         Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
 
 [<Fact>]
+let batchSizeConflictOptionCompareAllSearchableValue() =
+    use conn = openConnection()
+    use tx = conn.BeginTransaction()
+    let actors = new DvdRental.``public``.Tables.actor()
+    actors.AddRow(first_name = "Tom", last_name = "Hanks")
+    actors.AddRow(first_name = "Tom", last_name ="Cruise", last_update = Some DateTime.Now)
+    let i = actors.Update(conn, tx, batchSize = 100, conflictOption = Data.ConflictOption.CompareAllSearchableValues)
+    Assert.Equal(actors.Rows.Count, i)
+
+    for row in actors.Rows do 
+        use cmd = DvdRental.CreateCommand<getActorByName, ResultType.Tuples, SingleRow = true, XCtor = true>(conn, tx)
+        Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
+
+[<Fact>]
 let ``column "p1_00" does not exist``() =
     use conn = openConnection()
     use tx = conn.BeginTransaction()
@@ -476,14 +491,14 @@ let ``column "p1_00" does not exist``() =
         use cmd =  DvdRental.CreateCommand<"select nextval('film_film_id_seq' :: regclass)", SingleRow = true, XCtor = true>(conn, tx)
         cmd.Execute() |> Option.flatten |> Option.map int
 
-    let expected = [ for i in 0..3 -> Option.map ((+) i) nextFildId, sprintf "title %i" i]
+    let expected = [ for i in 0..100 -> Option.map ((+) i) nextFildId, sprintf "title %i" i]
     
     let films = new DvdRental.``public``.Tables.film()
     for id, title in expected do 
         films.AddRow(
             film_id = id, 
             title = title, 
-            description = Some "description 1", 
+            description = Some "Some description", 
             release_year = Some 2018, 
             language_id = 1s, 
             rental_duration = Some 6s, 
@@ -496,7 +511,7 @@ let ``column "p1_00" does not exist``() =
             fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
         )
 
-    let i = films.Update(conn, tx, batchSize = 2)
+    let i = films.Update(conn, tx, batchSize = 10)
     Assert.Equal(films.Rows.Count, i)
 
     for id, title in expected do 

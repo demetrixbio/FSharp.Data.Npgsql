@@ -35,16 +35,17 @@ type Utils private() =
     static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption) = 
+    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 
 
         if batchSize <= 0 then invalidArg "batchSize" "Batch size has to be larger than 0."
+        if batchTimeout <= 0 then invalidArg "batchTimeout" "Batch timeout has to be larger than 0."
 
         let selectCommand = table.SelectCommand
 
         if connection <> null then selectCommand.Connection <- connection
         if transaction <> null then selectCommand.Transaction <- transaction
 
-        use dataAdapter = new BatchDataAdapter(selectCommand, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)
+        use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
