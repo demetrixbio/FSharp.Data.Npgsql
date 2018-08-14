@@ -40,9 +40,9 @@ type Utils private() =
         if batchSize <= 0 then invalidArg "batchSize" "Batch size has to be larger than 0."
         if batchTimeout <= 0 then invalidArg "batchTimeout" "Batch timeout has to be larger than 0."
 
-        let selectCommand = table.SelectCommand
+        use selectCommand = table.SelectCommand.Clone()
 
-        if connection <> null then selectCommand.Connection <- connection
+        selectCommand.Connection <- connection
         if transaction <> null then selectCommand.Transaction <- transaction
 
         use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)

@@ -7,34 +7,27 @@
 //#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.6\lib\net451\Npgsql.dll"
 
 open Npgsql
-open NpgsqlTypes
-open System
-
-typeof<Npgsql.LegacyPostgis.PostgisGeometry>.AssemblyQualifiedName
+open System.Data
 
 do
     //NpgsqlLogManager.Provider <- ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
     //NpgsqlLogManager.IsParameterLoggingEnabled <- true
 
-    use conn = new NpgsqlConnection("Host=localhost;Username=postgres;Database=dvdrental;Port=32768")
-    conn.Open()
-    let types = conn.GetSchema()
-    for r in types.Rows do
-        printfn "%A" r.ItemArray
-    ()
+let conn = new NpgsqlConnection("Host=localhost;Username=postgres;Password=postgres;Database=lims")
 
-    use cmd =  conn.CreateCommand()
-    //cmd.CommandText <- "select now()"
-    //let now = cmd.ExecuteScalar() |> unbox<DateTime>
-    //printfn "Now: %A" now
+conn.Open()
+let tx = conn.BeginTransaction()
 
-    let now = DateTime.Now.AddMinutes(10.)
-    cmd.CommandText <- "select now() < @p"
-    cmd.Parameters.AddWithValue("p", NpgsqlDbType.TimestampTz, now) |> ignore
-    cmd.ExecuteScalar() |> printfn "Result: %A"
+let cmd = new NpgsqlCommand("select * from part.part where id = 1", conn, tx)
 
-    cmd.CommandText <- "select concat(now(), '/ - /', @p)"
-    cmd.Parameters.AddWithValue("p", NpgsqlDbType.TimestampTz, now) |> ignore
-    cmd.ExecuteScalar() |> printfn "Result: %A"
+let t = new DataTable()
+let cursor = cmd.ExecuteReader()
+t.Load cursor
+t.Rows.Count |> printfn "Rows: %i"
 
+let adapter = new NpgsqlDataAdapter(cmd)
+let builder = new NpgsqlCommandBuilder(adapter)
 
+t.Rows.[0].["sequence"] <- t.Rows.[0].["sequence"].ToString() + "_test"
+
+adapter.Update(t) |> printfn "Rows updated: %i"

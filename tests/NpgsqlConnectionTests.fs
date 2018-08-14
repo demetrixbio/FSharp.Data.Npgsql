@@ -518,3 +518,25 @@ let ``column "p1_00" does not exist``() =
         use cmd = DvdRental.CreateCommand<"select title from public.film where film_id = @id", SingleRow = true, XCtor = true>(conn, tx)
         Assert.Equal( Some title, cmd.Execute(id.Value))
 
+[<Literal>]
+let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
+
+type Lims = NpgsqlConnection<lims>
+
+[<Fact>]
+let largeBatchUpdate() =
+    use conn = new Npgsql.NpgsqlConnection(lims)
+
+    conn.Open()
+    use tx = conn.BeginTransaction()
+    let parts = 
+        use cmd = Lims.CreateCommand<"SELECT * FROM part.part LIMIT 1000", ResultType.DataTable, XCtor = true>(conn, tx)
+        cmd.Execute()
+    for r in parts.Rows do
+        r.sequence <- r.sequence |> Option.map (fun s -> s + "=test")
+
+    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
+    printfn "Records affected: %i" recordsAffected
+    Assert.Equal(parts.Rows.Count, recordsAffected)
+
+
