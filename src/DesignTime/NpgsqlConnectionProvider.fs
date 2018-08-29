@@ -13,6 +13,7 @@ open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open FSharp.Data.Npgsql
+open System.Reflection
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
@@ -222,6 +223,21 @@ let getEnums connectionString =
             let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
             for value in values do
                 t.AddMember( ProvidedField.Literal(value, t, value))
+
+            //let valuesFieldType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ t ])
+            //let valuesField = ProvidedField("Values", valuesFieldType) 
+            //valuesField.SetFieldAttributes( FieldAttributes.Public ||| FieldAttributes.InitOnly ||| FieldAttributes.Static)
+            //t.AddMember( valuesField)
+
+            //let typeInit = 
+            //    let valuesExpr = Expr.NewArray(typeof<string>, [ for v in values -> Expr.Value(v)])
+            //    ProvidedConstructor(
+            //        [], 
+            //        invokeCode = (fun _ -> Expr.FieldSet(valuesField, Expr.Coerce(valuesExpr, valuesFieldType))),
+            //        IsTypeInitializer = true
+            //    )
+
+            //t.AddMember typeInit 
 
             yield schema, t
     ]

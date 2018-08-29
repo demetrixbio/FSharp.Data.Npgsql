@@ -28,6 +28,8 @@ type NpgsqlProviders(config) as this =
         let nameSpace = this.GetType().Namespace
         
         assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
+
+        assembly.Location |> Path.GetDirectoryName |> this.RegisterProbingFolder
             
         this.AddNamespace(
             nameSpace, [ 

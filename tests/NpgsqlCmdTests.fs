@@ -382,6 +382,24 @@ let postGisSimpleSelectPointConnStr() =
     let actual = cmd.Execute().Value.Value
     let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
     Assert.Equal(expected, downcast actual)
+
+type UpdateMovieRating = NpgsqlCommand<"UPDATE public.film SET rating = @rating WHERE rating = @oldRating AND title = @title", dvdRental>
+
+[<Fact>]
+let updateWithEnum() =
+    use conn = Connection.get()
+    use tx = conn.BeginTransaction()
+
+    use cmd = new UpdateMovieRating(conn, tx)
+    Assert.Equal( 
+        1, 
+        cmd.Execute( 
+            rating = UpdateMovieRating.``public.mpaa_rating``.``PG-13``, 
+            oldRating = UpdateMovieRating.``public.mpaa_rating``.PG,
+            title = "Academy Dinosaur"
+        )
+    )
+
  
 //[<Fact>]
 //let npPkTable() =

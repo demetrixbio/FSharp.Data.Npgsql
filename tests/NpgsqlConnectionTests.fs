@@ -211,8 +211,16 @@ let deleteWithTx() =
     
 type Rating = DvdRental.``public``.Types.mpaa_rating
 
+//[<Fact>]
+//let enumValues() =
+//    Assert.Equal<_ list>(
+//        [ Rating.G; Rating.PG; Rating.``PG-13``; Rating.R; Rating.``NC-17`` ],
+//        DvdRental.``public``.Types.mpaa_rating.Values 
+//    )
+
 [<Fact>]
 let selectEnum() =
+    
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * 
