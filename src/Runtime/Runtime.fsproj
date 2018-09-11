@@ -42,14 +42,19 @@
   </ItemGroup>
 
   <Target Name="BeforeBuild">
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)" />
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netcoreapp2.0" />
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
   </Target>
 
   <Target Name="AfterBuild">
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\$(TargetFramework)\*.dll;..\DesignTime\bin\$(Configuration)\$(TargetFramework)\*.pdb">
-      <Output TaskParameter="Include" ItemName="DesignTimeBinaries" />
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.dll;..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.pdb">
+      <Output TaskParameter="Include" ItemName="DesignTimeBinaries1" />
     </CreateItem>
-    <Copy SourceFiles="@(DesignTimeBinaries)" DestinationFolder="$(OutputPath)" />
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll;..\DesignTime\bin\$(Configuration)\net461\*.pdb">
+      <Output TaskParameter="Include" ItemName="DesignTimeBinaries2" />
+    </CreateItem>
+    <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netcoreapp2.0" />
+    <Copy SourceFiles="@(DesignTimeBinaries2)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/net461" />
   </Target>
 
   <Target Name="IncludeAllDlls">
