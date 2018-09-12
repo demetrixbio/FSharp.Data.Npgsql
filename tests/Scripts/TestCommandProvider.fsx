@@ -1,10 +1,14 @@
-﻿#r @"C:\Users\dmorozov\.nuget\packages\npgsql\3.2.7\lib\net451\Npgsql.dll"
-#I "../../src/Runtime/bin/Debug/net461"
-#r "FSharp.Data.Npgsql.dll"
+﻿
+//#I "../../src/Runtime/bin/Debug/typeproviders/fsharp41/net461"
+#I "../../src/Runtime/bin/Debug/typeproviders/fsharp41/netcoreapp2.1"
+#r "Npgsql.dll"
+#r "Npgsql.LegacyPostgis.dll"
 #r "netstandard.dll"
+//#r "System.Runtime.dll"
+//#r "System.Reflection.dll"
 
+#r "../../src/Runtime/bin/Debug/netstandard2.0/FSharp.Data.Npgsql.dll"
 open FSharp.Data.Npgsql
-open System
 
 [<Literal>]
 let postgis_24_samples = "Host=localhost;Username=postgres;Password=postgres;Database=postgis_24_sample"

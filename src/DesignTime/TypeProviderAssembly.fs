@@ -11,7 +11,8 @@ open System.IO
 type NpgsqlProviders(config) as this = 
     inherit TypeProviderForNamespaces(
         config, 
-        assemblyReplacementMap = [("FSharp.Data.Npgsql.DesignTime", Path.GetFileNameWithoutExtension(config.RuntimeAssembly))]
+        assemblyReplacementMap = [("FSharp.Data.Npgsql.DesignTime", Path.GetFileNameWithoutExtension(config.RuntimeAssembly))],
+        addDefaultProbingLocation = true
     )
     
     let cache = ConcurrentDictionary()
@@ -29,8 +30,6 @@ type NpgsqlProviders(config) as this =
         
         assert (typeof<``ISqlCommand Implementation``>.Assembly.GetName().Name = assemblyName) 
 
-        assembly.Location |> Path.GetDirectoryName |> this.RegisterProbingFolder
-            
         this.AddNamespace(
             nameSpace, [ 
                 NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)

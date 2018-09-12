@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
+    <TargetFrameworks>netcoreapp2.1;net461</TargetFrameworks>
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
     <DefineConstants>NO_GENERATIVE</DefineConstants>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -32,12 +32,11 @@
 
   <ItemGroup>
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.0.2" />
+    <PackageReference Include="Npgsql" Version="4.0.3" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="2.0.0" />
-    <!--<PackageReference Include="System.Diagnostics.PerformanceCounter" Version="4.5.0" />-->
     <PackageReference Include="System.Xml.XDocument" Version="4.3.0" />
   </ItemGroup>
 
