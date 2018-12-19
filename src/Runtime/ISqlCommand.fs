@@ -135,21 +135,31 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             let message = sprintf "Expected at least %i columns in result set but received only %i." expectedColumns.Length cursor.FieldCount
             cursor.Close()
             invalidOp message
+        
+        //https://stackoverflow.com/questions/2253437/npgsqldatareader-getordinal-throwing-exceptions-any-way-around
+        let actualRow = Dictionary<string, Type>()
+        for i = 0 to cursor.FieldCount - 1 do 
+            actualRow.Add(cursor.GetName(i), cursor.GetFieldType(i))
 
         for i = 0 to expectedColumns.Length - 1 do
             let expectedName, expectedType = expectedColumns.[i].ColumnName, expectedColumns.[i].DataType
-            let actualName, actualType = cursor.GetName( i), cursor.GetFieldType( i)
-                
-            //TO DO: add extended property on column to mark enums
-            let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
-            let maybeArray = expectedType.IsArray && actualType = typeof<Array>
-            let typeless = expectedType = typeof<obj> && actualType = typeof<string>
-            if (expectedName <> "" && actualName <> expectedName) 
-                || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless)
-            then 
-                let message = sprintf """Expected column "%s" of type "%A" at position %i (0-based indexing) but received column "%s" of type "%A".""" expectedName expectedType i actualName actualType
+
+            let (isColumnPresent, actualType) = actualRow.TryGetValue(expectedName)
+            if not isColumnPresent then
+                let message = sprintf """Expected column "%s" of type "%A" was not found in actual row "%A".""" expectedName expectedType actualRow.Keys
                 cursor.Close()
                 invalidOp message
+            else
+                //TO DO: add extended property on column to mark enums
+                let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
+                let maybeArray = expectedType.IsArray && actualType = typeof<Array>
+                let typeless = expectedType = typeof<obj> && actualType = typeof<string>
+                if actualType = expectedType || maybeArray || maybeEnum || typeless then
+                    ()
+                else
+                    let message = sprintf """Expected column "%s" of type "%A" in a row but received column of type "%A".""" expectedName expectedType actualType
+                    cursor.Close()
+                    invalidOp message
 
     static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
