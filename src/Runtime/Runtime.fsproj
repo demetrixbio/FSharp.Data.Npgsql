@@ -6,15 +6,12 @@
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeAllDlls</TargetsForTfmSpecificBuildOutput>
     <Nuspecfile>FSharp.Data.Npgsql.nuspec</Nuspecfile>
   </PropertyGroup>
-  
   <PropertyGroup>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
     <NoWarn>101</NoWarn>
   </PropertyGroup>
-
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
-
   <ItemGroup>
     <Compile Include="DataTable.fs" />
     <Compile Include="BatchDataAdapter.fs" />
@@ -23,28 +20,23 @@
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="DesignTime.fs" />
   </ItemGroup>
-
   <ItemGroup>
     <Content Include="Scripts\NpgsqlGetStarted.fsx">
       <Pack>false</Pack>
     </Content>
   </ItemGroup>
-
   <ItemGroup>
     <None Include="FSharp.Data.Npgsql.nuspec" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.0.3" />
+    <PackageReference Include="Npgsql" Version="4.0.5" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
   </ItemGroup>
-
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netcoreapp2.0" />
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
   </Target>
-
   <Target Name="AfterBuild">
     <CreateItem Include="..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.dll;..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.pdb">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries1" />
@@ -55,11 +47,9 @@
     <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netcoreapp2.0" />
     <Copy SourceFiles="@(DesignTimeBinaries2)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/net461" />
   </Target>
-
   <Target Name="IncludeAllDlls">
     <ItemGroup>
       <BuildOutputInPackage Include="$(OutputPath)\*.dll" Exclude="$(OutputPath)\$(AssemblyName).dll" />
     </ItemGroup>
   </Target>
-
 </Project>
