@@ -188,11 +188,9 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
-        then 
-            let xs = Seq.delay <| fun() -> 
-                ``ISqlCommand Implementation``
-                    .ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
-                    .MapRowValues<'TItem>( rowMapper)
+        then
+            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
+            let xs = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
 
             if readerBehavior.HasFlag(CommandBehavior.SingleRow)
             then 
@@ -200,11 +198,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             else 
                 box xs 
         else
-            let resultset = 
-                ``ISqlCommand Implementation``
-                    .ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
-                    .MapRowValues<'TItem>( rowMapper)
-                    |> Seq.toList
+            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
+            let resultset = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
 
             if hasOutputParameters
             then
@@ -220,8 +215,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     static member internal AsyncExecuteSeq<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns) ->
         let xs = 
             async {
-                let! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns)
-                return reader.MapRowValues<'TItem>( rowMapper)
+                use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns)
+                return reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
             }
 
         if readerBehavior.HasFlag(CommandBehavior.SingleRow)
