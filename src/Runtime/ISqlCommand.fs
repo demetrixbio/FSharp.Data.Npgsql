@@ -61,10 +61,10 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 return upcast cmd.Connection
         }
 
-    static let seqToOption source =  
-        match source |> Seq.truncate 2 |> Seq.toArray with
-        | [||] -> None
-        | [| x |] -> Some x
+    static let listToOption source =  
+        match source |> List.truncate 2 with
+        | [] -> None
+        | [ x ] -> Some x
         | _ -> invalidOp "The output sequence contains more than one element."
 
     let execute, asyncExecute = 
@@ -86,12 +86,12 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 
                 let executeHandle = 
                     typeof<``ISqlCommand Implementation``>
-                        .GetMethod("ExecuteSeq", BindingFlags.NonPublic ||| BindingFlags.Static)
+                        .GetMethod("ExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
                         .MakeGenericMethod(itemType)
                 
                 let asyncExecuteHandle = 
                     typeof<``ISqlCommand Implementation``>
-                        .GetMethod("AsyncExecuteSeq", BindingFlags.NonPublic ||| BindingFlags.Static)
+                        .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
                         .MakeGenericMethod(itemType)
                         
                 executeHandle.Invoke(null, [| rowMapping |]) |> unbox >> box, 
@@ -184,22 +184,22 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             return result
         }
 
-    static member internal ExecuteSeq<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, expectedColumns) -> 
+    static member internal ExecuteList<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, expectedColumns) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
         then
             use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
-            let xs = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
+            let xs = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
 
             if readerBehavior.HasFlag(CommandBehavior.SingleRow)
             then 
-                xs |> seqToOption |> box
+                xs |> listToOption |> box
             else 
                 box xs 
         else
             use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
-            let resultset = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
+            let resultset = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
 
             if hasOutputParameters
             then
@@ -212,18 +212,18 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
             box resultset
             
-    static member internal AsyncExecuteSeq<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns) ->
+    static member internal AsyncExecuteList<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns) ->
         let xs = 
             async {
                 use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns)
-                return reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList :> seq<'TItem>
+                return reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
             }
 
         if readerBehavior.HasFlag(CommandBehavior.SingleRow)
         then
             async {
                 let! xs = xs 
-                return xs |> seqToOption
+                return xs |> listToOption
             }
             |> box
         else 
