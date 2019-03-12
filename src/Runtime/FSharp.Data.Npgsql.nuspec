@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
   <metadata>
     <id>FSharp.Data.Npgsql</id>
-    <version>0.1.44-beta</version>
+    <version>0.1.45-beta</version>
     <authors>Dmitry Morozov</authors>
     <owners>Dmitry Morozov</owners>
     <licenseUrl>https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE</licenseUrl>
@@ -12,7 +12,7 @@
     <copyright>Copyright 2017-2018 Dmitry Morozov</copyright>
     <tags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</tags>
     <dependencies>
-      <dependency id="Npgsql" version="4.0.3"/>
+      <dependency id="Npgsql" version="4.0.5"/>
       <dependency id="Npgsql.LegacyPostgis" version="1.0.0"/>
     </dependencies>
     <references>
