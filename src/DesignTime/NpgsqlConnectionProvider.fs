@@ -12,8 +12,6 @@ open Npgsql
 
 open FSharp.Data.Npgsql
 open InformationSchema
-open FSharp.Data.Npgsql
-open System.Reflection
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 

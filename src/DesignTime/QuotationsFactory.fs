@@ -513,8 +513,7 @@ type internal QuotationsFactory private() =
                     then
                         ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ providedRowType ])
                     else
-                        let collectionType = if hasOutputParameters then typedefof<_ list> else typedefof<_ seq>
-                        ProvidedTypeBuilder.MakeGenericType( collectionType, [ providedRowType ])
+                        ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ providedRowType ])
 
                 PerRow = Some { 
                     Provided = providedRowType
