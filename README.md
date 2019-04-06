@@ -1,18 +1,18 @@
 ## Description
-FSharp.Data.Npgsql is F# type providers library on a top of well-known [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html). 
+FSharp.Data.Npgsql is F# type providers library on a top of well-known [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html).
 
-The library includes two type providers: NpgsqlConnection and NpgsqlCommand. 
+The library includes two type providers: NpgsqlConnection and NpgsqlCommand.
 
 ## Nuget package
 
 https://www.nuget.org/packages/FSharp.Data.Npgsql/
 
-## Target platforms: 
+## Target platforms:
   - netstandard2.0
   - net461
-    
-  To compile on Linux/Mac F# project consuming the type provider make sure to run on [Mono 5.8.0](http://www.mono-project.com/docs/about-mono/releases/5.8.0/) or later. Mono 5.4.1 was failing for me with mysterious errors. Also apply [this fix](https://github.com/Microsoft/visualfsharp/issues/3303#issue-240393680) to your project file. See examples [here](https://github.com/fsprojects/FSharp.TypeProviders.SDK/tree/master/examples). 
-  
+
+  To compile on Linux/Mac F# project consuming the type provider make sure to run on [Mono 5.8.0](http://www.mono-project.com/docs/about-mono/releases/5.8.0/) or later. Mono 5.4.1 was failing for me with mysterious errors. Also apply [this fix](https://github.com/Microsoft/visualfsharp/issues/3303#issue-240393680) to your project file. See examples [here](https://github.com/fsprojects/FSharp.TypeProviders.SDK/tree/master/examples).
+
 ## Setup
 
 All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions exist:
@@ -31,7 +31,7 @@ type DvdRental = NpgsqlConnection<dvdRental>
 do
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
 
-    for x in cmd.Execute() do   
+    for x in cmd.Execute() do
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 Alternatevly using inline ```NpgsqlCommand``` definition.
@@ -44,7 +44,7 @@ Or using ```NpgsqlCommand``` with explicit type alias. `Create` factory method c
 
 ```fsharp
 type BasicQuery = NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
-do 
+do
     use cmd = BasicQuery.Create(dvdRental)
     //...
 ```
@@ -55,7 +55,7 @@ do
 do
     use cmd = DvdRental.CreateCommand<"SELECT title FROM public.film WHERE length > @longer_than">(dvdRental)
     let longerThan = TimeSpan.FromHours(3.)
-    let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
+    let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList
     printfn "Movies longer than %A:\n%A" longerThan xs
 ```
 ```NpgsqlCommand``` version:
@@ -64,8 +64,8 @@ do
     use cmd = new NpgsqlCommand<"SELECT title FROM public.film WHERE length > @longer_than", dvdRental>(dvdRental)
     let longerThan = System.TimeSpan.FromHours(3.)
     cmd.Execute(longer_than = int16 longerThan.TotalMinutes)
-    |> Seq.toList 
-    |> printfn "Movies longer than %A:\n%A" longerThan 
+    |> Seq.toList
+    |> printfn "Movies longer than %A:\n%A" longerThan
 ```
 
 ## Retrieve singleton record
@@ -78,7 +78,7 @@ do
 ```
 
 ```fsharp
-do 
+do
     use cmd = new NpgsqlCommand<"SELECT current_date as today", dvdRental, SingleRow = true>(dvdRental)
     cmd.Execute() |> printfn "Today is: %A"
 ```
@@ -86,28 +86,28 @@ do
 ## Result types
 
 There are 4 result types:
- - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See examples above. 
- - `ResultType.Tuples` - In practice it's rarely useful but why not? 
+ - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See examples above.
+ - `ResultType.Tuples` - In practice it's rarely useful but why not?
  ```fsharp
  do
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
-    for title, releaseYear in cmd.Execute() do   
+    for title, releaseYear in cmd.Execute() do
         printfn "Movie '%s' released in %i." title releaseYear.Value
  ```
- - `ResultType.DataTable` comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details. 
- - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
-is the only useful scenario. 
+ - `ResultType.DataTable` comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details.
+ - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert
+is the only useful scenario.
 
 ## NpgsqlConnection or NpgsqlCommand?
 
 It's recommended to use ```NpgsqlConnection``` type provider by default. ```NpgsqlCommand``` type provider exists mainly for flexibility.
-```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place. 
+```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place.
 
-But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
+But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience.
 
-## Naming 
+## Naming
 
-Both type providers have local type names that collide with types from Npgsql library. I admit it's slightly controversial decision but naming is too important to be compromised on. I believe both names best communicate the intent. 
+Both type providers have local type names that collide with types from Npgsql library. I admit it's slightly controversial decision but naming is too important to be compromised on. I believe both names best communicate the intent.
 If you'll end up having following error message :
 ```
 ...
@@ -117,7 +117,7 @@ FS0033	The non-generic type 'Npgsql.NpgsqlCommand' does not expect any type argu
 or
 ```
 ...
-FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type arguments, but here is given 2 type argument(s)	
+FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type arguments, but here is given 2 type argument(s)
 ...
 ```
 
@@ -135,8 +135,8 @@ type BasicQuery = FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year F
 do
     use cmd = new FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
 ```
- 
-It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little. 
+
+It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little.
 
  - Use fully qualified names for `Npgsql.NpgsqlConnection` and `Npgsql.NpgsqlCommand`
 
@@ -146,13 +146,13 @@ type PgConnectoin = Npgsql.NpgsqlConnection
 type PgCommand = Npgsql.NpgsqlCommand
 ```
 
-- Isolate usage by module or file  
+- Isolate usage by module or file
 
-I expect once you commit to the `NpgsqlCommand` type provider usage of `Npgsql.NpgsqlCommand` type will be very limited so name collision is not an issue.  
+I expect once you commit to the `NpgsqlCommand` type provider usage of `Npgsql.NpgsqlCommand` type will be very limited so name collision is not an issue.
 
 `Npgsql.NpgsqlConnection` collision can be solved by a simple helper function:
 ```fsharp
-let openConnection(connectionString) = 
+let openConnection(connectionString) =
     let conn = new Npgsql.NpgsqlConnection(connectionString)
     conn.Open()
     conn
@@ -164,25 +164,35 @@ Every instance of generated command has async counterpart of `Execute` method - 
 ```fsharp
 do
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
-    for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
+    for x in cmd.AsyncExecute() |> Async.RunSynchronously do
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 
 ```fsharp
 do
     use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
-    for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
+    for x in cmd.AsyncExecute() |> Async.RunSynchronously do
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
+
+## Prepared statements
+The methods `ExecutePrepared` and `AsyncExecutePrepared` on both `NpgsqlCommand` and `NpgsqlConnection` allow you to execute [prepared statements](https://www.npgsql.org/doc/prepare.html).
+
+```fsharp
+do
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+    for x in cmd.ExecutePrepared() do
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 
 ## Configuration
 _Design-time type providers configuration is never passed to run-time._
 
-Command constructor/factory method expects run-time connection parameter. 
+Command constructor/factory method expects run-time connection parameter.
 A notable exception is [Fsx](#scripting) flag.
-Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.  
+Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.
 
-Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
+Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals.
 
 - `ConfigType.JsonFile`
 ```fsharp
@@ -193,9 +203,9 @@ type DvdRental = NpgsqlConnection<connectionStringName, Config = jsonConfig>
 
 // NpgsqlCommand
 do
-    use cmd = new NpgsqlCommand<"        
+    use cmd = new NpgsqlCommand<"
         SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", Config = jsonConfig >(dvdRental)  
+    ", "dvdRental", Config = jsonConfig >(dvdRental)
     //...
 ```
 The type provider will look for connection string named `dvdRental` in file that should have content like:
@@ -214,31 +224,31 @@ type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.Environment>
 
 // NpgsqlCommand
 do
-    use cmd = new NpgsqlCommand<"        
+    use cmd = new NpgsqlCommand<"
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.Environment>(dvdRental)
 ```
 - `ConfigType.UserStore`
 
-Reads design time connection string from user store. 
+Reads design time connection string from user store.
 ```fsharp
 type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore>
 
 // NpgsqlCommand
 do
-    use cmd = new NpgsqlCommand<"        
+    use cmd = new NpgsqlCommand<"
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
 ```
 
-For the code above the type provider will try to find _single_ F# project in resolution folder and parse it to extract value of <UserSecretsId> element. This approach relies on several assumptions. Unfortunately more robust way via reading [UserSecretsIdAttribute](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.usersecrets.usersecretsidattribute?view=aspnetcore-2.0) is not available for the type provider because final assembly is not generated yet. To address this UserSecretsId can be supplied via Config parameter.  
- 
+For the code above the type provider will try to find _single_ F# project in resolution folder and parse it to extract value of <UserSecretsId> element. This approach relies on several assumptions. Unfortunately more robust way via reading [UserSecretsIdAttribute](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.usersecrets.usersecretsidattribute?view=aspnetcore-2.0) is not available for the type provider because final assembly is not generated yet. To address this UserSecretsId can be supplied via Config parameter.
+
 ```fsharp
 type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">
 
 // NpgsqlCommand
 do
-    use cmd = new NpgsqlCommand<"        
+    use cmd = new NpgsqlCommand<"
         SELECT 42 AS Answer, current_date as today
     ", "dvdRental", ConfigType = ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">(dvdRental)
     //...
@@ -255,48 +265,48 @@ More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspne
     //deactivate customer if exists and active
     let email = "mary.smith@sakilacustomer.org"
 
-    use cmd = new NpgsqlCommand<" 
-            UPDATE public.customer 
-            SET activebool = false 
-            WHERE email = @email 
+    use cmd = new NpgsqlCommand<"
+            UPDATE public.customer
+            SET activebool = false
+            WHERE email = @email
                 AND activebool
     ", dvdRental, SingleRow = true>(dvdRental)
 
     let recordsAffected = cmd.Execute(email)
-    if recordsAffected = 0 
+    if recordsAffected = 0
     then
         printfn "Could not deactivate customer %s" email
     elif recordsAffected = 1
-    then 
-        use restore = 
-            new NpgsqlCommand<" 
-                UPDATE public.customer 
+    then
+        use restore =
+            new NpgsqlCommand<"
+                UPDATE public.customer
                 SET activebool = true
-                WHERE email = @email 
+                WHERE email = @email
             ", dvdRental>(dvdRental)
-        assert( restore.Execute(email) = 1)    
+        assert( restore.Execute(email) = 1)
 ```
-- `ResultType.DataTable` - good to handle updates, deletes, upserts or inserts mixed with any above. 
+- `ResultType.DataTable` - good to handle updates, deletes, upserts or inserts mixed with any above.
 
 ```fsharp
-    //Deactivate customer if found and active 
+    //Deactivate customer if found and active
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
-    use tx = conn.BeginTransaction()    
-    use cmd = 
+    use tx = conn.BeginTransaction()
+    use cmd =
         new NpgsqlCommand<"
             SELECT customer_id, activebool
-            FROM public.customer 
-            WHERE email = @email  
+            FROM public.customer
+            WHERE email = @email
         ", dvdRental, ResultType.DataTable>(conn, tx)
     let t = cmd.Execute(email = "mary.smith@sakilacustomer.org")
     if t.Rows.Count > 0 && t.Rows.[0].activebool
-    then 
+    then
         t.Rows.[0].activebool <- true
         assert( t.Update(conn, tx) = 1)
 
     //Commit to persist changes
-    //tx.Commit() 
+    //tx.Commit()
 ```
 
 - Statically-typed data tables for inserts-only scenarios (for example ETL). Avalable only on ```NpgsqlConnection``` type provider.
@@ -311,27 +321,27 @@ More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspne
 
     //or
     //t.AddRow(first_name = "Tom", last_name = "Hanks")
-    //let r = t.Rows.[0] 
+    //let r = t.Rows.[0]
 
     assert( t.Update(conn, tx) = 1)
     printfn "Identity 'actor_id' %i and column with default 'last update': %A auto-fetched." r.actor_id r.last_update
 ```
-Worth noting that statically typed tables know to auto-fetch generated ids and default values after insert but only if updateBatchSize parameter set 1 (which is default). 
+Worth noting that statically typed tables know to auto-fetch generated ids and default values after insert but only if updateBatchSize parameter set 1 (which is default).
 
 ## Transactions
-Every instance of generated by `NpgsqlCommand` type provider command has constructor overload that accepts mandatory connection instance and optional transaction instance. Use it to executed commands inside transaction. 
+Every instance of generated by `NpgsqlCommand` type provider command has constructor overload that accepts mandatory connection instance and optional transaction instance. Use it to executed commands inside transaction.
 ```fsharp
 do
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
     use tx = conn.BeginTransaction()
-    use cmd = new NpgsqlCommand<"        
+    use cmd = new NpgsqlCommand<"
         INSERT INTO public.actor (first_name, last_name)
         VALUES(@firstName, @lastName)
     ", dvdRental>(conn, tx)
     assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
     //Commit to persist changes
-    //tx.Commit()    
+    //tx.Commit()
 ```
 `NpgsqlConnection` type provider handles transaction object diffrerently because [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) cannot have overloads by design. Pass extra `XCtor = true` parameter to have `CreateCommand` method signature that accepts connection + optional transaction. `XCtor` stands for extended constructor.
 ```fsharp
@@ -339,8 +349,8 @@ do
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
     use tx = conn.BeginTransaction()
-    use cmd = 
-        DvdRental.CreateCommand<"        
+    use cmd =
+        DvdRental.CreateCommand<"
             INSERT INTO public.actor (first_name, last_name)
             VALUES(@firstName, @lastName)`
         ", XCtor = true>(conn, tx)
@@ -348,15 +358,15 @@ do
     //Commit to persist changes
     //tx.Commit()
 ```
-`XCtor` also can be set on top level effectively making all `CreateCommand` methods to accept connection + transaction combination. 
+`XCtor` also can be set on top level effectively making all `CreateCommand` methods to accept connection + transaction combination.
 ```fsharp
 type DvdRentalXCtor = NpgsqlConnection<dvdRental, XCtor = true>
 do
     use conn = new Npgsql.NpgsqlConnection(dvdRental)
     conn.Open()
     use tx = conn.BeginTransaction()
-    use cmd = 
-        DvdRentalXCtor.CreateCommand<"        
+    use cmd =
+        DvdRentalXCtor.CreateCommand<"
             INSERT INTO public.actor (first_name, last_name)
             VALUES(@firstName, @lastName)
         ">(conn, tx)
@@ -370,16 +380,16 @@ To make scripting experience more palatable the type providers accept boolean fl
 ```
 type DvdRentalForScripting = NpgsqlConnection<dvdRental, Fsx = true>
 do
-    use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
+    use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()
     //...
 ```
 
 ```fsharp
-do 
-    use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental, Fsx = true>()    
+do
+    use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental, Fsx = true>()
     //...
 ```
-Re-using design time connection string allowed only for types evaluated in FSI. Attempt to create command that re-uses design time connection string outside FSI will throw an exception. 
+Re-using design time connection string allowed only for types evaluated in FSI. Attempt to create command that re-uses design time connection string outside FSI will throw an exception.
 
 ## Optional input parameters
 By default all input parameters of `Execute`/`AsyncExecute` methods generated by the type providers are mandatory. There are rare cases when you prefer to handle NULL input values inside SQL script. `AllParametersOptional` set to true makes all parameters optional.
@@ -388,9 +398,9 @@ do
     use cmd = new NpgsqlCommand<"
         SELECT coalesce(@x, 'Empty') AS x
     ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
-    
-    assert( cmd.Execute(Some "test") = Some( Some "test")) 
-    assert( cmd.Execute() = Some( Some "Empty")) 
+
+    assert( cmd.Execute(Some "test") = Some( Some "test"))
+    assert( cmd.Execute() = Some( Some "Empty"))
 ```
 
 ## Bulk Copy
@@ -402,36 +412,36 @@ To upload fast large amount of data use `BinaryImport` method on statically type
     use tx = conn.BeginTransaction()
 
     let actors = new DvdRental.``public``.Tables.actor()
-        
-    let actor_id = 
+
+    let actor_id =
         use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
-        cmd.Execute() |> Option.flatten 
-    
-    //Binary copy operation expects all columns including auto-generated and having defaults to be populated. 
-    //Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method. 
+        cmd.Execute() |> Option.flatten
+
+    //Binary copy operation expects all columns including auto-generated and having defaults to be populated.
+    //Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method.
     actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
-    
+
     actors.BinaryImport(conn)
 
-    use cmd = 
+    use cmd =
         DvdRental.CreateCommand<
-            "SELECT COUNT(*) FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", 
-            SingleRow = true, 
+            "SELECT COUNT(*) FROM public.actor WHERE first_name = @firstName AND last_name = @lastName",
+            SingleRow = true,
             XCtor = true>(conn, tx)
 
     assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
 ```
-Worth noting that `BinaryImport` operation expects _all_ columns including auto-generated and having defaults to be populated with values. 
+Worth noting that `BinaryImport` operation expects _all_ columns including auto-generated and having defaults to be populated with values.
 `BinaryImport` implementation uses Npgsql [Binary COPY](http://www.npgsql.org/doc/copy.html#binary-copy).
 
 ## Limitations
 
-  - One unfortunate PostgreSQL limitation is that column nullability cannot be inferred for derived columns. A command 
+  - One unfortunate PostgreSQL limitation is that column nullability cannot be inferred for derived columns. A command
   ```fsharp
   use cmd = new NpgsqlCommand<"SELECT 42 AS Answer", dvdRental>(dvdRental)
   assert( cmd.Execute() |> Seq.exactlyOne = Some 42)
   ```
-  will infer ```seq<Option<int>>``` as result although it's cleary should be ```seq<int>```. 
+  will infer ```seq<Option<int>>``` as result although it's cleary should be ```seq<int>```.
   - Custom enums and array types are supported but composite types not yet.
   - Data modification batch processing is [not supported](https://github.com/npgsql/npgsql/issues/1830).
 
@@ -442,4 +452,3 @@ From the repo root folder
 - docker build -t pg_dvdrental .\tests\
 - docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
 - dotnet test .\tests\
-

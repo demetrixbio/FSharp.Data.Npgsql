@@ -77,9 +77,11 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     |> cmdProvidedType.AddMember
 
                 addRedirectToISqlCommandMethod returnType.Single "Execute" 
+                addRedirectToISqlCommandMethod returnType.Single "ExecutePrepared" 
                             
                 let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
                 addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" 
+                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecutePrepared" 
 
             commands.AddMember cmdProvidedType
 
