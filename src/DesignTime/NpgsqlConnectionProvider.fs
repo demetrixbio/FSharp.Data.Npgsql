@@ -15,7 +15,7 @@ open InformationSchema
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor, globalPrepare) = 
         
     let xctorParam = ProvidedStaticParameter("XCtor", typeof<bool>, false) 
 
@@ -28,6 +28,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             ProvidedStaticParameter("TypeName", typeof<string>, "") 
         ] @ [ 
             if not globalXCtor then yield xctorParam
+            yield ProvidedStaticParameter("Prepare", typeof<bool>, globalPrepare)   
         ]
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
@@ -35,12 +36,12 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
         let getMethodImpl () = 
 
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor  = 
+            let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor, prepare =
                 if not globalXCtor
                 then 
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
                 else
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true
+                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true, args.[5] :?> _
                     
             if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
             then 
@@ -110,6 +111,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     SeqItemTypeName = %%returnType.SeqItemTypeName
                     ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
                     UseLegacyPostgis = useLegacyPostgis
+                    Prepare = prepare
                 } @@>
 
 
@@ -262,7 +264,7 @@ let getUserSchemas connectionString =
 let createRootType
     ( 
         assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder,
-        connectionStringOrName, configType, config, xctor, fsx
+        connectionStringOrName, configType, config, xctor, fsx, prepare
     ) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
@@ -300,7 +302,7 @@ let createRootType
 
     let commands = ProvidedTypeDefinition( "Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor, prepare)
 
     databaseRootType           
 
@@ -316,13 +318,14 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                 ProvidedStaticParameter("Config", typeof<string>, "") 
                 ProvidedStaticParameter("XCtor", typeof<bool>, false) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
+                ProvidedStaticParameter("Prepare", typeof<bool>, false) 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName, fun _ -> 
                         createRootType(
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5]
                         )
                 )   
             ) 
