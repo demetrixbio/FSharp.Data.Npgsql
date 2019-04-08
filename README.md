@@ -183,13 +183,13 @@ do
 type DvdRental = NpgsqlConnection<dvdRental, Prepare = true>
 
 do
-	// Will be prepared
+    // Will be prepared
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
     for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 
 do
-	// Overrides the DvdRental setting and thus won't be prepared
+    // Overrides the DvdRental setting and thus won't be prepared
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = false>(dvdRental)
     for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
@@ -198,7 +198,7 @@ do
 
 ```fsharp
 do 
-	// Will be prepared
+    // Will be prepared
     use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = true>(dvdRental)
 	for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
