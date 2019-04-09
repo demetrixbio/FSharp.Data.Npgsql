@@ -141,5 +141,6 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
 <param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
+<param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
 """
     providerType
