@@ -526,6 +526,14 @@ let ``column "p1_00" does not exist``() =
         use cmd = DvdRental.CreateCommand<"select title from public.film where film_id = @id", SingleRow = true, XCtor = true>(conn, tx)
         Assert.Equal( Some title, cmd.Execute(id.Value))
 
+
+[<Fact>]
+let selectBytea() =
+    use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value.Value
+    let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
+    Assert.Equal<byte>(expected, actual)
+
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
