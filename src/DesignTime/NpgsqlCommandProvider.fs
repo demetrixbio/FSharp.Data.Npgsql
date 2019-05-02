@@ -21,14 +21,8 @@ let createRootType
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-    let parameters = InformationSchema.extractParameters(connectionString, sqlStatement, allParametersOptional)
-
     let customTypes = ref( dict [])
-
-    let outputColumns = 
-        if resultType <> ResultType.DataReader
-        then InformationSchema.getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, customTypes)
-        else []
+    let (parameters, outputColumns) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, customTypes)
 
     let cmdProvidedType = ProvidedTypeDefinition(assembly, nameSpace, typeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
 
@@ -126,7 +120,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                         unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7]
                     )
             )
-        ) 
+        )
     )
 
     providerType.AddXmlDoc """

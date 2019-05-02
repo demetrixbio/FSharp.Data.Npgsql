@@ -3,31 +3,28 @@
 open System
 open System.Data
 open System.Collections.Concurrent
-open System.Collections.Generic
 
 open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 
 open Npgsql
 
+open System.Collections.Generic
 open FSharp.Data.Npgsql
 open InformationSchema
 
 let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes, fsx, isHostedExecution, globalXCtor) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor) = 
         
-    let xctorParam = ProvidedStaticParameter("XCtor", typeof<bool>, false) 
-
     let staticParams = 
         [
-            ProvidedStaticParameter("CommandText", typeof<string>) 
-            ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
-            ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
-            ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
-            ProvidedStaticParameter("TypeName", typeof<string>, "") 
-        ] @ [ 
-            if not globalXCtor then yield xctorParam
+            yield ProvidedStaticParameter("CommandText", typeof<string>) 
+            yield ProvidedStaticParameter("ResultType", typeof<ResultType>, ResultType.Records) 
+            yield ProvidedStaticParameter("SingleRow", typeof<bool>, false)   
+            yield ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
+            yield ProvidedStaticParameter("TypeName", typeof<string>, "") 
+            if not globalXCtor then yield ProvidedStaticParameter("XCtor", typeof<bool>, false)
         ]
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
@@ -46,12 +43,9 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             then 
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-            let parameters = extractParameters(connectionString, sqlStatement, allParametersOptional)
-
-            let outputColumns = 
-                if resultType <> ResultType.DataReader
-                then getOutputColumns(connectionString, sqlStatement, CommandType.Text, parameters, ref customTypes)
-                else []
+            let customTypes = dbSchemaLookups.Enums :> IDictionary<string, ProvidedTypeDefinition> |> ref
+            
+            let (parameters, outputColumns) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, customTypes)
 
             let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
@@ -69,7 +63,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
 
             do  
-                let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
+                let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, dbSchemaLookups.Enums)
 
                 let addRedirectToISqlCommandMethod outputType name = 
                     let hasOutputParameters = false
@@ -130,138 +124,10 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
     ))
     rootType.AddMember m
 
-//https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
 
-let getTableTypes(connectionString: string, schema, customTypes: Map<_, ProvidedTypeDefinition list>, fsx, isHostedExecution) = 
-    let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
-    tables.AddMembersDelayed <| fun() ->
-        
-        getTables(connectionString, schema)
-        |> List.map (fun (tableName, description) -> 
-                
-            let columns = getTableColumns(connectionString, schema, tableName, customTypes)
-
-            //type data row
-            let dataRowType = QuotationsFactory.GetDataRowType(columns)
-            //type data table
-            let dataTableType = 
-                QuotationsFactory.GetDataTableType(
-                    tableName, 
-                    dataRowType, 
-                    columns, 
-                    isHostedExecution && fsx,
-                    designTimeConnectionString = (if fsx then connectionString else null)
-                )
-
-            dataTableType.AddMember dataRowType
-        
-            do
-                description |> Option.iter (fun x -> dataTableType.AddXmlDoc( sprintf "<summary>%s</summary>" x))
-
-            do //ctor
-                let invokeCode _ = 
-
-                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
-
-                    let twoPartTableName = 
-                        use x = new NpgsqlCommandBuilder()
-                        sprintf "%s.%s" (x.QuoteIdentifier schema) (x.QuoteIdentifier tableName)
-
-                    let cmdText =  
-                        columns
-                        |> List.map(fun c ->  c.Name)
-                        |> String.concat " ,"
-                        |> sprintf "SELECT %s FROM %s" twoPartTableName
-
-                    <@@ 
-                        let selectCommand = new NpgsqlCommand(cmdText)
-                        let table = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand)
-                        table.TableName <- twoPartTableName
-                        table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
-                        table
-                    @@>
-
-                let ctor = ProvidedConstructor([], invokeCode)
-                dataTableType.AddMember ctor    
-
-                let binaryImport = 
-                    ProvidedMethod(
-                        "BinaryImport", 
-                        [ ProvidedParameter("connection", typeof<NpgsqlConnection> ) ],
-                        typeof<Void>,
-                        invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
-                    )
-                dataTableType.AddMember binaryImport
-
-            dataTableType
-        )
-
-    tables
-
-let getEnums connectionString = 
-    use conn = openConnection(connectionString)
-    use cmd = conn.CreateCommand()
-    cmd.CommandText <- "
-        SELECT
-          n.nspname              AS schema,
-          t.typname              AS name,
-          array_agg(e.enumlabel) AS values
-        FROM pg_type t
-          JOIN pg_enum e ON t.oid = e.enumtypid
-          JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-        GROUP BY
-          schema, name
-    "
-    [
-        use cursor = cmd.ExecuteReader()
-        while cursor.Read() do
-            let schema = cursor.GetString(0)
-            let name = cursor.GetString(1)
-            let values: string[] = cursor.GetValue(2) :?> _
-            let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
-            for value in values do
-                t.AddMember( ProvidedField.Literal(value, t, value))
-
-            //let valuesFieldType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ t ])
-            //let valuesField = ProvidedField("Values", valuesFieldType) 
-            //valuesField.SetFieldAttributes( FieldAttributes.Public ||| FieldAttributes.InitOnly ||| FieldAttributes.Static)
-            //t.AddMember( valuesField)
-
-            //let typeInit = 
-            //    let valuesExpr = Expr.NewArray(typeof<string>, [ for v in values -> Expr.Value(v)])
-            //    ProvidedConstructor(
-            //        [], 
-            //        invokeCode = (fun _ -> Expr.FieldSet(valuesField, Expr.Coerce(valuesExpr, valuesFieldType))),
-            //        IsTypeInitializer = true
-            //    )
-
-            //t.AddMember typeInit 
-
-            yield schema, t
-    ]
-    |> List.groupBy fst
-    |> List.map(fun (schema, types) ->
-        schema, List.map snd types
-    )
-    |> Map.ofList
-    
-let getUserSchemas connectionString = 
-    use conn = openConnection connectionString
-    use cmd = new NpgsqlCommand("
-        SELECT n.nspname  
-        FROM pg_catalog.pg_namespace n                                       
-        WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema';
-    ", conn)
-
-    using (cmd.ExecuteReader()) <| fun cursor -> 
-    [ 
-        while cursor.Read() do 
-            yield cursor.GetString(0) 
-    ]
-        
 let createRootType
     ( 
-        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder,
+        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, (schemaCache : ConcurrentDictionary<string, DbSchemaLookups>),
         connectionStringOrName, configType, config, xctor, fsx
     ) =
 
@@ -270,41 +136,96 @@ let createRootType
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
-    let schemas = 
-        connectionString
-        |> getUserSchemas
-        |> List.map (fun schema -> ProvidedTypeDefinition(schema, baseType = Some typeof<obj>, hideObjectMethods = true))
+    let schemaLookups =
+        schemaCache.GetOrAdd(
+            connectionString, fun _ ->
+                InformationSchema.getDbSchemaLookups(connectionString))
+    
+    for item in schemaLookups.Schemas do
+        let schema = item.Key
+        let enums = item.Value.Enums
+        let tables = item.Value.Tables |> Seq.map (fun i -> i.Key, i.Value |> List.ofSeq) |> List.ofSeq
         
-    let enums = getEnums connectionString
+        let s = ProvidedTypeDefinition(schema.Name, baseType = Some typeof<obj>, hideObjectMethods = true)
+        databaseRootType.AddMember s
+        
+        let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
+        for enum in enums do
+            es.AddMember enum.Value
+        s.AddMember es
+        
+        let ts = ProvidedTypeDefinition("Tables", Some typeof<obj>)
+        ts.AddMembersDelayed <| fun _ ->
+            [
+                for (table, columns) in tables ->
+                    //type data row
+                    let dataRowType = QuotationsFactory.GetDataRowType(columns)
+                    //type data table
+                    let dataTableType = 
+                        QuotationsFactory.GetDataTableType(
+                            table.Name, 
+                            dataRowType, 
+                            columns, 
+                            isHostedExecution && fsx,
+                            designTimeConnectionString = (if fsx then connectionString else null)
+                        )
 
-    databaseRootType.AddMembers schemas
+                    dataTableType.AddMember dataRowType
+                
+                    do
+                        table.Description |> Option.iter (fun x -> dataTableType.AddXmlDoc( sprintf "<summary>%s</summary>" x))
 
-    let customTypes = Dictionary()
+                    do //ctor
+                        let invokeCode _ = 
 
-    for s in schemas do
-        let ts = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
+                            let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
 
-        enums 
-        |> Map.tryFind s.Name 
-        |> Option.iter (fun xs ->
-            for x in xs do  
-                ts.AddMember x
-                customTypes.Add(sprintf "%s.%s" s.Name x.Name, x)
-        )
+                            let twoPartTableName = 
+                                use x = new NpgsqlCommandBuilder()
+                                sprintf "%s.%s" (x.QuoteIdentifier schema.Name) (x.QuoteIdentifier table.Name)
 
-        s.AddMember ts
+                            let cmdText =  
+                                columns
+                                |> List.map(fun c ->  c.Name)
+                                |> String.concat " ,"
+                                |> sprintf "SELECT %s FROM %s" twoPartTableName
 
-    for schemaType in schemas do
-        schemaType.AddMemberDelayed <| fun() -> 
-            getTableTypes(connectionString, schemaType.Name, enums, fsx, isHostedExecution)
+                            <@@ 
+                                let selectCommand = new NpgsqlCommand(cmdText)
+                                let table = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand)
+                                table.TableName <- twoPartTableName
+                                table.Columns.AddRange(%%Expr.NewArray(typeof<DataColumn>, columnExprs))
+                                table
+                            @@>
 
-    let commands = ProvidedTypeDefinition( "Commands", None)
+                        let ctor = ProvidedConstructor([], invokeCode)
+                        dataTableType.AddMember ctor    
+
+                        let binaryImport = 
+                            ProvidedMethod(
+                                "BinaryImport", 
+                                [ ProvidedParameter("connection", typeof<NpgsqlConnection> ) ],
+                                typeof<Void>,
+                                invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
+                            )
+                        dataTableType.AddMember binaryImport
+
+                    dataTableType
+            ]
+        s.AddMemberDelayed <| fun _ -> ts
+
+    let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, fsx, isHostedExecution, xctor)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, schemaLookups, fsx, isHostedExecution, xctor)
 
     databaseRootType           
 
-let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: ConcurrentDictionary<_, ProvidedTypeDefinition>) = 
+let getProviderType(assembly,
+                    nameSpace,
+                    isHostedExecution,
+                    resolutionFolder,
+                    cache: ConcurrentDictionary<_, ProvidedTypeDefinition>,
+                    schemaCache : ConcurrentDictionary<string, DbSchemaLookups>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -321,7 +242,7 @@ let getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, ca
                 cache.GetOrAdd(
                     typeName, fun _ -> 
                         createRootType(
-                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder,
+                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
                             unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
                         )
                 )   

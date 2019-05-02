@@ -3,15 +3,18 @@
 open System
 open System.Data
 open System.Reflection
-open Npgsql
-
+open System.Runtime.CompilerServices
+open Microsoft.FSharp.Core.CompilerServices
 open FSharp.Quotations
 
 open ProviderImplementation.ProvidedTypes
 
+open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
+open System.ComponentModel
+open System.Reflection.Emit
 
 type internal RowType = {
     Provided: Type
@@ -229,6 +232,10 @@ type internal QuotationsFactory private() =
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
         let recordType = ProvidedTypeDefinition("Record", baseType = Some typeof<obj>, hideObjectMethods = true)
+        
+        for customAttr in typeof<{| Foo : int |}>.GetCustomAttributesData() do
+            recordType.AddCustomAttribute(customAttr)
+        
         let properties, ctorParameters = 
             columns
             |> List.mapi ( fun i col ->
@@ -280,9 +287,9 @@ type internal QuotationsFactory private() =
 
     static member internal GetDataRowType (columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
-
+            
         columns 
-        |> List.mapi(fun i col ->
+        |> List.iteri(fun i col ->
 
             if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
 
@@ -294,9 +301,8 @@ type internal QuotationsFactory private() =
 
             if col.Description <> "" then p.AddXmlDoc col.Description
 
-            p
+            rowType.AddMember p
         )
-        |> rowType.AddMembers
 
         rowType
 

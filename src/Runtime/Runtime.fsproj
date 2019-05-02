@@ -30,7 +30,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.0.5" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
   </ItemGroup>
   <Target Name="BeforeBuild">

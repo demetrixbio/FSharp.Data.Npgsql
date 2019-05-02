@@ -11,8 +11,10 @@ open Npgsql
 open Npgsql.PostgresTypes
 open NpgsqlTypes
 
+open FSharp.Data.Npgsql
 open ProviderImplementation.ProvidedTypes
 open System.Collections
+open System.Collections.ObjectModel
 open System.Net
 
 type internal NpgsqlDataReader with
@@ -128,21 +130,32 @@ type DataType = {
             ClrType = x.ToClrType()
         }
 
-type Column = {
-    Name: string
-    DataType: DataType
-    Nullable: bool
-    MaxLength: int
-    ReadOnly: bool
-    AutoIncrement: bool
-    DefaultConstraint: string
-    Description: string
-    UDT: Type option
-    PartOfPrimaryKey: bool
-    BaseSchemaName: string
-    BaseTableName: string
+type Schema =
+    { OID : string
+      Name : string }
+    
+type Table =
+    { OID : string
+      Name : string
+      Description : string option }
+    
+type ColumnLookupKey = { TableOID : string; ColumnAttributeNumber : int16 }
 
-}   with
+type Column =
+    { ColumnAttributeNumber : int16
+      Name: string
+      DataType: DataType
+      Nullable: bool
+      MaxLength: int
+      ReadOnly: bool
+      AutoIncrement: bool
+      DefaultConstraint: string
+      Description: string
+      UDT: Type option
+      PartOfPrimaryKey: bool
+      BaseSchemaName: string
+      BaseTableName: string }
+    with
 
     member this.ClrType = this.DataType.ClrType
 
@@ -194,16 +207,25 @@ type Column = {
             x
         @@>
     
-type Parameter = {
-    Name: string
-    NpgsqlDbType: NpgsqlTypes.NpgsqlDbType
-    Direction: ParameterDirection 
-    MaxLength: int
-    Precision: byte
-    Scale : byte
-    Optional: bool
-    DataType: DataType
-}   with
+type DbSchemaLookupItem =
+    { Tables : Dictionary<Table, HashSet<Column>>
+      Enums : Map<string, ProvidedTypeDefinition> }
+    
+type DbSchemaLookups =
+    { Schemas : Dictionary<Schema, DbSchemaLookupItem>
+      Columns : Dictionary<ColumnLookupKey, Column>
+      Enums : Map<string, ProvidedTypeDefinition> }
+    
+type Parameter =
+    { Name: string
+      NpgsqlDbType: NpgsqlTypes.NpgsqlDbType
+      Direction: ParameterDirection 
+      MaxLength: int
+      Precision: byte
+      Scale : byte
+      Optional: bool
+      DataType: DataType }
+    with
    
     member this.Size = this.MaxLength
         //match this.TypeInfo.DbType with
@@ -215,59 +237,55 @@ let inline openConnection connectionString =
     conn.Open()
     conn
 
-let extractParameters(connectionString, commandText, allParametersOptional) =  
+let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, customTypes: ref<IDictionary<string, ProvidedTypeDefinition>>) =  
     use conn = openConnection(connectionString)
+    
     use cmd = new NpgsqlCommand(commandText, conn)
-    NpgsqlCommandBuilder.DeriveParameters(cmd)
+    let cols =
+        if resultType <> ResultType.DataReader then
+            NpgsqlCommandBuilder.DeriveInputParametersAndOutputTypes(cmd)
+        else
+            ReadOnlyCollection [||]
 
-    [
-        for p in cmd.Parameters do
-            assert (p.Direction = ParameterDirection.Input)
+    let parameters = 
+        [
+            for p in cmd.Parameters do
+                assert (p.Direction = ParameterDirection.Input)
 
-            yield { 
-                Name = p.ParameterName
-                NpgsqlDbType = 
-                    match p.PostgresType with
-                    | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
-                        //probably array of custom type (enum or composite)
-                        NpgsqlDbType.Array ||| NpgsqlDbType.Text
-                    | _ -> p.NpgsqlDbType
-                Direction = p.Direction
-                MaxLength = p.Size
-                Precision = p.Precision
-                Scale = p.Scale
-                Optional = allParametersOptional 
-                DataType = DataType.Create(p.PostgresType)
-            }
-    ]
-
-let getOutputColumns(connectionString, commandText, commandType, parameters: Parameter list, customTypes: ref<IDictionary<string, ProvidedTypeDefinition>>): Column list = 
-    use conn = openConnection connectionString
-        
-    use cmd = new NpgsqlCommand(commandText, conn, CommandType = commandType)
-    for p in parameters do
-        cmd.Parameters.Add(p.Name, p.NpgsqlDbType).Value <- DBNull.Value
-        
-    let cols = 
-        use cursor = cmd.ExecuteReader(CommandBehavior.KeyInfo ||| CommandBehavior.SchemaOnly)
-        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
-
+                yield { 
+                    Name = p.ParameterName
+                    NpgsqlDbType = 
+                        match p.PostgresType with
+                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
+                            //probably array of custom type (enum or composite)
+                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
+                        | _ -> p.NpgsqlDbType
+                    Direction = p.Direction
+                    MaxLength = p.Size
+                    Precision = p.Precision
+                    Scale = p.Scale
+                    Optional = allParametersOptional 
+                    DataType = DataType.Create(p.PostgresType)
+                }
+        ]
+    
     let getEnums() =  
             
         let enumTypes = 
             cols 
-            |> List.choose (fun c -> 
+            |> Seq.choose (fun c -> 
                 if c.PostgresType :? PostgresTypes.PostgresEnumType
                 then Some( c.PostgresType.FullName)
                 else None
             )
-            |> List.append [ 
+            |> Seq.append [ 
                 for p in parameters do 
                     if p.DataType.IsUserDefinedType 
                     then 
                         yield p.DataType.UdtTypeName 
             ]
-            |> List.distinct
+            |> Seq.distinct
+            |> List.ofSeq
 
         if enumTypes.IsEmpty
         then dict []
@@ -293,127 +311,231 @@ let getOutputColumns(connectionString, commandText, commandType, parameters: Par
     if customTypes.Value.Count = 0 
     then customTypes := getEnums()
 
-    cols
-    |> List.map ( fun c -> 
-        let dataType = DataType.Create(c.PostgresType)
+    let outputColumns =
+        cols
+        |> Seq.map ( fun c -> 
+            let dataType = DataType.Create(c.PostgresType)
 
-        { 
-            Name = c.ColumnName
-            DataType = dataType
-            Nullable = c.AllowDBNull.GetValueOrDefault(true)
-            MaxLength = c.ColumnSize.GetValueOrDefault(-1)
-            ReadOnly = c.IsReadOnly.GetValueOrDefault(false)
-            AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
-            DefaultConstraint = c.DefaultValue
-            Description = ""
-            UDT = 
-                match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
-                | true, x ->
-                    Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
-                | false, _ -> None 
-            PartOfPrimaryKey = c.IsKey.GetValueOrDefault(false)
-            BaseSchemaName = c.BaseSchemaName
-            BaseTableName = c.BaseTableName
-        } 
-    )
-
-let getTables(connectionString, schema) = 
+            {
+                ColumnAttributeNumber = c.ColumnAttributeNumber.GetValueOrDefault(-1s)
+                Name = c.ColumnName
+                DataType = dataType
+                Nullable = c.AllowDBNull.GetValueOrDefault(true)
+                MaxLength = c.ColumnSize.GetValueOrDefault(-1)
+                ReadOnly = c.IsReadOnly.GetValueOrDefault(false)
+                AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
+                DefaultConstraint = c.DefaultValue
+                Description = ""
+                UDT = 
+                    match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
+                    | true, x ->
+                        Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
+                    | false, _ -> None 
+                PartOfPrimaryKey = c.IsKey.GetValueOrDefault(false)
+                BaseSchemaName = c.BaseSchemaName
+                BaseTableName = c.BaseTableName
+            } 
+        )
+        |> List.ofSeq
+        
+    parameters, outputColumns
+    
+let getEnums connectionString = 
     use conn = openConnection(connectionString)
     use cmd = conn.CreateCommand()
-    cmd.CommandText <- sprintf "
-        SELECT 
-            table_name
-            --,obj_description('myschema.mytable'::regclass)
-        FROM 
-            information_schema.tables 
-        WHERE 
-            table_schema = '%s' 
-            AND table_type = 'BASE TABLE'
-    " schema
-
-    [ 
+    cmd.CommandText <- "
+        SELECT
+          n.nspname              AS schema,
+          t.typname              AS name,
+          array_agg(e.enumlabel) AS values
+        FROM pg_type t
+          JOIN pg_enum e ON t.oid = e.enumtypid
+          JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+        GROUP BY
+          schema, name
+    "
+    seq {
         use cursor = cmd.ExecuteReader()
         while cursor.Read() do
-            let tableName = unbox cursor.[0]
-            yield  tableName, None
-    ]
+            let schema = cursor.GetString(0)
+            let name = cursor.GetString(1)
+            let values: string[] = cursor.GetValue(2) :?> _
+            let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+            for value in values do
+                t.AddMember( ProvidedField.Literal(value, t, value))
 
-let getTableColumns(connectionString, schema, tableName, customTypes: Map<_, ProvidedTypeDefinition list>) = 
+            //let valuesFieldType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ t ])
+            //let valuesField = ProvidedField("Values", valuesFieldType) 
+            //valuesField.SetFieldAttributes( FieldAttributes.Public ||| FieldAttributes.InitOnly ||| FieldAttributes.Static)
+            //t.AddMember( valuesField)
+
+            //let typeInit = 
+            //    let valuesExpr = Expr.NewArray(typeof<string>, [ for v in values -> Expr.Value(v)])
+            //    ProvidedConstructor(
+            //        [], 
+            //        invokeCode = (fun _ -> Expr.FieldSet(valuesField, Expr.Coerce(valuesExpr, valuesFieldType))),
+            //        IsTypeInitializer = true
+            //    )
+
+            //t.AddMember typeInit 
+
+            yield schema, name, t
+    }
+    |> Seq.groupBy (fun (schema, _, _) -> schema)
+    |> Seq.map (fun (schema, types) ->
+        schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
+    )
+    |> Map.ofSeq
+
+let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
-    let cmd = conn.CreateCommand()
-    cmd.CommandText <- sprintf """
+    
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- """
         SELECT
-            c.table_schema
-            ,c.column_name
-            ,c.data_type
-            ,c.udt_name
-            ,c.is_nullable
-            ,c.character_maximum_length
-            ,c.is_updatable
-            ,c.is_identity
-            ,c.column_default
-            ,pgd.description
-            ,constraint_column_usage.column_name IS NOT NULL AS part_of_primary_key
-        FROM 
-            information_schema.columns c
-            LEFT JOIN pg_catalog.pg_statio_all_tables as st 
-            ON c.table_schema = st.schemaname AND c.table_name = st.relname
-            LEFT JOIN pg_catalog.pg_description pgd 
-            ON pgd.objsubid = c.ordinal_position AND pgd.objoid = st.relid
-            LEFT JOIN information_schema.table_constraints tc 
-            ON c.table_schema = tc.table_schema AND c.table_name = tc.table_name AND tc.constraint_type = 'PRIMARY KEY'
-            LEFT JOIN information_schema.constraint_column_usage USING (constraint_schema, constraint_name, column_name)
-        WHERE 
-            c.table_schema = '%s' 
-            AND c.table_name = '%s' 
-        ORDER BY 
-            ordinal_position
-    """ schema tableName
+          n.nspname              AS schema,
+          t.typname              AS name,
+          array_agg(e.enumlabel) AS values
+        FROM pg_type t
+          JOIN pg_enum e ON t.oid = e.enumtypid
+          JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+        GROUP BY
+          schema, name
+    """
+    
+    let enumsLookup =
+        seq {
+            use cursor = cmd.ExecuteReader()
+            while cursor.Read() do
+                let schema = cursor.GetString(0)
+                let name = cursor.GetString(1)
+                let values: string[] = cursor.GetValue(2) :?> _
+                let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+                for value in values do
+                    t.AddMember( ProvidedField.Literal(value, t, value))
+                yield schema, name, t
+        }
+        |> Seq.groupBy (fun (schema, _, _) -> schema)
+        |> Seq.map (fun (schema, types) ->
+            schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
+        )
+        |> Map.ofSeq
+    
+    //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- """
+        SELECT
+             ns.OID AS schema_oid,
+             ns.nspname AS schema_name,
+             attr.attrelid AS table_oid,
+             cls.relname AS table_name,
+             pg_catalog.obj_description(attr.attrelid) AS table_description,
+             attr.attnum AS col_number,
+             attr.attname AS col_name,
+             col.udt_name AS col_udt_name,
+             col.data_type AS col_data_type,
+             attr.attnotnull AS col_not_null,
+             col.character_maximum_length AS col_max_length,
+             CASE WHEN col.is_updatable = 'YES' THEN true ELSE false END AS col_is_updatable,
+             CASE WHEN col.is_identity = 'YES' THEN true else false END AS col_is_identity,
+             CASE WHEN attr.atthasdef THEN (SELECT pg_get_expr(adbin, cls.oid) FROM pg_attrdef WHERE adrelid = cls.oid AND adnum = attr.attnum) ELSE NULL END AS col_default,
+             pg_catalog.col_description(attr.attrelid, attr.attnum) AS col_description,
+             typ.oid AS col_typoid,
+             EXISTS (
+               SELECT * FROM pg_index
+               WHERE pg_index.indrelid = cls.oid AND
+                     pg_index.indisprimary AND
+                     attnum = ANY (indkey)
+             ) AS col_part_of_primary_key
 
-    [
-        use row = cmd.ExecuteReader()
-        while row.Read() do
+        FROM pg_class AS cls
+        INNER JOIN pg_namespace AS ns ON ns.oid = cls.relnamespace
 
-            let udtName = string row.["udt_name"]
-            let schema = unbox row.["table_schema"] 
+        LEFT JOIN pg_attribute AS attr ON attr.attrelid = cls.oid AND attr.atttypid <> 0 AND attr.attnum > 0 AND NOT attr.attisdropped
+        LEFT JOIN pg_type AS typ ON typ.oid = attr.atttypid
+        LEFT JOIN information_schema.columns AS col ON col.table_schema = ns.nspname AND
+           col.table_name = relname AND
+           col.column_name = attname
+        WHERE
+           cls.relkind IN ('r', 'v', 'm') AND
+           ns.nspname !~ '^pg_' AND
+           ns.nspname <> 'information_schema'
+        ORDER BY nspname, relname;
+    """
+    
+    let schemas = Dictionary<Schema, DbSchemaLookupItem>()
+    let columns = Dictionary<ColumnLookupKey, Column>()
+    
+    use row = cmd.ExecuteReader()
+    while row.Read() do
+        let schema : Schema =
+            { OID = unbox row.["schema_oid"]
+              Name = unbox row.["schema_name"] }
+        
+        if not <| schemas.ContainsKey(schema) then
+            
+            schemas.Add(schema, { Tables = Dictionary();
+                                  Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+        
+        match row.["table_oid"] |> Option.ofObj with
+        | None -> ()
+        | Some oid ->
+            let table =
+                { OID = unbox oid
+                  Name = unbox row.["table_name"]
+                  Description = row.["table_description"] |> Option.ofObj |> Option.map string }
+            
+            if not <| schemas.[schema].Tables.ContainsKey(table) then
+                schemas.[schema].Tables.Add(table, HashSet())
+            
+            match row.["col_number"] |> Option.ofObj with
+            | None -> ()
+            | Some attnum ->
+                let udtName = string row.["col_udt_name"]
+                let udt =
+                    schemas.[schema].Enums
+                    |> Map.tryFind udtName
+                    |> Option.map (fun x -> x :> Type)
+                
+                let clrType =
+                    match unbox row.["col_data_type"] with
+                    | "ARRAY" ->
+                        let elemType = getTypeMapping(udtName.TrimStart('_') ) 
+                        elemType.MakeArrayType()
+                    | "USER-DEFINED" ->
+                        if udt.IsSome then typeof<string> else typeof<obj>
+                    | dataType -> 
+                        getTypeMapping(dataType)
+                
+                let column =
+                    { ColumnAttributeNumber = unbox attnum
+                      Name = unbox row.["col_name"]
+                      DataType = { Name = udtName
+                                   Schema = schema.Name
+                                   ClrType = clrType }
+                      Nullable = row.["col_not_null"] |> unbox |> not
+                      MaxLength = row.GetValueOrDefault("col_max_length", -1)
+                      ReadOnly = row.["col_is_updatable"] |> unbox |> not
+                      AutoIncrement = unbox row.["col_is_identity"]
+                      DefaultConstraint = row.GetValueOrDefault("col_default", "")
+                      Description = row.GetValueOrDefault("col_description", "")
+                      UDT = udt
+                      PartOfPrimaryKey = unbox row.["col_part_of_primary_key"]
+                      BaseSchemaName = schema.Name
+                      BaseTableName = unbox row.["table_name"] }
+                 
+                if not <| schemas.[schema].Tables.[table].Contains(column) then
+                    schemas.[schema].Tables.[table].Add(column) |> ignore
+                
+                let lookupKey = { TableOID = table.OID
+                                  ColumnAttributeNumber = column.ColumnAttributeNumber }
+                if not <| columns.ContainsKey(lookupKey) then
+                    columns.Add(lookupKey, column)
 
-            let udt =                             
-                customTypes
-                |> Map.tryFind schema
-                |> Option.bind (List.tryFind (fun t -> t.Name = udtName))
-                |> Option.map (fun x -> x :> Type)
-
-            yield {
-                Name = unbox row.["column_name"]
-                DataType = 
-                    {
-                        Name = udtName
-                        Schema = schema
-                        ClrType = 
-                            match unbox row.["data_type"] with 
-                            | "ARRAY" -> 
-                                let elemType = getTypeMapping( udtName.TrimStart('_') ) 
-                                elemType.MakeArrayType()
-                            | "USER-DEFINED" ->
-                                if udt.IsSome 
-                                then 
-                                    typeof<string> 
-                                else 
-                                    typeof<obj>
-                            | dataType -> 
-                                getTypeMapping( dataType)
-                    }
-
-                Nullable = unbox row.["is_nullable"] = "YES"
-                MaxLength = row.GetValueOrDefault("character_maximum_length", -1)
-                ReadOnly = unbox row.["is_updatable"] = "NO"
-                AutoIncrement = unbox row.["is_identity"] = "YES"
-                DefaultConstraint = row.GetValueOrDefault("column_default", "")
-                Description = row.GetValueOrDefault("description", "")
-                UDT = udt
-                PartOfPrimaryKey = unbox row.["part_of_primary_key"]
-                BaseSchemaName = schema
-                BaseTableName = tableName
-            }
-    ]
-
+    { Schemas = schemas
+      Columns = columns
+      Enums = enumsLookup
+              |> Seq.map (fun s -> s.Value
+                                   |> Seq.map (fun x -> x.Key, x.Value))
+              |> Seq.concat
+              |> Map.ofSeq }

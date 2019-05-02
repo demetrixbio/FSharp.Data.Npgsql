@@ -16,12 +16,14 @@ type NpgsqlProviders(config) as this =
     )
     
     let cache = ConcurrentDictionary()
+    let schemaCache = ConcurrentDictionary()
 
     do 
         this.Disposing.Add <| fun _ ->
             try 
                 cache.Clear()
                 NpgsqlConnectionProvider.methodsCache.Clear()
+                schemaCache.Clear()
             with _ -> ()
     do 
         let assembly = Assembly.GetExecutingAssembly()
@@ -33,7 +35,6 @@ type NpgsqlProviders(config) as this =
         this.AddNamespace(
             nameSpace, [ 
                 NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
-                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
+                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, schemaCache)
             ]
         )
-
