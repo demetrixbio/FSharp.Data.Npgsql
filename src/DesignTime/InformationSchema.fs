@@ -151,7 +151,7 @@ type Column =
       AutoIncrement: bool
       DefaultConstraint: string
       Description: string
-      UDT: Type option
+      UDT: Type option Lazy // must be lazt due to late binding of columns with user defined types.
       PartOfPrimaryKey: bool
       BaseSchemaName: string
       BaseTableName: string }
@@ -169,7 +169,7 @@ type Column =
 
     member this.MakeProvidedType(?forceNullability: bool) = 
         let nullable = defaultArg forceNullability this.Nullable
-        match this.UDT with
+        match this.UDT.Value with
         | Some t -> 
             let t = if this.DataType.ClrType.IsArray then t.MakeArrayType() else t
             if nullable then ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ t ]) else t
@@ -184,7 +184,7 @@ type Column =
             clrType.PartiallyQualifiedName
 
         let localDateTimeMode = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
-        let isEnum = this.UDT |> Option.exists (fun x -> not x.IsArray)
+        let isEnum = this.UDT.Value |> Option.exists (fun x -> not x.IsArray)
 
         <@@ 
             let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType( typeName, throwOnError = true))
@@ -208,11 +208,12 @@ type Column =
         @@>
     
 type DbSchemaLookupItem =
-    { Tables : Dictionary<Table, HashSet<Column>>
+    { Schema : Schema
+      Tables : Dictionary<Table, HashSet<Column>>
       Enums : Map<string, ProvidedTypeDefinition> }
     
 type DbSchemaLookups =
-    { Schemas : Dictionary<Schema, DbSchemaLookupItem>
+    { Schemas : Dictionary<string, DbSchemaLookupItem>
       Columns : Dictionary<ColumnLookupKey, Column>
       Enums : Map<string, ProvidedTypeDefinition> }
     
@@ -326,11 +327,12 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                 AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
                 DefaultConstraint = c.DefaultValue
                 Description = ""
-                UDT = 
-                    match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
-                    | true, x ->
-                        Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
-                    | false, _ -> None 
+                UDT =
+                    lazy
+                        match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
+                        | true, x ->
+                            Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
+                        | false, _ -> None 
                 PartOfPrimaryKey = c.IsKey.GetValueOrDefault(false)
                 BaseSchemaName = c.BaseSchemaName
                 BaseTableName = c.BaseTableName
@@ -339,53 +341,6 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         |> List.ofSeq
         
     parameters, outputColumns
-    
-let getEnums connectionString = 
-    use conn = openConnection(connectionString)
-    use cmd = conn.CreateCommand()
-    cmd.CommandText <- "
-        SELECT
-          n.nspname              AS schema,
-          t.typname              AS name,
-          array_agg(e.enumlabel) AS values
-        FROM pg_type t
-          JOIN pg_enum e ON t.oid = e.enumtypid
-          JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-        GROUP BY
-          schema, name
-    "
-    seq {
-        use cursor = cmd.ExecuteReader()
-        while cursor.Read() do
-            let schema = cursor.GetString(0)
-            let name = cursor.GetString(1)
-            let values: string[] = cursor.GetValue(2) :?> _
-            let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
-            for value in values do
-                t.AddMember( ProvidedField.Literal(value, t, value))
-
-            //let valuesFieldType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ t ])
-            //let valuesField = ProvidedField("Values", valuesFieldType) 
-            //valuesField.SetFieldAttributes( FieldAttributes.Public ||| FieldAttributes.InitOnly ||| FieldAttributes.Static)
-            //t.AddMember( valuesField)
-
-            //let typeInit = 
-            //    let valuesExpr = Expr.NewArray(typeof<string>, [ for v in values -> Expr.Value(v)])
-            //    ProvidedConstructor(
-            //        [], 
-            //        invokeCode = (fun _ -> Expr.FieldSet(valuesField, Expr.Coerce(valuesExpr, valuesFieldType))),
-            //        IsTypeInitializer = true
-            //    )
-
-            //t.AddMember typeInit 
-
-            yield schema, name, t
-    }
-    |> Seq.groupBy (fun (schema, _, _) -> schema)
-    |> Seq.map (fun (schema, types) ->
-        schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
-    )
-    |> Map.ofSeq
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
@@ -404,7 +359,7 @@ let getDbSchemaLookups(connectionString) =
     """
     
     let enumsLookup =
-        seq {
+        [
             use cursor = cmd.ExecuteReader()
             while cursor.Read() do
                 let schema = cursor.GetString(0)
@@ -412,9 +367,9 @@ let getDbSchemaLookups(connectionString) =
                 let values: string[] = cursor.GetValue(2) :?> _
                 let t = new ProvidedTypeDefinition(name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
                 for value in values do
-                    t.AddMember( ProvidedField.Literal(value, t, value))
+                    t.AddMember(ProvidedField.Literal(value, t, value))
                 yield schema, name, t
-        }
+        ]
         |> Seq.groupBy (fun (schema, _, _) -> schema)
         |> Seq.map (fun (schema, types) ->
             schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
@@ -463,53 +418,54 @@ let getDbSchemaLookups(connectionString) =
         ORDER BY nspname, relname;
     """
     
-    let schemas = Dictionary<Schema, DbSchemaLookupItem>()
+    let schemas = Dictionary<string, DbSchemaLookupItem>()
     let columns = Dictionary<ColumnLookupKey, Column>()
     
     use row = cmd.ExecuteReader()
     while row.Read() do
         let schema : Schema =
-            { OID = unbox row.["schema_oid"]
-              Name = unbox row.["schema_name"] }
+            { OID = string row.["schema_oid"]
+              Name = string row.["schema_name"] }
         
-        if not <| schemas.ContainsKey(schema) then
+        if not <| schemas.ContainsKey(schema.Name) then
             
-            schemas.Add(schema, { Tables = Dictionary();
-                                  Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+            schemas.Add(schema.Name, { Schema = schema
+                                       Tables = Dictionary();
+                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
         match row.["table_oid"] |> Option.ofObj with
         | None -> ()
         | Some oid ->
             let table =
-                { OID = unbox oid
-                  Name = unbox row.["table_name"]
+                { OID = string oid
+                  Name = string row.["table_name"]
                   Description = row.["table_description"] |> Option.ofObj |> Option.map string }
             
-            if not <| schemas.[schema].Tables.ContainsKey(table) then
-                schemas.[schema].Tables.Add(table, HashSet())
+            if not <| schemas.[schema.Name].Tables.ContainsKey(table) then
+                schemas.[schema.Name].Tables.Add(table, HashSet())
             
-            match row.["col_number"] |> Option.ofObj with
-            | None -> ()
-            | Some attnum ->
+            match row.GetValueOrDefault("col_number", -1s) with
+            | -1s -> ()
+            | attnum ->
                 let udtName = string row.["col_udt_name"]
-                let udt =
-                    schemas.[schema].Enums
+                let isUdt =
+                    schemas.[schema.Name].Enums
                     |> Map.tryFind udtName
-                    |> Option.map (fun x -> x :> Type)
+                    |> Option.isSome
                 
                 let clrType =
-                    match unbox row.["col_data_type"] with
+                    match string row.["col_data_type"] with
                     | "ARRAY" ->
                         let elemType = getTypeMapping(udtName.TrimStart('_') ) 
                         elemType.MakeArrayType()
                     | "USER-DEFINED" ->
-                        if udt.IsSome then typeof<string> else typeof<obj>
+                        if isUdt then typeof<string> else typeof<obj>
                     | dataType -> 
                         getTypeMapping(dataType)
                 
                 let column =
-                    { ColumnAttributeNumber = unbox attnum
-                      Name = unbox row.["col_name"]
+                    { ColumnAttributeNumber = attnum
+                      Name = string row.["col_name"]
                       DataType = { Name = udtName
                                    Schema = schema.Name
                                    ClrType = clrType }
@@ -519,13 +475,17 @@ let getDbSchemaLookups(connectionString) =
                       AutoIncrement = unbox row.["col_is_identity"]
                       DefaultConstraint = row.GetValueOrDefault("col_default", "")
                       Description = row.GetValueOrDefault("col_description", "")
-                      UDT = udt
+                      UDT =
+                          lazy
+                              schemas.[schema.Name].Enums
+                              |> Map.tryFind udtName
+                              |> Option.map (fun x -> x :> Type)
                       PartOfPrimaryKey = unbox row.["col_part_of_primary_key"]
                       BaseSchemaName = schema.Name
-                      BaseTableName = unbox row.["table_name"] }
+                      BaseTableName = string row.["table_name"] }
                  
-                if not <| schemas.[schema].Tables.[table].Contains(column) then
-                    schemas.[schema].Tables.[table].Add(column) |> ignore
+                if not <| schemas.[schema.Name].Tables.[table].Contains(column) then
+                    schemas.[schema.Name].Tables.[table].Add(column) |> ignore
                 
                 let lookupKey = { TableOID = table.OID
                                   ColumnAttributeNumber = column.ColumnAttributeNumber }
@@ -535,7 +495,10 @@ let getDbSchemaLookups(connectionString) =
     { Schemas = schemas
       Columns = columns
       Enums = enumsLookup
-              |> Seq.map (fun s -> s.Value
-                                   |> Seq.map (fun x -> x.Key, x.Value))
+              |> Seq.map (fun s ->
+                let schemaName = s.Key
+                s.Value |> Seq.map (fun x ->
+                    let enumName = x.Key
+                    sprintf "%s.%s" schemaName enumName, x.Value))
               |> Seq.concat
               |> Map.ofSeq }
