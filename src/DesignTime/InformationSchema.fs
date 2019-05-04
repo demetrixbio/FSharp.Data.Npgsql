@@ -139,8 +139,6 @@ type Table =
       Name : string
       Description : string option }
     
-type ColumnLookupKey = { TableOID : string; ColumnAttributeNumber : int16 }
-
 type Column =
     { ColumnAttributeNumber : int16
       Name: string
@@ -212,6 +210,8 @@ type DbSchemaLookupItem =
       Tables : Dictionary<Table, HashSet<Column>>
       Enums : Map<string, ProvidedTypeDefinition> }
     
+type ColumnLookupKey = { TableOID : string; ColumnAttributeNumber : int16 }
+    
 type DbSchemaLookups =
     { Schemas : Dictionary<string, DbSchemaLookupItem>
       Columns : Dictionary<ColumnLookupKey, Column>
@@ -237,6 +237,68 @@ let inline openConnection connectionString =
     let conn = new NpgsqlConnection(connectionString)
     conn.Open()
     conn
+
+let extractParametersAndOutputColumnsFast(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
+    use conn = openConnection(connectionString)
+    
+    use cmd = new NpgsqlCommand(commandText, conn)
+    let outputColumns =
+        if resultType <> ResultType.DataReader then
+            let fields = NpgsqlCommandBuilder.Foo(cmd)
+            [ for tableOid, columnAttributeNumber, columnName, postgresType, fieldType in fields ->
+                    let lookupKey = { TableOID = string tableOid
+                                      ColumnAttributeNumber = columnAttributeNumber }
+                    if tableOid <> 0u then
+                        { dbSchemaLookups.Columns.[lookupKey] with Name = columnName }
+                    else
+                        let dataType = DataType.Create(postgresType)
+
+                        {
+                            ColumnAttributeNumber = columnAttributeNumber
+                            Name = columnName
+                            DataType = dataType
+                            Nullable = true
+                            MaxLength =  -1
+                            ReadOnly = true
+                            AutoIncrement = false
+                            DefaultConstraint = ""
+                            Description = ""
+                            UDT =
+                                lazy
+                                    match dbSchemaLookups.Enums.TryGetValue(dataType.UdtTypeName) with 
+                                    | true, x ->
+                                        Some( if fieldType.IsArray then x.MakeArrayType() else upcast x)
+                                    | false, _ -> None 
+                            PartOfPrimaryKey = false
+                            BaseSchemaName = null
+                            BaseTableName = null
+                        }  ]
+        else
+            []
+
+    let parameters = 
+        [
+            for p in cmd.Parameters do
+                assert (p.Direction = ParameterDirection.Input)
+
+                yield { 
+                    Name = p.ParameterName
+                    NpgsqlDbType = 
+                        match p.PostgresType with
+                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
+                            //probably array of custom type (enum or composite)
+                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
+                        | _ -> p.NpgsqlDbType
+                    Direction = p.Direction
+                    MaxLength = p.Size
+                    Precision = p.Precision
+                    Scale = p.Scale
+                    Optional = allParametersOptional 
+                    DataType = DataType.Create(p.PostgresType)
+                }
+        ]
+
+    parameters, outputColumns
 
 let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, customTypes: ref<IDictionary<string, ProvidedTypeDefinition>>) =  
     use conn = openConnection(connectionString)
