@@ -9,7 +9,6 @@ open ProviderImplementation.ProvidedTypes
 
 open Npgsql
 
-open System.Collections.Generic
 open FSharp.Data.Npgsql
 open InformationSchema
 
@@ -27,7 +26,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             if not globalXCtor then yield ProvidedStaticParameter("XCtor", typeof<bool>, false)
         ]
 
-    let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true, invokeCode = Unchecked.defaultof<_>)
+    let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
 
         let getMethodImpl () = 
@@ -43,9 +42,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             then 
                 invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-            let customTypes = dbSchemaLookups.Enums :> IDictionary<string, ProvidedTypeDefinition> |> ref
-            
-            let (parameters, outputColumns) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, customTypes)
+            let (parameters, outputColumns) = InformationSchema.extractParametersAndOutputColumnsFast(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
 
             let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
@@ -107,16 +104,16 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 } @@>
 
 
-            let ctorsAndFactories = 
-                QuotationsFactory.GetCommandCtors(
+            let impl = 
+                QuotationsFactory.GetCommandCtor(
                     cmdProvidedType, 
                     designTimeConfig, 
                     allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                    ?connectionString  = (if fsx then Some connectionString else None), 
-                    factoryMethodName = methodName
+                    xctor = xctor,
+                    factoryMethodName = methodName,
+                    ?connectionString  = (if fsx then Some connectionString else None)
+                    
                 )
-            assert (ctorsAndFactories.Length = 4)
-            let impl: ProvidedMethod = downcast ctorsAndFactories.[if xctor then 3 else 1] 
             rootType.AddMember impl
             impl
 

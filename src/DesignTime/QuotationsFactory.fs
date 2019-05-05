@@ -3,8 +3,6 @@
 open System
 open System.Data
 open System.Reflection
-open System.Runtime.CompilerServices
-open Microsoft.FSharp.Core.CompilerServices
 open FSharp.Quotations
 
 open ProviderImplementation.ProvidedTypes
@@ -13,8 +11,6 @@ open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
-open System.ComponentModel
-open System.Reflection.Emit
 
 type internal RowType = {
     Provided: Type
@@ -233,9 +229,6 @@ type internal QuotationsFactory private() =
         
         let recordType = ProvidedTypeDefinition("Record", baseType = Some typeof<obj>, hideObjectMethods = true)
         
-        for customAttr in typeof<{| Foo : int |}>.GetCustomAttributesData() do
-            recordType.AddCustomAttribute(customAttr)
-        
         let properties, ctorParameters = 
             columns
             |> List.mapi ( fun i col ->
@@ -262,8 +255,9 @@ type internal QuotationsFactory private() =
 
         let invokeCode args =
             let pairs =  
-                List.zip args properties //Because we need original names in dictionary
-                |> List.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
+                Seq.zip args properties //Because we need original names in dictionary
+                |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
+                |> List.ofSeq
 
             <@@
                 Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
@@ -289,7 +283,7 @@ type internal QuotationsFactory private() =
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
             
         columns 
-        |> List.iteri(fun i col ->
+        |> List.mapi(fun i col ->
 
             if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
 
@@ -301,8 +295,9 @@ type internal QuotationsFactory private() =
 
             if col.Description <> "" then p.AddXmlDoc col.Description
 
-            rowType.AddMember p
+            p
         )
+        |> rowType.AddMembers
 
         rowType
 
@@ -624,3 +619,54 @@ type internal QuotationsFactory private() =
         ]
 
 
+    static member internal GetCommandCtor
+        (
+            cmdProvidedType: ProvidedTypeDefinition, 
+            designTimeConfig, 
+            allowDesignTimeConnectionStringReUse: bool,
+            xctor: bool,
+            factoryMethodName,
+            ?connectionString: string
+        ) = 
+        let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
+        if xctor then
+            
+            let parameters2 = 
+                    [ 
+                        ProvidedParameter("connection", typeof<NpgsqlConnection>) 
+                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
+                        ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
+                    ]
+            let body2 (Arg3(connection, transaction, commandTimeout)) = 
+                let arguments = [  
+                    designTimeConfig
+                    <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice2Of2(%%connection, %%transaction) @@>
+                    commandTimeout
+                ]
+                Expr.NewObject(ctorImpl, arguments)
+            ProvidedMethod(factoryMethodName, parameters2, returnType = cmdProvidedType, invokeCode = body2, isStatic = true)
+        else
+            let parameters1 = [ 
+                ProvidedParameter(
+                    "connectionString", 
+                    typeof<string>, 
+                    ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))
+                ) 
+                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
+            ]
+            let body1 (args: _ list) = 
+                let designTimeConnectionString = defaultArg connectionString ""
+                let runTimeConnectionString = 
+                    <@@
+                        if %%args.Head = reuseDesignTimeConnectionString
+                        then 
+                            if allowDesignTimeConnectionStringReUse 
+                            then designTimeConnectionString
+                            else failwith prohibitDesignTimeConnStrReUse
+                        else
+                            %%args.Head
+                    @@>
+
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
+                
+            ProvidedMethod(factoryMethodName, parameters1, returnType = cmdProvidedType, invokeCode = body1, isStatic = true)
