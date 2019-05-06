@@ -5,7 +5,6 @@ open Xunit
 open Microsoft.Extensions.Configuration
 open FSharp.Data.Npgsql
 open NpgsqlCmdTests
-open System.Data
 
 [<Literal>]
 let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
@@ -435,13 +434,6 @@ let npPkTable() =
     //t.Update(dvdRental.Value) |> ignore
     ()
 
-[<Literal>]
-let getActorByName = "
-    SELECT first_name, last_name
-    FROM public.actor 
-    WHERE first_name = @firstName AND last_name = @lastName
-"
-
 [<Fact>]
 let binaryImport() =
     let firstName, lastName = "Tom", "Hanks"
@@ -526,13 +518,63 @@ let ``column "p1_00" does not exist``() =
         use cmd = DvdRental.CreateCommand<"select title from public.film where film_id = @id", SingleRow = true, XCtor = true>(conn, tx)
         Assert.Equal( Some title, cmd.Execute(id.Value))
 
-
 [<Fact>]
 let selectBytea() =
     use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
     let actual = cmd.Execute().Value.Value
     let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
     Assert.Equal<byte>(expected, actual)
+
+[<Fact>]
+let ``Command not prepared by default``() =
+    use conn = openConnection()
+    conn.UnprepareAll()
+
+    use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true>(conn)
+    cmd.Execute("", "") |> ignore
+
+    Assert.False(isStatementPrepared conn)
+
+[<Fact>]
+let ``Data table command prepared``() =
+    use conn = openConnection()
+    conn.UnprepareAll()
+
+    use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true, Prepare = true, ResultType = ResultType.DataTable>(conn)
+    cmd.Execute("", "") |> ignore
+
+    Assert.True(isStatementPrepared conn)
+
+[<Fact>]
+let ``Data reader command prepared``() =
+    use conn = openConnection()
+    conn.UnprepareAll()
+
+    use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true, Prepare = true, ResultType = ResultType.DataReader>(conn)
+    cmd.Execute("", "") |> ignore
+
+    Assert.True(isStatementPrepared conn)
+
+[<Fact>]
+let ``Records command prepared``() =
+    use conn = openConnection()
+    conn.UnprepareAll()
+
+    use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true, Prepare = true, ResultType = ResultType.Records>(conn)
+    cmd.Execute("", "") |> ignore
+
+    Assert.True(isStatementPrepared conn)
+
+[<Fact>]
+let ``Tuples command prepared``() =
+    use conn = openConnection()
+    conn.UnprepareAll()
+
+    use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true, Prepare = true, ResultType = ResultType.Tuples>(conn)
+    cmd.Execute("", "") |> ignore
+
+    Assert.True(isStatementPrepared conn)
+
 
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
