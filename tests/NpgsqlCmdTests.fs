@@ -407,6 +407,14 @@ let updateWithEnum() =
         )
     )
 
+
+[<Fact>]
+let selectBytea() =
+    use cmd = new NpgsqlCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", dvdRental, SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value.Value
+    let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
+    Assert.Equal<byte>(expected, actual)
+
 [<Literal>]
 let getActorByName = "
     SELECT first_name, last_name
@@ -463,6 +471,7 @@ let ``Tuples command prepared``() =
     cmd.Execute("", "") |> ignore
 
     Assert.True(isStatementPrepared conn)
+
  
 //[<Fact>]
 //let npPkTable() =

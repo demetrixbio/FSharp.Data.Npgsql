@@ -143,7 +143,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 
             //TO DO: add extended property on column to mark enums
             let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
-            let maybeArray = expectedType.IsArray && actualType = typeof<Array>
+            let maybeArray = (expectedType = typeof<Array> || expectedType.IsArray) && (actualType = typeof<Array> || actualType.IsArray)
             let typeless = expectedType = typeof<obj> && actualType = typeof<string>
             if (expectedName <> "" && actualName <> expectedName) 
                 || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless)

@@ -519,6 +519,13 @@ let ``column "p1_00" does not exist``() =
         Assert.Equal( Some title, cmd.Execute(id.Value))
 
 [<Fact>]
+let selectBytea() =
+    use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value.Value
+    let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
+    Assert.Equal<byte>(expected, actual)
+
+[<Fact>]
 let ``Command not prepared by default``() =
     use conn = openConnection()
     conn.UnprepareAll()
@@ -567,6 +574,7 @@ let ``Tuples command prepared``() =
     cmd.Execute("", "") |> ignore
 
     Assert.True(isStatementPrepared conn)
+
 
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
