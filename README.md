@@ -175,6 +175,35 @@ do
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 
+## Prepared statements
+[Prepared statements](https://www.npgsql.org/doc/prepare.html) are supported by setting the static parameter `Prepare` to `true`. For `NpgsqlConnection` this can be set when defining the type itself and also overriden when calling `CreateCommand`.
+
+```fsharp
+// All commands created from this type will be prepared
+type DvdRental = NpgsqlConnection<dvdRental, Prepare = true>
+
+do
+    // Will be prepared
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+    for x in cmd.Execute() do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+
+do
+    // Overrides the DvdRental setting and thus won't be prepared
+    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = false>(dvdRental)
+    for x in cmd.Execute() do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+
+```
+
+```fsharp
+do 
+    // Will be prepared
+    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = true>(dvdRental)
+	for x in cmd.Execute() do   
+        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+```
+
 ## Configuration
 _Design-time type providers configuration is never passed to run-time._
 
