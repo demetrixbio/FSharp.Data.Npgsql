@@ -238,171 +238,88 @@ let inline openConnection connectionString =
     conn.Open()
     conn
 
-let extractParametersAndOutputColumnsFast(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
+let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
     use conn = openConnection(connectionString)
     
     use cmd = new NpgsqlCommand(commandText, conn)
+    let cols = NpgsqlCommandBuilder.DeriveInputParametersAndOutputTypes(cmd)
+               |> Seq.tryLast // we are interested in output types of last executed statement only
+               |> Option.defaultWith (fun () -> ReadOnlyCollection([||]))
+    
     let outputColumns =
         if resultType <> ResultType.DataReader then
-            let fields = NpgsqlCommandBuilder.Foo(cmd)
-            [ for tableOid, columnAttributeNumber, columnName, postgresType, fieldType in fields ->
-                    let lookupKey = { TableOID = string tableOid
+            [ for column in cols ->
+                let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
+                
+                if column.TableOID <> 0u then
+                    let lookupKey = { TableOID = string column.TableOID
                                       ColumnAttributeNumber = columnAttributeNumber }
-                    if tableOid <> 0u then
-                        { dbSchemaLookups.Columns.[lookupKey] with Name = columnName }
-                    else
-                        let dataType = DataType.Create(postgresType)
+                    { dbSchemaLookups.Columns.[lookupKey] with Name = column.ColumnName }
+                else
+                    let dataType = DataType.Create(column.PostgresType)
 
-                        {
-                            ColumnAttributeNumber = columnAttributeNumber
-                            Name = columnName
-                            DataType = dataType
-                            Nullable = true
-                            MaxLength =  -1
-                            ReadOnly = true
-                            AutoIncrement = false
-                            DefaultConstraint = ""
-                            Description = ""
-                            UDT =
-                                lazy
-                                    match dbSchemaLookups.Enums.TryGetValue(dataType.UdtTypeName) with 
-                                    | true, x ->
-                                        Some( if fieldType.IsArray then x.MakeArrayType() else upcast x)
-                                    | false, _ -> None 
-                            PartOfPrimaryKey = false
-                            BaseSchemaName = null
-                            BaseTableName = null
-                        }  ]
+                    {
+                        ColumnAttributeNumber = columnAttributeNumber
+                        Name = column.ColumnName
+                        DataType = dataType
+                        Nullable = column.AllowDBNull.GetValueOrDefault(true)
+                        MaxLength = column.ColumnSize.GetValueOrDefault(-1)
+                        ReadOnly = true
+                        AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
+                        DefaultConstraint = column.DefaultValue
+                        Description = ""
+                        UDT =
+                            lazy
+                                match dbSchemaLookups.Enums.TryGetValue(dataType.UdtTypeName) with 
+                                | true, x ->
+                                    Some( if column.DataType.IsArray then x.MakeArrayType() else upcast x)
+                                | false, _ -> None 
+                        PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
+                        BaseSchemaName = column.BaseSchemaName
+                        BaseTableName = column.BaseTableName
+                    }  ]
         else
             []
-
-    let parameters = 
-        [
-            for p in cmd.Parameters do
-                assert (p.Direction = ParameterDirection.Input)
-
-                yield { 
-                    Name = p.ParameterName
-                    NpgsqlDbType = 
-                        match p.PostgresType with
-                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
-                            //probably array of custom type (enum or composite)
-                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
-                        | _ -> p.NpgsqlDbType
-                    Direction = p.Direction
-                    MaxLength = p.Size
-                    Precision = p.Precision
-                    Scale = p.Scale
-                    Optional = allParametersOptional 
-                    DataType = DataType.Create(p.PostgresType)
-                }
-        ]
-
-    parameters, outputColumns
-
-let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, customTypes: ref<IDictionary<string, ProvidedTypeDefinition>>) =  
-    use conn = openConnection(connectionString)
-    
-    use cmd = new NpgsqlCommand(commandText, conn)
-    let cols =
-        if resultType <> ResultType.DataReader then
-            NpgsqlCommandBuilder.DeriveInputParametersAndOutputTypes(cmd)
-        else
-            ReadOnlyCollection [||]
-
-    let parameters = 
-        [
-            for p in cmd.Parameters do
-                assert (p.Direction = ParameterDirection.Input)
-
-                yield { 
-                    Name = p.ParameterName
-                    NpgsqlDbType = 
-                        match p.PostgresType with
-                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
-                            //probably array of custom type (enum or composite)
-                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
-                        | _ -> p.NpgsqlDbType
-                    Direction = p.Direction
-                    MaxLength = p.Size
-                    Precision = p.Precision
-                    Scale = p.Scale
-                    Optional = allParametersOptional 
-                    DataType = DataType.Create(p.PostgresType)
-                }
-        ]
-    
-    let getEnums() =  
             
-        let enumTypes = 
-            cols 
-            |> Seq.choose (fun c -> 
-                if c.PostgresType :? PostgresTypes.PostgresEnumType
-                then Some( c.PostgresType.FullName)
-                else None
-            )
-            |> Seq.append [ 
-                for p in parameters do 
-                    if p.DataType.IsUserDefinedType 
-                    then 
-                        yield p.DataType.UdtTypeName 
-            ]
-            |> Seq.distinct
-            |> List.ofSeq
+    let parameters = 
+        [
+            for p in cmd.Parameters do
+                assert (p.Direction = ParameterDirection.Input)
 
-        if enumTypes.IsEmpty
-        then dict []
-        else
-            use getEnums = conn.CreateCommand()
-            getEnums.CommandText <- 
-                enumTypes
-                |> List.map (fun x -> sprintf "enum_range(NULL::%s) AS \"%s\"" x x)
-                |> String.concat ","
-                |> sprintf "SELECT %s"
+                yield { 
+                    Name = p.ParameterName
+                    NpgsqlDbType = 
+                        match p.PostgresType with
+                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
+                            //probably array of custom type (enum or composite)
+                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
+                        | _ -> p.NpgsqlDbType
+                    Direction = p.Direction
+                    MaxLength = p.Size
+                    Precision = p.Precision
+                    Scale = p.Scale
+                    Optional = allParametersOptional 
+                    DataType = DataType.Create(p.PostgresType)
+                }
+        ]
 
-            [
-                use cursor = getEnums.ExecuteReader()
-                cursor.Read() |> ignore
-                for i = 0 to cursor.FieldCount - 1 do 
-                    let t = new ProvidedTypeDefinition(cursor.GetName(i), Some typeof<string>, hideObjectMethods = true, nonNullable = true)
-                    let values = cursor.GetValue(i) :?> string[]
-                    t.AddMembers [ for value in values -> ProvidedField.Literal(value, t, value) ]
-                    yield t.Name, t 
-            ]
-            |> dict
+    let enums =  
+        outputColumns 
+        |> Seq.choose (fun c ->
+            if c.DataType.IsUserDefinedType && dbSchemaLookups.Enums.ContainsKey(c.DataType.UdtTypeName) then
+                Some (c.DataType.UdtTypeName, dbSchemaLookups.Enums.[c.DataType.UdtTypeName])
+            else
+                None)
+        |> Seq.append [ 
+            for p in parameters do
+                if p.DataType.IsUserDefinedType && dbSchemaLookups.Enums.ContainsKey(p.DataType.UdtTypeName)
+                then 
+                    yield p.DataType.UdtTypeName, dbSchemaLookups.Enums.[p.DataType.UdtTypeName]
+        ]
+        |> Seq.distinct
+        |> Map.ofSeq
 
-    if customTypes.Value.Count = 0 
-    then customTypes := getEnums()
-
-    let outputColumns =
-        cols
-        |> Seq.map ( fun c -> 
-            let dataType = DataType.Create(c.PostgresType)
-
-            {
-                ColumnAttributeNumber = c.ColumnAttributeNumber.GetValueOrDefault(-1s)
-                Name = c.ColumnName
-                DataType = dataType
-                Nullable = c.AllowDBNull.GetValueOrDefault(true)
-                MaxLength = c.ColumnSize.GetValueOrDefault(-1)
-                ReadOnly = c.IsReadOnly.GetValueOrDefault(false)
-                AutoIncrement = c.IsAutoIncrement.GetValueOrDefault(false)
-                DefaultConstraint = c.DefaultValue
-                Description = ""
-                UDT =
-                    lazy
-                        match customTypes.Value.TryGetValue(dataType.UdtTypeName) with 
-                        | true, x ->
-                            Some( if c.DataType.IsArray then x.MakeArrayType() else upcast x)
-                        | false, _ -> None 
-                PartOfPrimaryKey = c.IsKey.GetValueOrDefault(false)
-                BaseSchemaName = c.BaseSchemaName
-                BaseTableName = c.BaseTableName
-            } 
-        )
-        |> List.ofSeq
-        
-    parameters, outputColumns
+    parameters, outputColumns, enums
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)

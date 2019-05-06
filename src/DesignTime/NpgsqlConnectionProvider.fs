@@ -2,7 +2,6 @@
 
 open System
 open System.Data
-open System.Collections.Concurrent
 
 open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
@@ -12,7 +11,7 @@ open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 
-let methodsCache = new ConcurrentDictionary<_, ProvidedMethod>()
+let methodsCache = new Cache<ProvidedMethod>()
 
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor) = 
         
@@ -28,96 +27,96 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
-
-        let getMethodImpl () = 
-
-            let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor  = 
-                if not globalXCtor
+        methodsCache.GetOrAdd(
+            methodName,
+            lazy
+                let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor  = 
+                    if not globalXCtor
+                    then 
+                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
+                    else
+                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true
+                        
+                if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
                 then 
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
-                else
-                    args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true
-                    
-            if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
-            then 
-                invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
+                    invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-            let (parameters, outputColumns) = InformationSchema.extractParametersAndOutputColumnsFast(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                let (parameters, outputColumns, _) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                
+                let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
-            let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
+                let returnType = 
+                    QuotationsFactory.GetOutputTypes(
+                        outputColumns, 
+                        resultType, 
+                        commandBehaviour, 
+                        hasOutputParameters = false, 
+                        allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
+                        designTimeConnectionString = (if fsx then connectionString else null)
+                    )
 
-            let returnType = 
-                QuotationsFactory.GetOutputTypes(
-                    outputColumns, 
-                    resultType, 
-                    commandBehaviour, 
-                    hasOutputParameters = false, 
-                    allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                    designTimeConnectionString = (if fsx then connectionString else null)
-                )
+                let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
-            let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
-            let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
+                let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
+                commands.AddMember cmdProvidedType
+                
+                do  
+                    let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, dbSchemaLookups.Enums)
 
-            do  
-                let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, dbSchemaLookups.Enums)
+                    let addRedirectToISqlCommandMethod outputType name = 
+                        let hasOutputParameters = false
+                        QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+                        |> cmdProvidedType.AddMember
 
-                let addRedirectToISqlCommandMethod outputType name = 
-                    let hasOutputParameters = false
-                    QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
-                    |> cmdProvidedType.AddMember
+                    addRedirectToISqlCommandMethod returnType.Single "Execute" 
+                                
+                    let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
+                    addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" 
 
-                addRedirectToISqlCommandMethod returnType.Single "Execute" 
-                            
-                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
-                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" 
+                commands.AddMember cmdProvidedType
 
-            commands.AddMember cmdProvidedType
+                if resultType = ResultType.Records 
+                then
+                    returnType.PerRow 
+                    |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1)
+                    |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
 
-            if resultType = ResultType.Records 
-            then
-                returnType.PerRow 
-                |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1)
-                |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
+                elif resultType = ResultType.DataTable 
+                then
+                    returnType.Single |> cmdProvidedType.AddMember
 
-            elif resultType = ResultType.DataTable 
-            then
-                returnType.Single |> cmdProvidedType.AddMember
-
-            
-            let useLegacyPostgis = 
-                (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
-                ||
-                (outputColumns |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+                
+                let useLegacyPostgis = 
+                    (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+                    ||
+                    (outputColumns |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
 
 
-            let designTimeConfig = 
-                <@@ {
-                    SqlStatement = sqlStatement
-                    Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
-                    ResultType = %%Expr.Value(resultType)
-                    SingleRow = singleRow
-                    Row2ItemMapping = %%returnType.Row2ItemMapping
-                    SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
-                    UseLegacyPostgis = useLegacyPostgis
-                } @@>
+                let designTimeConfig = 
+                    <@@ {
+                        SqlStatement = sqlStatement
+                        Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
+                        ResultType = %%Expr.Value(resultType)
+                        SingleRow = singleRow
+                        Row2ItemMapping = %%returnType.Row2ItemMapping
+                        SeqItemTypeName = %%returnType.SeqItemTypeName
+                        ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                        UseLegacyPostgis = useLegacyPostgis
+                    } @@>
 
 
-            let impl = 
-                QuotationsFactory.GetCommandCtor(
-                    cmdProvidedType, 
-                    designTimeConfig, 
-                    allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                    xctor = xctor,
-                    factoryMethodName = methodName,
-                    ?connectionString  = (if fsx then Some connectionString else None)
-                    
-                )
-            rootType.AddMember impl
-            impl
-
-        methodsCache.GetOrAdd(methodName, fun _ -> getMethodImpl())
+                let ctorsAndFactories = 
+                    QuotationsFactory.GetCommandCtors(
+                        cmdProvidedType, 
+                        designTimeConfig, 
+                        allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
+                        ?connectionString  = (if fsx then Some connectionString else None), 
+                        factoryMethodName = methodName
+                    )
+                assert (ctorsAndFactories.Length = 4)
+                let impl: ProvidedMethod = downcast ctorsAndFactories.[if xctor then 3 else 1] 
+                rootType.AddMember impl
+                impl)
     ))
     rootType.AddMember m
 
@@ -191,7 +190,7 @@ let createTableTypes(connectionString: string, item: DbSchemaLookupItem, fsx, is
 
 let createRootType
     ( 
-        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, (schemaCache : ConcurrentDictionary<string, DbSchemaLookups>),
+        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
         connectionStringOrName, configType, config, xctor, fsx
     ) =
 
@@ -202,22 +201,22 @@ let createRootType
 
     let schemaLookups =
         schemaCache.GetOrAdd(
-            connectionString, fun _ ->
-                InformationSchema.getDbSchemaLookups(connectionString))
+            connectionString,
+            lazy InformationSchema.getDbSchemaLookups(connectionString))
     
-    let schemas = schemaLookups.Schemas
-                  |> Seq.map (fun s -> ProvidedTypeDefinition(s.Key, baseType = Some typeof<obj>, hideObjectMethods = true))
-                  |> List.ofSeq
+    let dbSchemas = schemaLookups.Schemas
+                    |> Seq.map (fun s -> ProvidedTypeDefinition(s.Key, baseType = Some typeof<obj>, hideObjectMethods = true))
+                    |> List.ofSeq
                   
-    databaseRootType.AddMembers schemas
+    databaseRootType.AddMembers dbSchemas
     
-    for schemaType in schemas do
+    for schemaType in dbSchemas do
         let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
         for enum in schemaLookups.Schemas.[schemaType.Name].Enums do
             es.AddMember enum.Value
         schemaType.AddMember es
         
-    for schemaType in schemas do
+    for schemaType in dbSchemas do
         schemaType.AddMemberDelayed <| fun () ->
             createTableTypes(connectionString, schemaLookups.Schemas.[schemaType.Name], fsx, isHostedExecution)
 
@@ -227,12 +226,7 @@ let createRootType
 
     databaseRootType           
 
-let getProviderType(assembly,
-                    nameSpace,
-                    isHostedExecution,
-                    resolutionFolder,
-                    cache: ConcurrentDictionary<_, ProvidedTypeDefinition>,
-                    schemaCache : ConcurrentDictionary<string, DbSchemaLookups>) = 
+let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: Cache<ProvidedTypeDefinition>, schemaCache : Cache<DbSchemaLookups>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -247,7 +241,8 @@ let getProviderType(assembly,
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
-                    typeName, fun _ -> 
+                    typeName,
+                    lazy
                         createRootType(
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
                             unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
