@@ -5,8 +5,10 @@
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeAllDlls</TargetsForTfmSpecificBuildOutput>
     <Nuspecfile>FSharp.Data.Npgsql.nuspec</Nuspecfile>
-  </PropertyGroup>
-  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
     <NoWarn>101</NoWarn>
@@ -29,8 +31,9 @@
     <None Include="FSharp.Data.Npgsql.nuspec" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.5.0"/>
+    <PackageReference Include="Npgsql" Version="4.0.7" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.0.5" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
   </ItemGroup>
   <Target Name="BeforeBuild">

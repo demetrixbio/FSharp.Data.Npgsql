@@ -3,12 +3,11 @@
 open System
 open System.Data
 open System.Reflection
-open Npgsql
-
 open FSharp.Quotations
 
 open ProviderImplementation.ProvidedTypes
 
+open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Generic
@@ -229,6 +228,7 @@ type internal QuotationsFactory private() =
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
         let recordType = ProvidedTypeDefinition("Record", baseType = Some typeof<obj>, hideObjectMethods = true)
+        
         let properties, ctorParameters = 
             columns
             |> List.mapi ( fun i col ->
@@ -255,8 +255,9 @@ type internal QuotationsFactory private() =
 
         let invokeCode args =
             let pairs =  
-                List.zip args properties //Because we need original names in dictionary
-                |> List.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
+                Seq.zip args properties //Because we need original names in dictionary
+                |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
+                |> List.ofSeq
 
             <@@
                 Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
@@ -280,7 +281,7 @@ type internal QuotationsFactory private() =
 
     static member internal GetDataRowType (columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
-
+            
         columns 
         |> List.mapi(fun i col ->
 
@@ -532,7 +533,7 @@ type internal QuotationsFactory private() =
                 let t = 
                     if p.DataType.IsUserDefinedType
                     then
-                        let t = customType.[ p.DataType.UdtTypeName ] 
+                        let t = customType.[p.DataType.UdtTypeName] 
                         if p.DataType.ClrType.IsArray 
                         then t.MakeArrayType()
                         else upcast t

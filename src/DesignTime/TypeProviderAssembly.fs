@@ -1,9 +1,9 @@
 ﻿namespace FSharp.Data.Npgsql
 
+open DesignTime.InformationSchema
 open System.Reflection
 open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
-open System.Collections.Concurrent
 open FSharp.Data.Npgsql.DesignTime
 open System.IO
 
@@ -15,15 +15,15 @@ type NpgsqlProviders(config) as this =
         addDefaultProbingLocation = true
     )
     
-    let cache = ConcurrentDictionary()
+    let cache = Cache<ProvidedTypeDefinition>()
+    let schemaCache = Cache<DbSchemaLookups>()
 
     do 
         this.Disposing.Add <| fun _ ->
             try 
-                cache.Clear()
                 NpgsqlConnectionProvider.methodsCache.Clear()
             with _ -> ()
-    do 
+    do
         let assembly = Assembly.GetExecutingAssembly()
         let assemblyName = assembly.GetName().Name
         let nameSpace = this.GetType().Namespace
@@ -32,8 +32,7 @@ type NpgsqlProviders(config) as this =
 
         this.AddNamespace(
             nameSpace, [ 
-                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
-                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache)
+                NpgsqlCommandProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, schemaCache)
+                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, schemaCache)
             ]
         )
-
