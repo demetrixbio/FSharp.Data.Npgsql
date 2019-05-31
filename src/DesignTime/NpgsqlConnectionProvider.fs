@@ -13,7 +13,7 @@ open InformationSchema
 
 let methodsCache = new Cache<ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare) = 
         
     let staticParams = 
         [
@@ -23,6 +23,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             yield ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             yield ProvidedStaticParameter("TypeName", typeof<string>, "") 
             if not globalXCtor then yield ProvidedStaticParameter("XCtor", typeof<bool>, false)
+            yield ProvidedStaticParameter("Prepare", typeof<bool>, globalPrepare)   
         ]
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
@@ -30,12 +31,12 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         methodsCache.GetOrAdd(
             methodName,
             lazy
-                let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor  = 
+                let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor, prepare  = 
                     if not globalXCtor
                     then 
-                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _
+                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
                     else
-                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true
+                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true, args.[5] :?> _
                         
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
                 then 
@@ -102,6 +103,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         SeqItemTypeName = %%returnType.SeqItemTypeName
                         ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
                         UseLegacyPostgis = useLegacyPostgis
+                        Prepare = prepare
                     } @@>
 
 
@@ -191,7 +193,7 @@ let createTableTypes(connectionString: string, item: DbSchemaLookupItem, fsx, is
 let createRootType
     ( 
         assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
-        connectionStringOrName, configType, config, xctor, fsx
+        connectionStringOrName, configType, config, xctor, fsx, prepare
     ) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
@@ -222,7 +224,7 @@ let createRootType
 
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, schemaLookups, fsx, isHostedExecution, xctor)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, schemaLookups, fsx, isHostedExecution, xctor, prepare)
 
     databaseRootType           
 
@@ -238,6 +240,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                 ProvidedStaticParameter("Config", typeof<string>, "") 
                 ProvidedStaticParameter("XCtor", typeof<bool>, false) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
+                ProvidedStaticParameter("Prepare", typeof<bool>, false) 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
@@ -245,7 +248,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                     lazy
                         createRootType(
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4]
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5]
                         )
                 )   
             ) 
@@ -257,6 +260,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
 <param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
+<param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
 """
     providerType
 

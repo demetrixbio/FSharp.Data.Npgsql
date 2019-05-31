@@ -14,7 +14,6 @@ open NpgsqlTypes
 open FSharp.Data.Npgsql
 open ProviderImplementation.ProvidedTypes
 open System.Collections
-open System.Collections.ObjectModel
 open System.Net
 
 type internal NpgsqlDataReader with
@@ -242,9 +241,10 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     use conn = openConnection(connectionString)
     
     use cmd = new NpgsqlCommand(commandText, conn)
-    let cols = NpgsqlCommandBuilder.DeriveInputParametersAndOutputTypes(cmd)
-               |> Seq.tryLast // we are interested in output types of last executed statement only
-               |> Option.defaultWith (fun () -> ReadOnlyCollection([||]))
+    NpgsqlCommandBuilder.DeriveParameters(cmd)
+    let cols = 
+        use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
+        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
     
     let outputColumns =
         if resultType <> ResultType.DataReader then

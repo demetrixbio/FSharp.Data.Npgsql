@@ -21,6 +21,7 @@ type DesignTimeConfig = {
     SeqItemTypeName: string
     ExpectedColumns: DataColumn[]
     UseLegacyPostgis: bool
+    Prepare: bool
 }
 
 [<Sealed>]
@@ -103,8 +104,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     interface ISqlCommand with
 
-        member __.Execute parameters = execute(cmd, setupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
-        member __.AsyncExecute parameters = asyncExecute(cmd, asyncSetupConnection, readerBehavior, parameters, cfg.ExpectedColumns)
+        member __.Execute parameters = execute(cmd, setupConnection, readerBehavior, parameters, cfg.ExpectedColumns, cfg.Prepare)
+        member __.AsyncExecute parameters = asyncExecute(cmd, asyncSetupConnection, readerBehavior, parameters, cfg.ExpectedColumns, cfg.Prepare)
 
     interface IDisposable with
         member __.Dispose() =
@@ -142,7 +143,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 
             //TO DO: add extended property on column to mark enums
             let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
-            let maybeArray = expectedType.IsArray && actualType = typeof<Array>
+            let maybeArray = (expectedType = typeof<Array> || expectedType.IsArray) && (actualType = typeof<Array> || actualType.IsArray)
             let typeless = expectedType = typeof<obj> && actualType = typeof<string>
             if (expectedName <> "" && actualName <> expectedName) 
                 || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless)
@@ -151,45 +152,53 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 cursor.Close()
                 invalidOp message
 
-    static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
+    static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         setupConnection() |> ignore
+
+        if prepare then
+            cmd.Prepare()
+
         let cursor = cmd.ExecuteReader(readerBehavior)
         ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, expectedColumns)
         cursor
 
-    static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, expectedColumns) = 
+    static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, expectedColumns, prepare) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-            let! _ = setupConnection() 
+            let! _ = setupConnection()
+
+            if prepare then
+                do! cmd.PrepareAsync() |> Async.AwaitTask
+
             let! cursor = cmd.ExecuteReaderAsync( readerBehavior) |> Async.AwaitTask
             ``ISqlCommand Implementation``.VerifyOutputColumns(downcast cursor, expectedColumns)
             return cursor
         }
     
-    static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
-        use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
+    static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare) = 
+        use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare) 
         let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
         result.Columns.AddRange(expectedColumns)
         //result.PrimaryKey <- expectedColumns |> Array.filter (fun c -> unbox c.ExtendedProperties.["IsKey"])
         result.Load(cursor)
         result
 
-    static member internal AsyncExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns) = 
+    static member internal AsyncExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare) = 
         async {
-            use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns) 
+            use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare) 
             let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
             result.Columns.AddRange(expectedColumns)
             result.Load(reader)
             return result
         }
 
-    static member internal ExecuteList<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, expectedColumns) -> 
+    static member internal ExecuteList<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, expectedColumns, prepare) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
         then
-            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
+            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare)
             let xs = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
 
             if readerBehavior.HasFlag(CommandBehavior.SingleRow)
@@ -198,7 +207,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             else 
                 box xs 
         else
-            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns)
+            use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedColumns, prepare)
             let resultset = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
 
             if hasOutputParameters
@@ -212,10 +221,10 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
             box resultset
             
-    static member internal AsyncExecuteList<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns) ->
+    static member internal AsyncExecuteList<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns, prepare) ->
         let xs = 
             async {
-                use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns)
+                use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, expectedDataReaderColumns, prepare)
                 return reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
             }
 
@@ -229,9 +238,12 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         else 
             box xs 
 
-    static member internal ExecuteNonQuery setupConnection (cmd, _, _, parameters, _) = 
+    static member internal ExecuteNonQuery setupConnection (cmd, _, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         use __ = setupConnection()
+
+        if prepare then
+            cmd.Prepare()
 
         let recordsAffected = cmd.ExecuteNonQuery() 
         for i = 0 to parameters.Length - 1 do
@@ -242,10 +254,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 parameters.[i] <- name, p.Value
         recordsAffected
 
-    static member internal AsyncExecuteNonQuery setupConnection (cmd, _, _, parameters, _) = 
+    static member internal AsyncExecuteNonQuery setupConnection (cmd, _, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         async {         
             use! __ = setupConnection()
+
+            if prepare then
+                do! cmd.PrepareAsync() |> Async.AwaitTask
+
             return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
         }
 

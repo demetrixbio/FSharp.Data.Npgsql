@@ -3,12 +3,12 @@
   <PropertyGroup>
     <TargetFrameworks>netcoreapp2.0;net461</TargetFrameworks>
     <AssemblyName>FSharp.Data.Npgsql.DesignTime</AssemblyName>
-    <DefineConstants>NO_GENERATIVE</DefineConstants>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <DebugType>full</DebugType>
-  </PropertyGroup>
-
-  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
     <NoWarn>101</NoWarn>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
@@ -32,16 +32,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.5.0" Condition="'$(TargetFramework)' == 'net461'" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="4.0.7" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="2.0.0" />
     <PackageReference Include="System.Xml.XDocument" Version="4.3.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\..\npgsql\src\Npgsql\Npgsql.csproj" />
   </ItemGroup>
 
 </Project>

@@ -11,7 +11,7 @@ open FSharp.Data.Npgsql.DesignTime.InformationSchema
 let internal createRootType
     (
         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
-        sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, configType, config
+        sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, configType, config, prepare
     ) = 
 
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
@@ -76,6 +76,7 @@ let internal createRootType
                 SeqItemTypeName = %%returnType.SeqItemTypeName
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
                 UseLegacyPostgis = useLegacyPostgis
+                Prepare = prepare
             } @@>
 
         do
@@ -117,6 +118,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
             ProvidedStaticParameter("AllParametersOptional", typeof<bool>, false) 
             ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
             ProvidedStaticParameter("Config", typeof<string>, "") 
+            ProvidedStaticParameter("Prepare", typeof<bool>, false) 
         ],             
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
@@ -124,7 +126,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                 lazy 
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
-                        unbox args.[0],  unbox args.[1],  unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7]
+                        unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
                     )
             )
         )
@@ -140,6 +142,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
 <param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
 <param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
 <param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
+<param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
 """
     
     providerType
