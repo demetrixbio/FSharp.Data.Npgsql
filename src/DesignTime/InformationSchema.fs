@@ -242,6 +242,7 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     
     use cmd = new NpgsqlCommand(commandText, conn)
     NpgsqlCommandBuilder.DeriveParameters(cmd)
+    for p in cmd.Parameters do p.Value <- DBNull.Value
     let cols = 
         use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
         if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
@@ -280,29 +281,24 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                     }  ]
         else
             []
-            
+
     let parameters = 
-        [
-            for p in cmd.Parameters do
-                assert (p.Direction = ParameterDirection.Input)
-
-                yield { 
-                    Name = p.ParameterName
-                    NpgsqlDbType = 
-                        match p.PostgresType with
-                        | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
-                            //probably array of custom type (enum or composite)
-                            NpgsqlDbType.Array ||| NpgsqlDbType.Text
-                        | _ -> p.NpgsqlDbType
-                    Direction = p.Direction
-                    MaxLength = p.Size
-                    Precision = p.Precision
-                    Scale = p.Scale
-                    Optional = allParametersOptional 
-                    DataType = DataType.Create(p.PostgresType)
-                }
-        ]
-
+        [ for p in cmd.Parameters ->
+            assert (p.Direction = ParameterDirection.Input)
+            { Name = p.ParameterName
+              NpgsqlDbType = 
+                match p.PostgresType with
+                | :? PostgresArrayType as x when (x.Element :? PostgresEnumType) -> 
+                    //probably array of custom type (enum or composite)
+                    NpgsqlDbType.Array ||| NpgsqlDbType.Text
+                | _ -> p.NpgsqlDbType
+              Direction = p.Direction
+              MaxLength = p.Size
+              Precision = p.Precision
+              Scale = p.Scale
+              Optional = allParametersOptional 
+              DataType = DataType.Create(p.PostgresType) } ]
+    
     let enums =  
         outputColumns 
         |> Seq.choose (fun c ->

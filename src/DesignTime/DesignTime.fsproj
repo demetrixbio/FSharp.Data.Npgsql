@@ -32,10 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.5.0" Condition="'$(TargetFramework)' == 'net461'" />
-  </ItemGroup>
-  
-  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.5.0"/>
     <PackageReference Include="Npgsql" Version="4.0.7" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
