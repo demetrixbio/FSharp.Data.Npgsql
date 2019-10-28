@@ -158,11 +158,8 @@ let createTableTypes(connectionString: string, item: DbSchemaLookupItem, fsx, is
                         use x = new NpgsqlCommandBuilder()
                         sprintf "%s.%s" (x.QuoteIdentifier item.Schema.Name) (x.QuoteIdentifier tableName)
 
-                    let cmdText =  
-                        columns
-                        |> List.map(fun c ->  c.Name)
-                        |> String.concat " ,"
-                        |> sprintf "SELECT %s FROM %s" twoPartTableName
+                    let columns = columns |> List.map(fun c ->  c.Name) |> String.concat " ,"
+                    let cmdText = sprintf "SELECT %s FROM %s" columns twoPartTableName
 
                     <@@ 
                         let selectCommand = new NpgsqlCommand(cmdText)
