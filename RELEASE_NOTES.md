@@ -7,3 +7,6 @@
 * Prepared statements / automatic preparation support for NpgsqlCommand and NpgsqlConnection providers.
 * Bytea column type support.
 * Schema caching for type inference, performance improvements.
+
+### 0.1.47-beta - October 28th, 2019
+* Fixed timestamptz Npgsql parameter handling by DataTable/DbCommand api. Insertions of DateTime into timestamptz column always delegate conversion handling to underlying Npgsql library.
