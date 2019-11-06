@@ -183,6 +183,8 @@ type Column =
      
         let isTimestampTz = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
         let isTimestamp = this.DataType.Name = "timestamp" && this.ClrType = typeof<DateTime>
+        let isJson = this.DataType.Name = "json"
+        let isJsonb = this.DataType.Name = "jsonb"
         let isEnum = this.UDT.Value |> Option.exists (fun x -> not x.IsArray)
         
         <@@ 
@@ -194,6 +196,8 @@ type Column =
 
             if x.DataType = typeof<string> then x.MaxLength <- %%Expr.Value(this.MaxLength)
             
+            // control flow must be specified via simple bool switches as we are inside of quotation expression.
+            // Expr.Value can contain only boxed primitive types (not variables)
             if isTimestampTz then
                 //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
                 x.DateTimeMode <- DataSetDateTime.Local
@@ -207,6 +211,10 @@ type Column =
             elif isEnum then
                 // value is an enum and should be sent to npgsql as unknown (auto conversion from string to appropriate enum type)
                 x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Unknown))
+            elif isJson then
+                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Json))
+            elif isJsonb then
+                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Jsonb))
             
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.IsKey), %%Expr.Value(box this.PartOfPrimaryKey))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
