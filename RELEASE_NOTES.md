@@ -10,3 +10,6 @@
 
 ### 0.1.47-beta - October 28th, 2019
 * Fixed timestamptz Npgsql parameter handling by DataTable/DbCommand api. Insertions of DateTime into timestamptz column always delegate conversion handling to underlying Npgsql library.
+
+### 0.1.48-beta - November 6th, 2019
+* Added json/jsonb Npgsql parameter handling for DataTable/DbCommand api.
