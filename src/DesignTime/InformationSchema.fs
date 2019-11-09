@@ -69,7 +69,7 @@ let private builtins = [
     "date", typeof<DateTime>
     "interval", typeof<TimeSpan>
     "timestamp without time zone", typeof<DateTime>; "timestamp", typeof<DateTime>   
-    "timestamp with time zone", typeof<DateTime>; "timestamptz", typeof<DateTime>
+    "timestamp with time zone", typeof<DateTimeOffset>; "timestamptz", typeof<DateTimeOffset>
     "time without time zone", typeof<TimeSpan>; "time", typeof<TimeSpan>
     "time with time zone", typeof<DateTimeOffset>; "timetz", typeof<DateTimeOffset>
 
