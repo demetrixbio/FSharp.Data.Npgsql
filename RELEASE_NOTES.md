@@ -13,3 +13,6 @@
 
 ### 0.1.48-beta - November 6th, 2019
 * Added json/jsonb Npgsql parameter handling for DataTable/DbCommand api.
+
+### 0.1.49-beta - January 13th, 2020
+* DataTable.Update wrong DbParameter type fix in case of multiple update statements.  
