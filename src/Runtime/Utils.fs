@@ -15,7 +15,6 @@ type Utils private() =
     [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
         seq {
-            use _ = cursor
             let values = Array.zeroCreate cursor.FieldCount
             while cursor.Read() do
                 cursor.GetValues(values) |> ignore

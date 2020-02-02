@@ -262,13 +262,19 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     use cmd = new NpgsqlCommand(commandText, conn)
     NpgsqlCommandBuilder.DeriveParameters(cmd)
     for p in cmd.Parameters do p.Value <- DBNull.Value
-    let cols = 
+
+    let resultSets =
         use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
-        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+        [ 
+            if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+
+            while cursor.NextResult () do
+                if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+        ]
     
     let outputColumns =
         if resultType <> ResultType.DataReader then
-            [ for column in cols ->
+            resultSets |> List.map (List.map (fun column -> 
                 let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
                 
                 if column.TableOID <> 0u then
@@ -297,9 +303,9 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                         PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
                         BaseSchemaName = column.BaseSchemaName
                         BaseTableName = column.BaseTableName
-                    }  ]
+                    }))
         else
-            []
+            [[]]
 
     let parameters = 
         [ for p in cmd.Parameters ->
@@ -320,19 +326,20 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     
     let enums =  
         outputColumns 
-        |> Seq.choose (fun c ->
+        |> List.concat
+        |> List.choose (fun c ->
             if c.DataType.IsUserDefinedType && dbSchemaLookups.Enums.ContainsKey(c.DataType.UdtTypeName) then
                 Some (c.DataType.UdtTypeName, dbSchemaLookups.Enums.[c.DataType.UdtTypeName])
             else
                 None)
-        |> Seq.append [ 
+        |> List.append [ 
             for p in parameters do
                 if p.DataType.IsUserDefinedType && dbSchemaLookups.Enums.ContainsKey(p.DataType.UdtTypeName)
                 then 
                     yield p.DataType.UdtTypeName, dbSchemaLookups.Enums.[p.DataType.UdtTypeName]
         ]
-        |> Seq.distinct
-        |> Map.ofSeq
+        |> List.distinct
+        |> Map.ofList
 
     parameters, outputColumns, enums
 

@@ -7,6 +7,7 @@ open Npgsql
 open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql
 open FSharp.Data.Npgsql.DesignTime.InformationSchema
+open System
 
 let internal createRootType
     (
@@ -23,6 +24,7 @@ let internal createRootType
             connectionString,
             lazy InformationSchema.getDbSchemaLookups(connectionString))
     
+    //todo not possible with multiple statements
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
@@ -37,44 +39,30 @@ let internal createRootType
     
     let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
-    let returnType = 
-        QuotationsFactory.GetOutputTypes(
-            outputColumns, 
-            resultType, 
-            commandBehaviour, 
-            hasOutputParameters = false, 
-            allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
-            designTimeConnectionString = (if fsx then connectionString else null)
-        )
-
-    do
-        if resultType = ResultType.Records 
-        then
-            returnType.PerRow 
-            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1 )
-            |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
-
-        elif resultType = ResultType.DataTable 
-        then
-            returnType.Single |> cmdProvidedType.AddMember
+    let returnTypes = 
+        outputColumns |> List.mapi (fun i cs ->
+            QuotationsFactory.GetOutputTypes(
+                cs, 
+                resultType, 
+                commandBehaviour, 
+                hasOutputParameters = false, 
+                allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
+                designTimeConnectionString = (if fsx then connectionString else null),
+                typeNameSuffix = if outputColumns.Length > 1 then (i + 1).ToString () else ""))
 
     let useLegacyPostgis = 
         (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
         ||
-        (outputColumns |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
-
+        (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
 
     do  //ctors
         let designTimeConfig = 
-
             <@@ {
                 SqlStatement = sqlStatement
                 Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                 ResultType = resultType
                 SingleRow = singleRow
-                Row2ItemMapping = %%returnType.Row2ItemMapping
-                SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
                 UseLegacyPostgis = useLegacyPostgis
                 Prepare = prepare
             } @@>
@@ -89,18 +77,7 @@ let internal createRootType
             )
             |> cmdProvidedType.AddMembers
 
-    do  
-        let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
-
-        let hasOutputParameters = false
-        let addRedirectToISqlCommandMethod outputType name = 
-            QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
-            |> cmdProvidedType.AddMember
-
-        addRedirectToISqlCommandMethod returnType.Single "Execute" 
-                            
-        let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
-        addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" 
+    QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns
 
     cmdProvidedType
 
