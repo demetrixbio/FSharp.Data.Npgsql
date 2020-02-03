@@ -10,7 +10,6 @@ open Npgsql
 
 open FSharp.Data.Npgsql
 open InformationSchema
-open FSharp.Data.Npgsql
 
 let methodsCache = new Cache<ProvidedMethod>()
 
@@ -39,7 +38,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     else
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true, args.[5] :?> _
                         
-                //todo not possible with multiple statements
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
                 then 
                     invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."

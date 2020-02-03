@@ -31,8 +31,8 @@
     <None Include="FSharp.Data.Npgsql.nuspec" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.5.0"/>
-    <PackageReference Include="Npgsql" Version="4.0.7" />
+    <PackageReference Include="FSharp.Core" Version="4.5.0" />
+    <PackageReference Include="Npgsql" Version="4.1.3" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
   </ItemGroup>

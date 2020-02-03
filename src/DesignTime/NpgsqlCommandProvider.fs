@@ -24,7 +24,6 @@ let internal createRootType
             connectionString,
             lazy InformationSchema.getDbSchemaLookups(connectionString))
     
-    //todo not possible with multiple statements
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 

@@ -462,7 +462,7 @@ type internal QuotationsFactory private() =
             let dataRowType = QuotationsFactory.GetDataRowType(outputColumns)
             let dataTableType = 
                 QuotationsFactory.GetDataTableType(
-                    "Table", 
+                    "Table" + typeNameSuffix, 
                     dataRowType, 
                     outputColumns, 
                     allowDesignTimeConnectionStringReUse,
@@ -681,7 +681,7 @@ type internal QuotationsFactory private() =
             resultSetsType.AddMember ctor
 
             List.zip outputColumns returnTypes
-            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns resultSetsType)
+            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns cmdProvidedType)
 
             addRedirectToISqlCommandMethod resultSetsType "Execute" 
             

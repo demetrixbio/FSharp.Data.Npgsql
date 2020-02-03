@@ -263,14 +263,13 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     NpgsqlCommandBuilder.DeriveParameters(cmd)
     for p in cmd.Parameters do p.Value <- DBNull.Value
 
-    let resultSets =
+    let resultSets = [ 
         use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
-        [ 
-            if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
 
-            while cursor.NextResult () do
-                if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
-        ]
+        while cursor.NextResult () do
+            if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+    ]
     
     let outputColumns =
         if resultType <> ResultType.DataReader then
