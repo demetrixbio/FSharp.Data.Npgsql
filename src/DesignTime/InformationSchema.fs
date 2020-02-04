@@ -130,11 +130,11 @@ type DataType = {
         }
 
 type Schema =
-    { OID : string
+    { OID : uint32
       Name : string }
     
 type Table =
-    { OID : string
+    { OID : uint32
       Name : string
       Description : string option }
     
@@ -228,7 +228,7 @@ type DbSchemaLookupItem =
       Tables : Dictionary<Table, HashSet<Column>>
       Enums : Map<string, ProvidedTypeDefinition> }
     
-type ColumnLookupKey = { TableOID : string; ColumnAttributeNumber : int16 }
+type ColumnLookupKey = { TableOID : uint32; ColumnAttributeNumber : int16 }
     
 type DbSchemaLookups =
     { Schemas : Dictionary<string, DbSchemaLookupItem>
@@ -271,11 +271,12 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
             [ for column in cols ->
                 let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
                 
-                if column.TableOID <> 0u then
-                    let lookupKey = { TableOID = string column.TableOID
-                                      ColumnAttributeNumber = columnAttributeNumber }
-                    { dbSchemaLookups.Columns.[lookupKey] with Name = column.ColumnName }
-                else
+                let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
+
+                match dbSchemaLookups.Columns.TryGetValue lookupKey with
+                | (true, col) ->
+                    { col with Name = column.ColumnName }
+                | _ ->
                     let dataType = DataType.Create(column.PostgresType)
 
                     {
@@ -418,7 +419,7 @@ let getDbSchemaLookups(connectionString) =
     use row = cmd.ExecuteReader()
     while row.Read() do
         let schema : Schema =
-            { OID = string row.["schema_oid"]
+            { OID = row.["schema_oid"] :?> uint32
               Name = string row.["schema_name"] }
         
         if not <| schemas.ContainsKey(schema.Name) then
@@ -431,7 +432,7 @@ let getDbSchemaLookups(connectionString) =
         | None -> ()
         | Some oid ->
             let table =
-                { OID = string oid
+                { OID = oid :?> uint32
                   Name = string row.["table_name"]
                   Description = row.["table_description"] |> Option.ofObj |> Option.map string }
             

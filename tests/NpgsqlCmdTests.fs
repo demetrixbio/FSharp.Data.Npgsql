@@ -472,6 +472,11 @@ let ``Tuples command prepared``() =
 
     Assert.True(isStatementPrepared conn)
 
+[<Fact>]
+let ``Queries against system catalogs work``() =
+    use cmd = new NpgsqlCommand<"SELECT * FROM pg_timezone_names", dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0) 
  
 //[<Fact>]
 //let npPkTable() =
