@@ -344,7 +344,7 @@ let ``AddRow/NewRow preserve order``() =
         title = "Inception", 
         description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
         language_id = 1s,
-        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+        fulltext = NpgsqlTypes.NpgsqlTsVector.Parse("")
     )
 
 
@@ -472,7 +472,97 @@ let ``Tuples command prepared``() =
 
     Assert.True(isStatementPrepared conn)
 
- 
+[<Literal>]
+let getActorsAndFilms = "select * from actor limit 5; select * from film limit 5"
+
+[<Fact>]
+let ``Two selects record``() =
+    use cmd = new NpgsqlCommand<getActorsAndFilms, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.title) |> List.length)
+
+[<Fact>]
+let ``Two selects tuple``() =
+    use cmd = new NpgsqlCommand<getActorsAndFilms, dvdRental, ResultType = ResultType.Tuples>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.length)
+
+[<Fact>]
+let ``Two selects data table``() =
+    use cmd = new NpgsqlCommand<getActorsAndFilms, dvdRental, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.title) |> Seq.length)
+
+[<Fact>]
+let ``Two selects data reader``() =
+    use cmd = new NpgsqlCommand<getActorsAndFilms, dvdRental, ResultType = ResultType.DataReader>(dvdRental)
+    let actual = cmd.Execute()
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (2, resultSets)
+
+[<Literal>]
+let getActorsDeleteActorsGetFilms = "select * from actor limit 5; delete from actor where actor_id = -1; select * from film limit 5"
+
+[<Fact>]
+let ``Two selects and nonquery record``() =
+    use cmd = new NpgsqlCommand<getActorsDeleteActorsGetFilms, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.title) |> List.length)
+
+[<Fact>]
+let ``Two selects and nonquery tuple``() =
+    use cmd = new NpgsqlCommand<getActorsDeleteActorsGetFilms, dvdRental, ResultType = ResultType.Tuples>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.length)
+
+[<Fact>]
+let ``Two selects and nonquery data table``() =
+    use cmd = new NpgsqlCommand<getActorsDeleteActorsGetFilms, dvdRental, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.title) |> Seq.length)
+
+[<Fact>]
+let ``Two selects and nonquery data reader``() =
+    use cmd = new NpgsqlCommand<getActorsDeleteActorsGetFilms, dvdRental, ResultType = ResultType.DataReader>(dvdRental)
+    let actual = cmd.Execute()
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (2, resultSets)
+
+[<Literal>]
+let fourSelects = "SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10)"
+
+[<Fact>]
+let ``Four single-column selects async``() =
+    use cmd = new NpgsqlCommand<fourSelects, dvdRental>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (10, actual.ResultSet1 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet2 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet3 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet4 |> Seq.map (fun x -> x.Value) |> Seq.length)
+
 //[<Fact>]
 //let npPkTable() =
 //    use cmd =

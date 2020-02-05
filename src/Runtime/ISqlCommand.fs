@@ -73,7 +73,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | _ -> invalidOp "The output sequence contains more than one element."
 
     static let buildResultSetsBackingDict (dataPerResultSet: seq<obj>) expectedResultSetCount =
-        Seq.zip [ for i in 1 .. expectedResultSetCount do sprintf "ResultSet%d" i ] dataPerResultSet |> Map.ofSeq
+        Seq.zip [ for i in 1 .. expectedResultSetCount do yield sprintf "ResultSet%d" i ] dataPerResultSet |> Map.ofSeq
 
     let execute, asyncExecute = 
         match cfg.ResultType with
@@ -81,18 +81,20 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             ``ISqlCommand Implementation``.ExecuteReader >> box, 
             ``ISqlCommand Implementation``.AsyncExecuteReader >> box
         | ResultType.DataTable ->
-            ``ISqlCommand Implementation``.ExecuteDataTables >> box, 
-            ``ISqlCommand Implementation``.AsyncExecuteDataTables >> box
+            if cfg.ResultSets.Length = 1 then
+                ``ISqlCommand Implementation``.ExecuteDataTable >> box, 
+                ``ISqlCommand Implementation``.AsyncExecuteDataTable >> box
+            else
+                ``ISqlCommand Implementation``.ExecuteDataTables >> box, 
+                ``ISqlCommand Implementation``.AsyncExecuteDataTables >> box
         | ResultType.Records | ResultType.Tuples ->
             match cfg.ResultSets with
             | [| resultSet |] ->
-                match box resultSet.Row2ItemMapping, resultSet.SeqItemTypeName with
-                | null, null ->
-                    ``ISqlCommand Implementation``.ExecuteNonQuery setupConnection >> box, 
-                    ``ISqlCommand Implementation``.AsyncExecuteNonQuery asyncSetupConnection >> box
-                | rowMapping, itemTypeName ->
-                    assert (rowMapping <> null && itemTypeName <> null)
-                    let itemType = Type.GetType( itemTypeName, throwOnError = true)
+                if isNull resultSet.SeqItemTypeName || isNull (box resultSet.Row2ItemMapping) then
+                    ``ISqlCommand Implementation``.ExecuteNonQuery >> box, 
+                    ``ISqlCommand Implementation``.AsyncExecuteNonQuery >> box
+                else
+                    let itemType = Type.GetType( resultSet.SeqItemTypeName, throwOnError = true)
                     
                     let executeHandle = 
                         typeof<``ISqlCommand Implementation``>
@@ -104,8 +106,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                             .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
                             .MakeGenericMethod(itemType)
                             
-                    executeHandle.Invoke(null, [| rowMapping |]) |> unbox >> box, 
-                    asyncExecuteHandle.Invoke(null, [| rowMapping |]) |> unbox >> box
+                    executeHandle.Invoke(null, [| resultSet.Row2ItemMapping |]) |> unbox >> box, 
+                    asyncExecuteHandle.Invoke(null, [| resultSet.Row2ItemMapping |]) |> unbox >> box
             | _ ->
                 ``ISqlCommand Implementation``.ExecuteMulti >> box,
                 ``ISqlCommand Implementation``.AsyncExecuteMulti >> box
@@ -188,6 +190,12 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             return cursor
         }
     
+    static member internal LoadDataTable (cursor: Common.DbDataReader) cmd columns =
+        let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd)
+        result.Columns.AddRange(columns)
+        result.Load(cursor)
+        result
+
     static member internal AsyncExecuteDataTables(cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         do! setupConnection() |> Async.Ignore
@@ -195,17 +203,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         if prepare then
             do! cmd.PrepareAsync() |> Async.AwaitTask
 
-        use cursor = cmd.ExecuteReader(readerBehavior)        
+        use! cursor = cmd.ExecuteReaderAsync(readerBehavior) |> Async.AwaitTask
 
         // No explicit NextResult calls, Load takes care of it
         let results =
             resultSets
             |> Array.map (fun resultSet ->
                 ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
-                let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
-                result.Columns.AddRange(resultSet.ExpectedColumns)
-                result.Load(cursor)
-                box result)
+                ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
         return buildResultSetsBackingDict results resultSets.Length }
 
@@ -224,12 +229,19 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             resultSets
             |> Array.map (fun resultSet ->
                 ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
-                let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd.Clone())
-                result.Columns.AddRange(resultSet.ExpectedColumns)
-                result.Load(cursor)
-                box result)
+                ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-        buildResultSetsBackingDict results resultSets.Length
+        buildResultSetsBackingDict results resultSets.Length |> box
+
+    static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) = 
+        use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) 
+        ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSets.[0].ExpectedColumns
+
+    static member internal AsyncExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) = 
+        async {
+            use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) 
+            return ``ISqlCommand Implementation``.LoadDataTable reader (cmd.Clone()) resultSets.[0].ExpectedColumns
+        }
 
     static member internal ExecuteList<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
@@ -320,7 +332,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             currentResultSet <- currentResultSet + 1
             go <- cursor.NextResult()
 
-        buildResultSetsBackingDict results resultSets.Length
+        buildResultSetsBackingDict results resultSets.Length |> box
 
     static member internal AsyncExecuteMulti (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
@@ -341,9 +353,9 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             let! more = cursor.NextResultAsync() |> Async.AwaitTask
             go <- more
 
-        return buildResultSetsBackingDict results resultSets.Length }
+        return buildResultSetsBackingDict results resultSets.Length |> box }
 
-    static member internal ExecuteNonQuery setupConnection (cmd, _, _, parameters, _, prepare) = 
+    static member internal ExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         use __ = setupConnection()
 
@@ -359,7 +371,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 parameters.[i] <- name, p.Value
         recordsAffected
 
-    static member internal AsyncExecuteNonQuery setupConnection (cmd, _, _, parameters, _, prepare) = 
+    static member internal AsyncExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         async {         
             use! __ = setupConnection()

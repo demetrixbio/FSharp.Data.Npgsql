@@ -635,7 +635,7 @@ type internal QuotationsFactory private() =
             <@@ {
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns do c.ToDataColumnExpr() ])
+                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>)
 
     static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) =

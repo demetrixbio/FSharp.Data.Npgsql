@@ -267,12 +267,12 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     let resultSets = [ 
         use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
         if cursor.FieldCount = 0 then
-            []
+            yield []
         else
-            [ for c in cursor.GetColumnSchema() -> c ]
+            yield [ for c in cursor.GetColumnSchema() -> c ]
 
             while cursor.NextResult () do
-                [ for c in cursor.GetColumnSchema() -> c ]
+                yield [ for c in cursor.GetColumnSchema() -> c ]
     ]
     
     let outputColumns =
