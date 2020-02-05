@@ -681,7 +681,7 @@ type internal QuotationsFactory private() =
             resultSetsType.AddMember ctor
 
             List.zip outputColumns returnTypes
-            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns cmdProvidedType)
+            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns resultSetsType)
 
             addRedirectToISqlCommandMethod resultSetsType "Execute" 
             

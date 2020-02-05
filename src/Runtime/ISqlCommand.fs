@@ -107,8 +107,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     executeHandle.Invoke(null, [| rowMapping |]) |> unbox >> box, 
                     asyncExecuteHandle.Invoke(null, [| rowMapping |]) |> unbox >> box
             | _ ->
-                ``ISqlCommand Implementation``.ExecuteListMulti >> box,
-                ``ISqlCommand Implementation``.AsyncExecuteListMulti >> box
+                ``ISqlCommand Implementation``.ExecuteMulti >> box,
+                ``ISqlCommand Implementation``.AsyncExecuteMulti >> box
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
     member __.CommandTimeout = cmd.CommandTimeout
@@ -259,8 +259,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
             box resultset
 
-    // Reads data from the current result set, TODO output params
-    static member internal ExecuteListSingle<'TItem> (reader: NpgsqlDataReader, readerBehavior: CommandBehavior, resultSetDefinition) = 
+    // TODO output params
+    static member internal ExecuteSingle<'TItem> (reader: NpgsqlDataReader, readerBehavior: CommandBehavior, resultSetDefinition) = 
         ``ISqlCommand Implementation``.VerifyOutputColumns(reader, resultSetDefinition.ExpectedColumns)
         let xs = reader.MapRowValues<'TItem>(resultSetDefinition.Row2ItemMapping) |> Seq.toList
 
@@ -287,18 +287,22 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         else 
             box xs 
 
-    static member private ReadResultSet cursor readerBehavior resultSetDefinition =
-        ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
-        let itemType = Type.GetType(resultSetDefinition.SeqItemTypeName, throwOnError = true)
-        
-        let executeHandle = 
-            typeof<``ISqlCommand Implementation``>
-                .GetMethod("ExecuteListSingle", BindingFlags.NonPublic ||| BindingFlags.Static)
-                .MakeGenericMethod(itemType)
-                
-        executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition |])
+    static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultSetDefinition =
+        // Is this a result set for a non-query?
+        if isNull resultSetDefinition.SeqItemTypeName || isNull (box resultSetDefinition.Row2ItemMapping) then
+            box cursor.RecordsAffected
+        else
+            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
+            let itemType = Type.GetType(resultSetDefinition.SeqItemTypeName, throwOnError = true)
+            
+            let executeHandle = 
+                typeof<``ISqlCommand Implementation``>
+                    .GetMethod("ExecuteSingle", BindingFlags.NonPublic ||| BindingFlags.Static)
+                    .MakeGenericMethod(itemType)
+                    
+            executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition |])
 
-    static member internal ExecuteListMulti (cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) =
+    static member internal ExecuteMulti (cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) =
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         setupConnection() |> ignore
 
@@ -318,7 +322,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
         buildResultSetsBackingDict results resultSets.Length
 
-    static member internal AsyncExecuteListMulti (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
+    static member internal AsyncExecuteMulti (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         do! setupConnection() |> Async.Ignore
 
