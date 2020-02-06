@@ -381,7 +381,7 @@ let getDbSchemaLookups(connectionString) =
              pg_catalog.obj_description(attr.attrelid) AS table_description,
              attr.attnum AS col_number,
              attr.attname AS col_name,
-             col.udt_name AS col_udt_name,
+             coalesce(col.udt_name, typ.typname) AS col_udt_name,
              col.data_type AS col_data_type,
              attr.attnotnull AS col_not_null,
              col.character_maximum_length AS col_max_length,
@@ -452,8 +452,13 @@ let getDbSchemaLookups(connectionString) =
                     | "ARRAY" ->
                         let elemType = getTypeMapping(udtName.TrimStart('_') ) 
                         elemType.MakeArrayType()
+                    | "" when udtName.StartsWith "_" -> // possibly a column of a materialized view
+                        let elemType = getTypeMapping(udtName.TrimStart('_') ) 
+                        elemType.MakeArrayType()
                     | "USER-DEFINED" ->
                         if isUdt then typeof<string> else typeof<obj>
+                    | "" -> // possibly a column of a materialized view
+                        getTypeMapping(udtName)
                     | dataType -> 
                         getTypeMapping(dataType)
                 
