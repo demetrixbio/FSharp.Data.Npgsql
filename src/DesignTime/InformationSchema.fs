@@ -458,7 +458,7 @@ let getDbSchemaLookups(connectionString) =
                     | "USER-DEFINED" ->
                         if isUdt then typeof<string> else typeof<obj>
                     | "" -> // possibly a column of a materialized view
-                        getTypeMapping(udtName)
+                        if isUdt then typeof<string> else getTypeMapping(udtName)
                     | dataType -> 
                         getTypeMapping(dataType)
                 

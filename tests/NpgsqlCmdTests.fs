@@ -347,7 +347,16 @@ let ``AddRow/NewRow preserve order``() =
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
     )
 
+[<Literal>]
+let selectFromMaterializedView = "select some_data, title from long_films"
 
+[<Fact>]
+let ``Select from materialized view``() =
+    use cmd = new NpgsqlCommand<selectFromMaterializedView, dvdRental, SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value
+    Assert.Equal<int[]>([|1;2;3|], actual.some_data.Value)
+    Assert.True(String.IsNullOrWhiteSpace actual.title.Value |> not)
+ 
 [<Fact>]
 let asyncUpdateTable() =
     
@@ -472,7 +481,7 @@ let ``Tuples command prepared``() =
 
     Assert.True(isStatementPrepared conn)
 
- 
+
 //[<Fact>]
 //let npPkTable() =
 //    use cmd =
