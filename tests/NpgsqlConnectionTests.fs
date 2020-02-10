@@ -208,6 +208,20 @@ let deleteWithTx() =
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
     
+[<Fact>]
+let ``Select from partitioned table``() =
+    use cmd = DvdRental.CreateCommand<selectFromPartitionedTable>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
+[<Fact>]
+let ``Select from specific partition``() =
+    use cmd = DvdRental.CreateCommand<selectFromSpecificPartition>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
 type Rating = DvdRental.``public``.Types.mpaa_rating
 
 //[<Fact>]

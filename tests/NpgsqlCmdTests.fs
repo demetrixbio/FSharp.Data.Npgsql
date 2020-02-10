@@ -207,7 +207,27 @@ let deleteWithTx() =
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
-    
+   
+[<Literal>]
+let selectFromPartitionedTable = "select * from logs where log_time between '2019-01-01' and '2019-12-31'"
+
+[<Fact>]
+let ``Select from partitioned table``() =
+    use cmd = new NpgsqlCommand<selectFromPartitionedTable, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
+[<Literal>]
+let selectFromSpecificPartition = "select * from logs_2019 where log_time between '2019-01-01' and '2019-12-31'"
+
+[<Fact>]
+let ``Select from specific partition``() =
+    use cmd = new NpgsqlCommand<selectFromSpecificPartition, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
 type GetAllRatings = NpgsqlCommand<"
     SELECT * 
     FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
