@@ -451,13 +451,13 @@ type internal QuotationsFactory private() =
 
     static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString, typeNameSuffix) =    
          
-        if resultType = ResultType.DataReader 
+        if resultType = ResultType.DataReader
         then 
             { Single = typeof<NpgsqlDataReader>; PerRow = None }
         elif List.isEmpty outputColumns
         then 
             { Single = typeof<int>; PerRow = None }
-        elif resultType = ResultType.DataTable 
+        elif resultType = ResultType.DataTable
         then
             let dataRowType = QuotationsFactory.GetDataRowType(outputColumns)
             let dataTableType = 
@@ -625,7 +625,7 @@ type internal QuotationsFactory private() =
             |> Option.filter (fun x -> x.Provided <> x.ErasedTo && List.length outputColumns > 1)
             |> Option.iter (fun x -> declaringType.AddMember x.Provided)
 
-        elif resultType = ResultType.DataTable 
+        elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive
         then
             returnType.Single |> declaringType.AddMember
 

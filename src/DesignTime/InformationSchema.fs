@@ -263,17 +263,29 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     NpgsqlCommandBuilder.DeriveParameters(cmd)
     for p in cmd.Parameters do p.Value <- DBNull.Value
 
-    //todo fix nonqueries, skip for DataReader
-    let resultSets = [ 
-        use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
-        if cursor.FieldCount = 0 then
-            yield []
+    let resultSets =
+        if resultType = ResultType.DataReader then
+            []
         else
-            yield [ for c in cursor.GetColumnSchema() -> c ]
+            use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
+            
+            let resultSetSchemasFromNpgsql = [
+                if cursor.FieldCount = 0 then
+                    // Command consists of a single non-query
+                    yield 0, []
+                else
+                    yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
 
-            while cursor.NextResult () do
-                yield [ for c in cursor.GetColumnSchema() -> c ]
-    ]
+                    while cursor.NextResult () do
+                        yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
+                ]
+
+            // Account for non-queries, which Npgsql neglects when there are multiple statements 
+            [ 0 .. cursor.Statements.Count - 1 ]
+            |> List.map (fun i ->
+                match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
+                | Some (_, columns) -> columns
+                | _ -> [])
     
     let outputColumns =
         if resultType <> ResultType.DataReader then
@@ -424,7 +436,7 @@ let getDbSchemaLookups(connectionString) =
     
     let schemas = Dictionary<string, DbSchemaLookupItem>()
     let columns = Dictionary<ColumnLookupKey, Column>()
-    
+
     use row = cmd.ExecuteReader()
     while row.Read() do
         let schema : Schema =

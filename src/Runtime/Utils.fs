@@ -10,6 +10,13 @@ open Npgsql
 [<Extension>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
+    static member private StatementIndexGetter =
+        typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
+    
+    [<Extension>]
+    [<EditorBrowsable(EditorBrowsableState.Never)>]
+    static member GetStatementIndex(cursor: DbDataReader) =
+        Utils.StatementIndexGetter.Invoke(cursor, null) :?> int
 
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
