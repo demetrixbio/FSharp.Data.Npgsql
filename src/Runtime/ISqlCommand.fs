@@ -281,7 +281,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     // TODO output params
     static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition) = 
-        ``ISqlCommand Implementation``.VerifyOutputColumns(reader, resultSetDefinition.ExpectedColumns)
         let xs = reader.MapRowValues<'TItem>(resultSetDefinition.Row2ItemMapping) |> Seq.toList
 
         if readerBehavior.HasFlag(CommandBehavior.SingleRow)
