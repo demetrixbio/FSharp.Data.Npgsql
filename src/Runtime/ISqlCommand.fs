@@ -72,9 +72,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | [ x ] -> Some x
         | _ -> invalidOp "The output sequence contains more than one element."
 
-    static let buildResultSetsBackingDict (dataPerResultSet: seq<obj>) expectedResultSetCount =
-        Seq.zip [ for i in 1 .. expectedResultSetCount do yield sprintf "ResultSet%d" i ] dataPerResultSet |> Map.ofSeq
-
     let execute, asyncExecute = 
         match cfg.ResultType with
         | ResultType.DataReader -> 
@@ -216,7 +213,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
         ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
-        return buildResultSetsBackingDict results resultSets.Length |> box }
+        return box results }
 
     // Reads data tables from multiple result sets
     static member internal ExecuteDataTables(cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = 
@@ -239,7 +236,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
         ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
-        buildResultSetsBackingDict results resultSets.Length |> box
+        box results
 
     static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) = 
         use cursor = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) 
@@ -338,7 +335,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 go <- cursor.NextResult()
 
         ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
-        buildResultSetsBackingDict results resultSets.Length |> box
+        box results
 
     static member internal AsyncExecuteMulti (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
@@ -362,7 +359,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 go <- more
 
         ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
-        return buildResultSetsBackingDict results resultSets.Length |> box }
+        return box results }
 
     static member internal ExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  

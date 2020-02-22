@@ -660,24 +660,14 @@ type internal QuotationsFactory private() =
                 returnTypes
                 |> List.mapi (fun i rt ->
                     let propName = sprintf "ResultSet%d" (i + 1)
-                    let prop = ProvidedProperty(propName, rt.Single, fun args -> <@@ %%args.[0] |> unbox |> Map.find<string, obj> propName @@>)
+                    let prop = ProvidedProperty(propName, rt.Single, fun args -> <@@ (%%args.[0] |> unbox<obj[]>).[i] @@>)
                     let ctorParam = ProvidedParameter(propName, rt.Single)
                     prop, ctorParam)
                 |> List.unzip
 
             resultSetsType.AddMembers props
 
-            let invokeCode args =
-                let pairs =  
-                    Seq.zip args props //Because we need original names in dictionary
-                    |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
-                    |> List.ofSeq
-
-                <@@
-                    Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
-                @@>
-
-            let ctor = ProvidedConstructor(ctorParams, invokeCode)
+            let ctor = ProvidedConstructor(ctorParams, fun args -> Expr.NewArray(typeof<obj>, args))
             resultSetsType.AddMember ctor
 
             List.zip outputColumns returnTypes
