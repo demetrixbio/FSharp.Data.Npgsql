@@ -110,7 +110,6 @@ type PostgresType with
 type DataType = {
     Name: string
     Schema: string
-    IsArray : bool
     ClrType: Type
 }   with    
     member this.FullName = sprintf "%s.%s" this.Schema this.Name
@@ -125,11 +124,10 @@ type DataType = {
     member this.UdtTypeName = 
         sprintf "%s.%s" this.Schema this.UdtTypeShortName
 
-    static member Create(x: PostgresTypes.PostgresType, isArray : bool) = 
+    static member Create(x: PostgresTypes.PostgresType) = 
         { 
             Name = x.Name
             Schema = x.Namespace
-            IsArray = isArray
             ClrType = x.ToClrType()
         }
 
@@ -157,7 +155,6 @@ type Column =
       AutoIncrement: bool
       DefaultConstraint: string
       Description: string
-      UDT: UDT option
       PartOfPrimaryKey: bool
       BaseSchemaName: string
       BaseTableName: string }
@@ -173,24 +170,14 @@ type Column =
     member this.HasDefaultConstraint = string this.DefaultConstraint <> ""
     member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint || this.AutoIncrement
 
-    member this.MakeProvidedType(customTypes : Map<string, ProvidedTypeDefinition>, ?forceNullability: bool) = 
+    member this.MakeProvidedType(customTypes : Map<string, ProvidedTypeDefinition>, ?forceNullability: bool) =
         let nullable = defaultArg forceNullability this.Nullable
-        match this.UDT with
-        | Some _ ->
-            if customTypes.ContainsKey (this.DataType.UdtTypeName) then 
-                let providedType = customTypes.[this.DataType.UdtTypeName]
-                let t = if this.DataType.ClrType.IsArray then providedType.MakeArrayType() else upcast providedType
-                if nullable then ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ t ]) else t
-            else
-                customTypes
-                |> Seq.map (fun (KeyValue(s, _)) -> sprintf ("{%s}") s)
-                |> String.concat "; "
-                |> failwithf "{%s} not found in [%s]" this.DataType.UdtTypeName
-        | None ->   
-            if nullable
-            then typedefof<_ option>.MakeGenericType this.ClrType
-            else this.ClrType
-
+        if this.DataType.IsUserDefinedType && customTypes.ContainsKey(this.DataType.UdtTypeName) then 
+            let providedType = customTypes.[this.DataType.UdtTypeName]
+            let t = if this.DataType.ClrType.IsArray then providedType.MakeArrayType() else upcast providedType
+            if nullable then ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ t ]) else t
+        else
+            if nullable then typedefof<_ option>.MakeGenericType this.ClrType else this.ClrType
 
     member this.ToDataColumnExpr() =
         let typeName = 
@@ -201,7 +188,7 @@ type Column =
         let isTimestamp = this.DataType.Name = "timestamp" && this.ClrType = typeof<DateTime>
         let isJson = this.DataType.Name = "json"
         let isJsonb = this.DataType.Name = "jsonb"
-        let isEnum = (not this.DataType.IsArray) && this.UDT.IsSome
+        let isEnum = (not this.ClrType.IsArray) && this.DataType.IsUserDefinedType
         
         <@@ 
             let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType( typeName, throwOnError = true))
@@ -291,7 +278,7 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                                       ColumnAttributeNumber = columnAttributeNumber }
                     { dbSchemaLookups.Columns.[lookupKey] with Name = column.ColumnName }
                 else
-                    let dataType = DataType.Create(column.PostgresType, column.DataType.IsArray)
+                    let dataType = DataType.Create(column.PostgresType)
                     {
                         ColumnAttributeNumber = columnAttributeNumber
                         Name = column.ColumnName
@@ -302,10 +289,6 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                         AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
                         DefaultConstraint = column.DefaultValue
                         Description = ""
-                        UDT = if dataType.IsUserDefinedType && dbSchemaLookups.Schemas.[dataType.Schema].Enums.ContainsKey(dataType.UdtTypeShortName) then
-                                  Some dbSchemaLookups.Schemas.[dataType.Schema].Enums.[dataType.UdtTypeShortName]
-                              else
-                                  None
                         PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
                         BaseSchemaName = column.BaseSchemaName
                         BaseTableName = column.BaseTableName
@@ -322,7 +305,6 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                     //probably array of custom type (enum or composite)
                     NpgsqlDbType.Array ||| NpgsqlDbType.Text
                 | _ -> p.NpgsqlDbType
-            let isArray = npgsqlDbType = NpgsqlDbType.Array
             { Name = p.ParameterName
               NpgsqlDbType = npgsqlDbType
               Direction = p.Direction
@@ -330,14 +312,18 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
               Precision = p.Precision
               Scale = p.Scale
               Optional = allParametersOptional 
-              DataType = DataType.Create(p.PostgresType, isArray) } ]
+              DataType = DataType.Create(p.PostgresType) } ]
     
     let enums =  
         outputColumns 
-        |> Seq.choose (fun c -> c.UDT)
+        |> Seq.choose (fun c ->
+            if c.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.ContainsKey(c.DataType.UdtTypeShortName) then
+                Some dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.[c.DataType.UdtTypeShortName]
+            else
+                None)
         |> Seq.append [ 
             for p in parameters do
-                if p.DataType.IsUserDefinedType then
+                if p.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.ContainsKey(p.DataType.UdtTypeShortName) then
                     yield dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.[p.DataType.UdtTypeShortName]
         ]
         |> Seq.distinct
@@ -468,15 +454,13 @@ let getDbSchemaLookups(connectionString) =
                       Name = string row.["col_name"]
                       DataType = { Name = udtName
                                    Schema = schema.Name
-                                   ClrType = clrType
-                                   IsArray = string row.["col_data_type"] = "ARRAY" }
+                                   ClrType = clrType }
                       Nullable = row.["col_not_null"] |> unbox |> not
                       MaxLength = row.GetValueOrDefault("col_max_length", -1)
                       ReadOnly = row.["col_is_updatable"] |> unbox |> not
                       AutoIncrement = unbox row.["col_is_identity"]
                       DefaultConstraint = row.GetValueOrDefault("col_default", "")
                       Description = row.GetValueOrDefault("col_description", "")
-                      UDT = schemas.[schema.Name].Enums |> Map.tryFind udtName
                       PartOfPrimaryKey = unbox row.["col_part_of_primary_key"]
                       BaseSchemaName = schema.Name
                       BaseTableName = string row.["table_name"] }

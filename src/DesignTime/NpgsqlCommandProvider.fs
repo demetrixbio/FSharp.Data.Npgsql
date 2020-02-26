@@ -13,7 +13,6 @@ let internal createRootType
         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
         sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, configType, config, prepare
     ) = 
-
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
 
     let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
@@ -130,11 +129,14 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
                 typeName, 
-                lazy 
+                lazy
+                    try
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
                         unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
                     )
+                    with
+                    | ex -> failwithf "here! %s" ex.StackTrace
             )
         )
     )
