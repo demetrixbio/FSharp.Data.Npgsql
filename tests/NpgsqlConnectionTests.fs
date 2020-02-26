@@ -25,7 +25,7 @@ type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
 let selectLiterals() =
     use cmd = 
         DvdRental.CreateCommand<"        
-            SELECT 42 AS Answer, current_date as today
+            SELECT 42 AS Answer, current_date as today 
         ">(dvdRentalRuntime.Value)
 
     let x = cmd.Execute() |> Seq.exactlyOne
@@ -224,12 +224,6 @@ let ``Select from specific partition``() =
 
 type Rating = DvdRental.``public``.Types.mpaa_rating
 
-//[<Fact>]
-//let enumValues() =
-//    Assert.Equal<_ list>(
-//        [ Rating.G; Rating.PG; Rating.``PG-13``; Rating.R; Rating.``NC-17`` ],
-//        DvdRental.``public``.Types.mpaa_rating.Values 
-//    )
 
 [<Fact>]
 let selectEnum() =
@@ -244,8 +238,6 @@ let selectEnum() =
         [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
         [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
     ) 
-
-////ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
 
 [<Fact>]
 let selectEnumWithArray() =
@@ -336,6 +328,7 @@ let tableInsertViaAddRow() =
     tran.Rollback()
 
     Assert.Equal(None, cmd.Execute(r.rental_id))
+  
 [<Fact>]
 let selectEnumWithArray2() =
     use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRentalRuntime.Value)
@@ -438,15 +431,6 @@ let asyncUpdateTable() =
         actors.Rows.[0].last_update <- DateTime.UtcNow
     
     Assert.Equal(1, actors.Update(conn, tx))
-
-[<Fact>]
-let npPkTable() =
-    //use cmd =
-    //    DvdRental.CreateCommand<"select * from table_name limit 1", ResultType.DataTable>(dvdRental.Value)
-    //let t = cmd.Execute()
-    //t.Rows.[0].column_1 <- Some -1
-    //t.Update(dvdRental.Value) |> ignore
-    ()
 
 [<Fact>]
 let binaryImport() =
@@ -607,7 +591,8 @@ let largeBatchUpdate() =
     for r in parts.Rows do
         r.sequence <- r.sequence |> Option.map (fun s -> s + "=test")
 
-    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
+    //let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
+    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.OverwriteChanges, batchTimeout = 60*10)
     printfn "Records affected: %i" recordsAffected
     Assert.Equal(parts.Rows.Count, recordsAffected)
 

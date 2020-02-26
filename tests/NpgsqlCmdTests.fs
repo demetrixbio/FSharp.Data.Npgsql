@@ -231,8 +231,7 @@ let ``Select from specific partition``() =
 type GetAllRatings = NpgsqlCommand<"
     SELECT * 
     FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
-    WHERE X <> @exclude;  
-", dvdRental>
+    WHERE X <> @exclude;", dvdRental>
 
 type Rating = GetAllRatings.``public.mpaa_rating``
 
@@ -246,18 +245,13 @@ let selectEnum() =
 
 //ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
 
-type EchoRatingsArray = NpgsqlCommand<"
-        SELECT @ratings::mpaa_rating[];
-    ", dvdRental, SingleRow = true>
+type EchoRatingsArray = NpgsqlCommand<"SELECT @ratings::mpaa_rating[];", dvdRental, SingleRow = true>
 
 [<Fact>]
 let selectEnumWithArray() =
     use cmd = new EchoRatingsArray(dvdRental)
 
-    let ratings = [| 
-        EchoRatingsArray.``public.mpaa_rating``.``PG-13`` 
-        EchoRatingsArray.``public.mpaa_rating``.R 
-    |]
+    let ratings = [| EchoRatingsArray.``public.mpaa_rating``.``PG-13``; EchoRatingsArray.``public.mpaa_rating``.R |]
         
     Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
 
@@ -346,7 +340,7 @@ let selectEnumWithArray2() =
     let actual = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal( (Some 42, Some [| 1..3 |]), actual)
 
-[<Fact>]
+(*[<Fact>]
 let ``AddRow/NewRow preserve order``() =
     use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(dvdRental)
     let actors = getActors.Execute("Tom", "Hankss")
@@ -365,7 +359,7 @@ let ``AddRow/NewRow preserve order``() =
         description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
         language_id = 1s,
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
-    )
+    )*)
 
 
 [<Fact>]
@@ -491,27 +485,3 @@ let ``Tuples command prepared``() =
     cmd.Execute("", "") |> ignore
 
     Assert.True(isStatementPrepared conn)
-
- 
-//[<Fact>]
-//let npPkTable() =
-//    use cmd =
-//        new NpgsqlCommand<"select * from table_name limit 1", dvdRental, ResultType.DataTable>(dvdRental)
-//    let t = cmd.Execute()
-//    //t.Rows.[0].column_1 <- Some -1
-//    //t.Update(dvdRental.Value) |> ignore
-//    ()
-
-//[<Fact>]
-//let ``timestamp with time zone params``() =
-//    do
-//        let now = 
-//            use cmd = new NpgsqlCommand<"SELECT current_timestamp", dvdRental, SingleRow = true>(dvdRental)
-//            cmd.Execute().Value.Value
-//        use cmd = new NpgsqlCommand<"SELECT current_timestamp < @p", dvdRental, SingleRow = true>(dvdRental)
-//        Assert.True( cmd.Execute( now).Value.Value)
-    
-//    do
-//        use cmd = new NpgsqlCommand<"SELECT current_timestamp > @p", dvdRental, SingleRow = true>(dvdRental)
-//        Assert.True( cmd.Execute( DateTime.UtcNow.AddMinutes(-1.)).Value.Value)
-
