@@ -59,7 +59,10 @@ type internal QuotationsFactory private() =
     [<Literal>]
     static let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
 
-    
+    static let getValueAtIndex = typeof<Array>.GetMethod("GetValue", [| typeof<int> |])
+
+    static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(arrayExpr, getValueAtIndex, [ Expr.Value index ])
+
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
         let bodyFactory =   
@@ -231,18 +234,14 @@ type internal QuotationsFactory private() =
         let properties, ctorParameters = 
             columns
             |> List.mapi ( fun i col ->
-                let propertyName = col.Name
+                let propertyName =
+                    if col.Name = "" then
+                        failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
+                    else
+                        col.Name
 
-                if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
-                    
                 let propType = col.MakeProvidedType(customTypes)
-
-                let property = 
-                    ProvidedProperty(
-                        propertyName, 
-                        propType, 
-                        fun args -> <@@ %%args.[0] |> unbox |> Map.find<string, obj> propertyName @@>
-                    )
+                let property = ProvidedProperty(propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
 
                 let ctorParameter = ProvidedParameter(propertyName, propType)  
 
@@ -252,17 +251,7 @@ type internal QuotationsFactory private() =
 
         recordType.AddMembers properties
 
-        let invokeCode args =
-            let pairs =  
-                Seq.zip args properties //Because we need original names in dictionary
-                |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
-                |> List.ofSeq
-
-            <@@
-                Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
-            @@> 
-        
-        let ctor = ProvidedConstructor(ctorParameters, invokeCode)
+        let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, args))
         recordType.AddMember ctor
         
         recordType
@@ -482,16 +471,14 @@ type internal QuotationsFactory private() =
                     let erasedTo = column0.ClrTypeConsideringNullability
                     let provided = column0.MakeProvidedType(customTypes)
                     let values = Var("values", typeof<obj[]>)
-                    let indexGet = Expr.Call(Expr.Var values, typeof<Array>.GetMethod("GetValue", [| typeof<int> |]), [ Expr.Value 0 ])
-                    provided, erasedTo, Expr.Lambda(values,  indexGet) 
+                    let indexGet = QuotationsFactory.GetValueAtIndexExpr (Expr.Var values) 0
+                    provided, erasedTo, Expr.Lambda(values, indexGet) 
 
                 elif resultType = ResultType.Records 
                 then 
                     let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix)
-                    let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
-                    let mapping = <@@ fun (values: obj[]) -> ((%%names: string[]), values) ||> Array.zip |> Map.ofArray |> box @@>
-
-                    upcast provided, typeof<obj>, mapping
+                    let values = Var("values", typeof<obj[]>)
+                    upcast provided, typeof<obj>, Expr.Lambda(values, Expr.Coerce(Expr.Var values, typeof<obj>))
                 else 
                     let providedType = 
                         match outputColumns with
@@ -659,7 +646,7 @@ type internal QuotationsFactory private() =
                 returnTypes
                 |> List.mapi (fun i rt ->
                     let propName = sprintf "ResultSet%d" (i + 1)
-                    let prop = ProvidedProperty(propName, rt.Single, fun args -> <@@ (%%args.[0] |> unbox<obj[]>).[i] @@>)
+                    let prop = ProvidedProperty(propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
                     let ctorParam = ProvidedParameter(propName, rt.Single)
                     prop, ctorParam)
                 |> List.unzip
