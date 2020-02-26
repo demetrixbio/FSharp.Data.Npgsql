@@ -573,6 +573,11 @@ let ``Tuples command prepared``() =
 
     Assert.True(isStatementPrepared conn)
 
+[<Fact>]
+let ``Queries against system catalogs work``() =
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM pg_timezone_names">(dvdRental)
+    let actual = cmd.Execute()
+    Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0)    
 
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"

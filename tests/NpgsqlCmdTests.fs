@@ -485,3 +485,32 @@ let ``Tuples command prepared``() =
     cmd.Execute("", "") |> ignore
 
     Assert.True(isStatementPrepared conn)
+
+[<Fact>]
+let ``Queries against system catalogs work``() =
+    use cmd = new NpgsqlCommand<"SELECT * FROM pg_timezone_names", dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0) 
+ 
+//[<Fact>]
+//let npPkTable() =
+//    use cmd =
+//        new NpgsqlCommand<"select * from table_name limit 1", dvdRental, ResultType.DataTable>(dvdRental)
+//    let t = cmd.Execute()
+//    //t.Rows.[0].column_1 <- Some -1
+//    //t.Update(dvdRental.Value) |> ignore
+//    ()
+
+//[<Fact>]
+//let ``timestamp with time zone params``() =
+//    do
+//        let now = 
+//            use cmd = new NpgsqlCommand<"SELECT current_timestamp", dvdRental, SingleRow = true>(dvdRental)
+//            cmd.Execute().Value.Value
+//        use cmd = new NpgsqlCommand<"SELECT current_timestamp < @p", dvdRental, SingleRow = true>(dvdRental)
+//        Assert.True( cmd.Execute( now).Value.Value)
+    
+//    do
+//        use cmd = new NpgsqlCommand<"SELECT current_timestamp > @p", dvdRental, SingleRow = true>(dvdRental)
+//        Assert.True( cmd.Execute( DateTime.UtcNow.AddMinutes(-1.)).Value.Value)
+
