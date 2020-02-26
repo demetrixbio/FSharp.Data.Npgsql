@@ -207,12 +207,31 @@ let deleteWithTx() =
 
 
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
-    
+   
+[<Literal>]
+let selectFromPartitionedTable = "select * from logs where log_time between '2019-01-01' and '2019-12-31'"
+
+[<Fact>]
+let ``Select from partitioned table``() =
+    use cmd = new NpgsqlCommand<selectFromPartitionedTable, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
+[<Literal>]
+let selectFromSpecificPartition = "select * from logs_2019 where log_time between '2019-01-01' and '2019-12-31'"
+
+[<Fact>]
+let ``Select from specific partition``() =
+    use cmd = new NpgsqlCommand<selectFromSpecificPartition, dvdRental>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal(2, actual.Length)
+    Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
+
 type GetAllRatings = NpgsqlCommand<"
     SELECT * 
     FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
-    WHERE X <> @exclude;  
-", dvdRental>
+    WHERE X <> @exclude;", dvdRental>
 
 type Rating = GetAllRatings.``public.mpaa_rating``
 
@@ -226,18 +245,13 @@ let selectEnum() =
 
 //ALTER TABLE public.country ADD ratings MPAA_RATING[] NULL;
 
-type EchoRatingsArray = NpgsqlCommand<"
-        SELECT @ratings::mpaa_rating[];
-    ", dvdRental, SingleRow = true>
+type EchoRatingsArray = NpgsqlCommand<"SELECT @ratings::mpaa_rating[];", dvdRental, SingleRow = true>
 
 [<Fact>]
 let selectEnumWithArray() =
     use cmd = new EchoRatingsArray(dvdRental)
 
-    let ratings = [| 
-        EchoRatingsArray.``public.mpaa_rating``.``PG-13`` 
-        EchoRatingsArray.``public.mpaa_rating``.R 
-    |]
+    let ratings = [| EchoRatingsArray.``public.mpaa_rating``.``PG-13``; EchoRatingsArray.``public.mpaa_rating``.R |]
         
     Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
 
@@ -326,7 +340,7 @@ let selectEnumWithArray2() =
     let actual = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal( (Some 42, Some [| 1..3 |]), actual)
 
-[<Fact>]
+(*[<Fact>]
 let ``AddRow/NewRow preserve order``() =
     use getActors = new NpgsqlCommand<"SELECT * FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", dvdRental, ResultType.DataTable>(dvdRental)
     let actors = getActors.Execute("Tom", "Hankss")
@@ -345,7 +359,7 @@ let ``AddRow/NewRow preserve order``() =
         description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
         language_id = 1s,
         fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
-    )
+    )*)
 
 
 [<Fact>]
