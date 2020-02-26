@@ -391,7 +391,7 @@ let ``AddRow/NewRow preserve order``() =
         description = Some "A thief, who steals corporate secrets through the use of dream-sharing technology, is given the inverse task of planting an idea into the mind of a CEO.",
         language_id = 1s,
         rating = Some Rating.``PG-13``,
-        fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+        fulltext = NpgsqlTypes.NpgsqlTsVector.Parse("")
     )
     use conn = openConnection()
     use tx = conn.BeginTransaction()
@@ -506,7 +506,7 @@ let ``column "p1_00" does not exist``() =
             rating = Some Rating.PG, 
             last_update = Some DateTime.Now, 
             special_features = Some [| "Deleted Scenes" |] , 
-            fulltext = NpgsqlTypes.NpgsqlTsVector(ResizeArray())
+            fulltext = NpgsqlTypes.NpgsqlTsVector.Parse("")
         )
 
     let i = films.Update(conn, tx, batchSize = 10)
@@ -581,10 +581,133 @@ let ``Tuples command prepared``() =
     Assert.True(isStatementPrepared conn)
 
 [<Fact>]
+let ``Two selects record``() =
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms>(dvdRental)
+    let actual = cmd.Execute()
+    Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.title) |> List.length)
+    
+[<Fact>]
 let ``Queries against system catalogs work``() =
     use cmd = DvdRental.CreateCommand<"SELECT * FROM pg_timezone_names">(dvdRental)
     let actual = cmd.Execute()
     Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0)    
+
+[<Fact>]
+let ``Two selects tuple``() =
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.Tuples>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.length)
+    Assert.Equal (5, actual.ResultSet2 |> List.length)
+
+[<Fact>]
+let ``Two selects data table``() =
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.title) |> Seq.length)
+
+[<Fact>]
+let ``Two selects data reader``() =
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataReader>(dvdRental)
+    let actual = cmd.Execute()
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (2, resultSets)
+
+[<Fact>]
+let ``Two selects and nonquery record``() =
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (5, actual.ResultSet3 |> List.map (fun x -> x.title) |> List.length)
+
+[<Fact>]
+let ``Two selects and nonquery tuple``() =
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.Tuples>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1 |> List.length)
+    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (5, actual.ResultSet3 |> List.length)
+
+[<Fact>]
+let ``Two selects and nonquery data table``() =
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (5, actual.ResultSet3.Rows |> Seq.map (fun x -> x.title) |> Seq.length)
+
+[<Fact>]
+let ``Two selects and nonquery data reader``() =
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataReader>(dvdRental)
+    let actual = cmd.Execute()
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (2, resultSets)
+
+[<Fact>]
+let ``Four single-column selects async``() =
+    use cmd = DvdRental.CreateCommand<fourSelects>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (10, actual.ResultSet1 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet2 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet3 |> Seq.map (fun x -> x.Value) |> Seq.length)
+    Assert.Equal (10, actual.ResultSet4 |> Seq.map (fun x -> x.Value) |> Seq.length)
+
+[<Fact>]
+let ``One select and two updates record async``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (1, actual.ResultSet3)
+
+[<Fact>]
+let ``One select and two updates tuple async``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (5, actual.ResultSet2 |> List.length)
+    Assert.Equal (1, actual.ResultSet3)
+
+[<Fact>]
+let ``One select and two updates data table async``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (1, actual.ResultSet3)
+
+[<Fact>]
+let ``One select and two updates reader async``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataReader>(dvdRental)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (1, resultSets)
 
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"

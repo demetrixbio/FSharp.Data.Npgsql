@@ -264,13 +264,34 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     use cmd = new NpgsqlCommand(commandText, conn)
     NpgsqlCommandBuilder.DeriveParameters(cmd)
     for p in cmd.Parameters do p.Value <- DBNull.Value
-    let cols = 
-        use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
-        if cursor.FieldCount = 0 then [] else [ for c in cursor.GetColumnSchema() -> c ]
+
+    let resultSets =
+        if resultType = ResultType.DataReader then
+            []
+        else
+            use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
+            
+            let resultSetSchemasFromNpgsql = [
+                if cursor.FieldCount = 0 then
+                    // Command consists of a single non-query
+                    yield 0, []
+                else
+                    yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
+
+                    while cursor.NextResult () do
+                        yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
+                ]
+
+            // Account for non-queries, which Npgsql neglects when there are multiple statements 
+            [ 0 .. cursor.Statements.Count - 1 ]
+            |> List.map (fun i ->
+                match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
+                | Some (_, columns) -> columns
+                | _ -> [])
     
     let outputColumns =
         if resultType <> ResultType.DataReader then
-            [ for column in cols ->
+            resultSets |> List.map (List.map (fun column -> 
                 let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
                 
                 let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
@@ -293,9 +314,9 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                         PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
                         BaseSchemaName = column.BaseSchemaName
                         BaseTableName = column.BaseTableName
-                    }  ]
+                    }))
         else
-            []
+            [[]]
 
     let parameters = 
         [ for p in cmd.Parameters ->
@@ -317,18 +338,18 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
     
     let enums =  
         outputColumns 
-        |> Seq.choose (fun c ->
+        |> List.concat
+        |> List.choose (fun c ->
             if c.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.ContainsKey(c.DataType.UdtTypeShortName) then
                 Some dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.[c.DataType.UdtTypeShortName]
             else
                 None)
-        |> Seq.append [ 
+        |> List.append [ 
             for p in parameters do
                 if p.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.ContainsKey(p.DataType.UdtTypeShortName) then
                     yield dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.[p.DataType.UdtTypeShortName]
         ]
-        |> Seq.distinct
-        |> Seq.toList
+        |> List.distinct
 
     parameters, outputColumns, enums
 
@@ -407,7 +428,7 @@ let getDbSchemaLookups(connectionString) =
     
     let schemas = Dictionary<string, DbSchemaLookupItem>()
     let columns = Dictionary<ColumnLookupKey, Column>()
-    
+
     use row = cmd.ExecuteReader()
     while row.Read() do
         let schema : Schema =

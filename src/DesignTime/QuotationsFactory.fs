@@ -220,13 +220,13 @@ type internal QuotationsFactory private() =
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
-    static member internal GetRecordType(customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) =
+    static member internal GetRecordType(columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix) =
         columns 
             |> Seq.groupBy (fun x -> x.Name) 
             |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
-        let recordType = ProvidedTypeDefinition("Record", baseType = Some typeof<obj>, hideObjectMethods = true)
+        let recordType = ProvidedTypeDefinition("Record" + typeNameSuffix, baseType = Some typeof<obj>, hideObjectMethods = true)
         
         let properties, ctorParameters = 
             columns
@@ -449,20 +449,20 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, customTypes : Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString) =    
+    static member internal GetOutputTypes(outputColumns, customTypes: Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString, typeNameSuffix) =    
          
-        if resultType = ResultType.DataReader 
+        if resultType = ResultType.DataReader
         then 
             { Single = typeof<NpgsqlDataReader>; PerRow = None }
         elif List.isEmpty outputColumns
         then 
             { Single = typeof<int>; PerRow = None }
-        elif resultType = ResultType.DataTable 
+        elif resultType = ResultType.DataTable
         then
             let dataRowType = QuotationsFactory.GetDataRowType(customTypes, outputColumns)
             let dataTableType = 
                 QuotationsFactory.GetDataTableType(
-                    "Table", 
+                    "Table" + typeNameSuffix, 
                     dataRowType,
                     customTypes,
                     outputColumns, 
@@ -487,7 +487,7 @@ type internal QuotationsFactory private() =
 
                 elif resultType = ResultType.Records 
                 then 
-                    let provided = QuotationsFactory.GetRecordType(customTypes, outputColumns)
+                    let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix)
                     let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
                     let mapping = <@@ fun (values: obj[]) -> ((%%names: string[]), values) ||> Array.zip |> Map.ofArray |> box @@>
 
@@ -616,5 +616,67 @@ type internal QuotationsFactory private() =
             then 
                 yield upcast ProvidedMethod(factoryMethodName.Value, parameters2, returnType = cmdProvidedType, invokeCode = body2, isStatic = true)
         ]
+
+    static member internal AddProvidedTypeToDeclaring resultType returnType outputColumns (declaringType: ProvidedTypeDefinition) =
+        if resultType = ResultType.Records 
+        then
+            returnType.PerRow 
+            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && List.length outputColumns > 1)
+            |> Option.iter (fun x -> declaringType.AddMember x.Provided)
+
+        elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive
+        then
+            returnType.Single |> declaringType.AddMember
+
+    static member internal BuildResultSetDefinitions (outputColumns: Column list list) (returnTypes: ReturnType list) =
+        List.zip outputColumns returnTypes
+        |> List.map (fun (outputColumns, returnType) ->
+            <@@ {
+                Row2ItemMapping = %%returnType.Row2ItemMapping
+                SeqItemTypeName = %%returnType.SeqItemTypeName
+                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+            } @@>)
+
+    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) =
+        let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
+        
+        let addRedirectToISqlCommandMethod outputType name = 
+            let hasOutputParameters = false
+            QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+            |> cmdProvidedType.AddMember
+
+        match returnTypes with
+        | [ returnType ] ->
+            addRedirectToISqlCommandMethod returnType.Single "Execute" 
+                        
+            let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
+            addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+
+            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns.Head cmdProvidedType
+        | _ ->
+            let resultSetsType = ProvidedTypeDefinition("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
+            let props, ctorParams =
+                returnTypes
+                |> List.mapi (fun i rt ->
+                    let propName = sprintf "ResultSet%d" (i + 1)
+                    let prop = ProvidedProperty(propName, rt.Single, fun args -> <@@ (%%args.[0] |> unbox<obj[]>).[i] @@>)
+                    let ctorParam = ProvidedParameter(propName, rt.Single)
+                    prop, ctorParam)
+                |> List.unzip
+
+            resultSetsType.AddMembers props
+
+            let ctor = ProvidedConstructor(ctorParams, fun args -> Expr.NewArray(typeof<obj>, args))
+            resultSetsType.AddMember ctor
+
+            List.zip outputColumns returnTypes
+            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns resultSetsType)
+
+            addRedirectToISqlCommandMethod resultSetsType "Execute" 
+            
+            let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ resultSetsType ])
+            addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+
+            cmdProvidedType.AddMember resultSetsType
 
 

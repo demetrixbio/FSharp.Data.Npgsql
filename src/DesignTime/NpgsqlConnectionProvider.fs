@@ -46,53 +46,31 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 
                 let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
-                let returnType = 
-                    QuotationsFactory.GetOutputTypes(
-                        outputColumns, 
-                        customTypes,
-                        resultType, 
-                        commandBehaviour, 
-                        hasOutputParameters = false, 
-                        allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                        designTimeConnectionString = (if fsx then connectionString else null)
-                    )
+                let returnTypes =
+                    outputColumns |> List.mapi (fun i cs ->
+                        QuotationsFactory.GetOutputTypes(
+                            cs,
+                            customTypes,
+                            resultType, 
+                            commandBehaviour, 
+                            hasOutputParameters = false, 
+                            allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
+                            designTimeConnectionString = (if fsx then connectionString else null),
+                            typeNameSuffix = if outputColumns.Length > 1 then (i + 1).ToString () else ""))
 
                 let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
                 let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
-                do  
-                    let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
-
-                    let addRedirectToISqlCommandMethod outputType name = 
-                        let hasOutputParameters = false
-                        QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
-                        |> cmdProvidedType.AddMember
-
-                    addRedirectToISqlCommandMethod returnType.Single "Execute" 
-                                
-                    let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
-                    addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" 
+                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns
 
                 commands.AddMember cmdProvidedType
 
-                if resultType = ResultType.Records 
-                then
-                    returnType.PerRow 
-                    |> Option.filter (fun x -> x.Provided <> x.ErasedTo && outputColumns.Length > 1)
-                    |> Option.iter (fun x -> cmdProvidedType.AddMember x.Provided)
-
-                elif resultType = ResultType.DataTable 
-                then
-                    returnType.Single |> cmdProvidedType.AddMember
-
-                
                 let useLegacyPostgis = 
                     (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
                     ||
-                    (outputColumns |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
-
+                    (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
 
                 let designTimeConfig = 
                     <@@ {
@@ -100,9 +78,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                         ResultType = %%Expr.Value(resultType)
                         SingleRow = singleRow
-                        Row2ItemMapping = %%returnType.Row2ItemMapping
-                        SeqItemTypeName = %%returnType.SeqItemTypeName
-                        ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                        ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
                         UseLegacyPostgis = useLegacyPostgis
                         Prepare = prepare
                     } @@>
