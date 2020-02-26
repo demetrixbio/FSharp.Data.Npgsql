@@ -524,6 +524,13 @@ let selectBytea() =
     Assert.Equal<byte>(expected, actual)
 
 [<Fact>]
+let ``Select from materialized view``() =
+    use cmd = DvdRental.CreateCommand<selectFromMaterializedView, SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value
+    Assert.Equal<int[]>([|1;2;3|], actual.some_data.Value)
+    Assert.True(String.IsNullOrWhiteSpace actual.title.Value |> not)
+
+[<Fact>]
 let ``Command not prepared by default``() =
     use conn = openConnection()
     conn.UnprepareAll()
