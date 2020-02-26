@@ -251,7 +251,7 @@ type internal QuotationsFactory private() =
 
         recordType.AddMembers properties
 
-        let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, args))
+        let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, List.map (fun arg -> Expr.Coerce(arg, typeof<obj>)) args))
         recordType.AddMember ctor
         
         recordType

@@ -709,6 +709,19 @@ let ``One select and two updates reader async``() =
 
     Assert.Equal (1, resultSets)
 
+[<Fact>]
+let ``Can instantiate provided record``() =
+    let fname = "a"
+    let lname = "b"
+    let id = 1
+    let time = DateTime (2020, 1, 1)
+    let actual = DvdRental.Commands.``CreateCommand,CommandText"select * from actor limit 5; select * from film limit 5"``.ResultSets.Record1 (id, fname, lname, time)
+
+    Assert.Equal (actual.actor_id, id)
+    Assert.Equal (actual.first_name, fname)
+    Assert.Equal (actual.last_name, lname)
+    Assert.Equal (actual.last_update, time)
+
 [<Literal>]
 let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
