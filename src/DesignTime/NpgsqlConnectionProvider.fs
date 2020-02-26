@@ -11,9 +11,9 @@ open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 
-let methodsCache = new Cache<ProvidedMethod>()
+let methodsCache = Cache<ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes : Map<string, ProvidedTypeDefinition>, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare) = 
         
     let staticParams = 
         [
@@ -49,6 +49,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 let returnType = 
                     QuotationsFactory.GetOutputTypes(
                         outputColumns, 
+                        customTypes,
                         resultType, 
                         commandBehaviour, 
                         hasOutputParameters = false, 
@@ -62,7 +63,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 commands.AddMember cmdProvidedType
                 
                 do  
-                    let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, dbSchemaLookups.Enums)
+                    let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
 
                     let addRedirectToISqlCommandMethod outputType name = 
                         let hasOutputParameters = false
@@ -122,7 +123,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
     ))
     rootType.AddMember m
 
-let createTableTypes(connectionString: string, item: DbSchemaLookupItem, fsx, isHostedExecution) = 
+let createTableTypes(connectionString: string, customTypes : Map<string, ProvidedTypeDefinition>, item: DbSchemaLookupItem, fsx, isHostedExecution) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tables.AddMembersDelayed <| fun() ->
         
@@ -133,12 +134,13 @@ let createTableTypes(connectionString: string, item: DbSchemaLookupItem, fsx, is
             let columns = s.Value |> List.ofSeq
 
             //type data row
-            let dataRowType = QuotationsFactory.GetDataRowType(columns)
+            let dataRowType = QuotationsFactory.GetDataRowType(customTypes, columns)
             //type data table
             let dataTableType = 
                 QuotationsFactory.GetDataTableType(
                     tableName, 
-                    dataRowType, 
+                    dataRowType,
+                    customTypes,
                     columns, 
                     isHostedExecution && fsx,
                     designTimeConnectionString = (if fsx then connectionString else null)
@@ -209,19 +211,25 @@ let createRootType
                   
     databaseRootType.AddMembers dbSchemas
     
-    for schemaType in dbSchemas do
-        let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
-        for enum in schemaLookups.Schemas.[schemaType.Name].Enums do
-            es.AddMember enum.Value
-        schemaType.AddMember es
+    let customTypes =
+        [ for schemaType in dbSchemas do
+            let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
+            for (KeyValue(_, enum)) in schemaLookups.Schemas.[schemaType.Name].Enums do
+                let t = ProvidedTypeDefinition(enum.Name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+                for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
+                es.AddMember t
+                let udtTypeName = sprintf "%s.%s" enum.Schema enum.Name
+                yield udtTypeName, t
+            schemaType.AddMember es
+        ] |> Map.ofList
         
     for schemaType in dbSchemas do
         schemaType.AddMemberDelayed <| fun () ->
-            createTableTypes(connectionString, schemaLookups.Schemas.[schemaType.Name], fsx, isHostedExecution)
+            createTableTypes(connectionString, customTypes, schemaLookups.Schemas.[schemaType.Name], fsx, isHostedExecution)
 
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, schemaLookups, fsx, isHostedExecution, xctor, prepare)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, fsx, isHostedExecution, xctor, prepare)
 
     databaseRootType           
 

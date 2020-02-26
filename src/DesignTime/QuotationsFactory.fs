@@ -10,7 +10,6 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
-open System.Collections.Generic
 
 type internal RowType = {
     Provided: Type
@@ -221,7 +220,7 @@ type internal QuotationsFactory private() =
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
-    static member internal GetRecordType(columns: Column list) =
+    static member internal GetRecordType(customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) =
         columns 
             |> Seq.groupBy (fun x -> x.Name) 
             |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
@@ -236,7 +235,7 @@ type internal QuotationsFactory private() =
 
                 if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
                     
-                let propType = col.MakeProvidedType()
+                let propType = col.MakeProvidedType(customTypes)
 
                 let property = 
                     ProvidedProperty(
@@ -279,7 +278,7 @@ type internal QuotationsFactory private() =
             let setter = if column.ReadOnly then None else Some( QuotationsFactory.GetBody("SetNonNullableValueInDataRow", column.ClrType, name))
             getter, setter
 
-    static member internal GetDataRowType (columns: Column list) = 
+    static member internal GetDataRowType (customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
             
         columns 
@@ -287,7 +286,7 @@ type internal QuotationsFactory private() =
 
             if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
 
-            let propertyType = col.MakeProvidedType()
+            let propertyType = col.MakeProvidedType(customTypes)
 
             let getter, setter = QuotationsFactory.GetDataRowPropertyGetterAndSetterCode col
 
@@ -304,7 +303,8 @@ type internal QuotationsFactory private() =
     static member internal GetDataTableType
         (
             typeName, 
-            dataRowType: ProvidedTypeDefinition, 
+            dataRowType: ProvidedTypeDefinition,
+            customTypes: Map<string, ProvidedTypeDefinition>,
             outputColumns: Column list, 
             allowDesignTimeConnectionStringReUse: bool,
             designTimeConnectionString: string
@@ -334,7 +334,7 @@ type internal QuotationsFactory private() =
                     for c in outputColumns do 
                         if not c.ReadOnly
                         then 
-                            let dataType = c.MakeProvidedType(forceNullability = c.OptionalForInsert)
+                            let dataType = c.MakeProvidedType(customTypes, forceNullability = c.OptionalForInsert)
                             let parameter = 
                                 if c.OptionalForInsert
                                 then ProvidedParameter(c.Name, parameterType = dataType, optionalValue = null)
@@ -449,7 +449,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString) =    
+    static member internal GetOutputTypes(outputColumns, customTypes : Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString) =    
          
         if resultType = ResultType.DataReader 
         then 
@@ -459,11 +459,12 @@ type internal QuotationsFactory private() =
             { Single = typeof<int>; PerRow = None }
         elif resultType = ResultType.DataTable 
         then
-            let dataRowType = QuotationsFactory.GetDataRowType(outputColumns)
+            let dataRowType = QuotationsFactory.GetDataRowType(customTypes, outputColumns)
             let dataTableType = 
                 QuotationsFactory.GetDataTableType(
                     "Table", 
-                    dataRowType, 
+                    dataRowType,
+                    customTypes,
                     outputColumns, 
                     allowDesignTimeConnectionStringReUse,
                     designTimeConnectionString
@@ -479,14 +480,14 @@ type internal QuotationsFactory private() =
                 then
                     let column0 = outputColumns.Head
                     let erasedTo = column0.ClrTypeConsideringNullability
-                    let provided = column0.MakeProvidedType()
+                    let provided = column0.MakeProvidedType(customTypes)
                     let values = Var("values", typeof<obj[]>)
                     let indexGet = Expr.Call(Expr.Var values, typeof<Array>.GetMethod("GetValue", [| typeof<int> |]), [ Expr.Value 0 ])
                     provided, erasedTo, Expr.Lambda(values,  indexGet) 
 
                 elif resultType = ResultType.Records 
                 then 
-                    let provided = QuotationsFactory.GetRecordType(outputColumns)
+                    let provided = QuotationsFactory.GetRecordType(customTypes, outputColumns)
                     let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
                     let mapping = <@@ fun (values: obj[]) -> ((%%names: string[]), values) ||> Array.zip |> Map.ofArray |> box @@>
 
@@ -494,8 +495,8 @@ type internal QuotationsFactory private() =
                 else 
                     let providedType = 
                         match outputColumns with
-                        | [ x ] -> x.MakeProvidedType()
-                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType() |]
+                        | [ x ] -> x.MakeProvidedType(customTypes)
+                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType(customTypes) |]
 
                     let erasedToTupleType = 
                         match outputColumns with
@@ -523,7 +524,7 @@ type internal QuotationsFactory private() =
                 }               
             }
 
-    static member internal GetExecuteArgs(sqlParameters: Parameter list, customType: IDictionary<_, ProvidedTypeDefinition>) = 
+    static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
         [
             for p in sqlParameters do
                 //assert p.Name.StartsWith("@")
@@ -533,10 +534,8 @@ type internal QuotationsFactory private() =
                 let t = 
                     if p.DataType.IsUserDefinedType
                     then
-                        let t = customType.[p.DataType.UdtTypeName] 
-                        if p.DataType.ClrType.IsArray 
-                        then t.MakeArrayType()
-                        else upcast t
+                        let t = customTypes.[p.DataType.UdtTypeName]
+                        if p.DataType.ClrType.IsArray then t.MakeArrayType() else upcast t 
                     else p.DataType.ClrType
 
                 if p.Optional 
