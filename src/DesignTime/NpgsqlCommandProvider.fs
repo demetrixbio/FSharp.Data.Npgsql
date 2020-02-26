@@ -130,13 +130,10 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
             cache.GetOrAdd(
                 typeName, 
                 lazy
-                    try
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
                         unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
                     )
-                    with
-                    | ex -> failwithf "here! %s" ex.StackTrace
             )
         )
     )
