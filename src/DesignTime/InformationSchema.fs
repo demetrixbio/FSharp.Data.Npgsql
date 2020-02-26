@@ -398,7 +398,7 @@ let getDbSchemaLookups(connectionString) =
            col.table_name = relname AND
            col.column_name = attname
         WHERE
-           cls.relkind IN ('r', 'v', 'm') AND
+           cls.relkind IN ('r', 'v', 'm', 'p') AND
            ns.nspname !~ '^pg_' AND
            ns.nspname <> 'information_schema'
         ORDER BY nspname, relname;
