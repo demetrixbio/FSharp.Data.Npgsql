@@ -7,14 +7,12 @@ open Npgsql
 open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql
 open FSharp.Data.Npgsql.DesignTime.InformationSchema
-open System
 
 let internal createRootType
     (
         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
         sqlStatement, connectionStringOrName, resultType, singleRow, fsx, allParametersOptional, configType, config, prepare
     ) = 
-
     if String.IsNullOrWhiteSpace( connectionStringOrName) then invalidArg "Connection" "Value is empty!" 
 
     let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
@@ -27,21 +25,28 @@ let internal createRootType
     if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
     then invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-    let (parameters, outputColumns, customTypes) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, schemaLookups)
-
     let cmdProvidedType = ProvidedTypeDefinition(assembly, nameSpace, typeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
+    
+    let (parameters, outputColumns, enums) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, schemaLookups)
 
-    customTypes
-    |> Seq.map (fun s -> s.Value)
-    |> List.ofSeq
-    |> cmdProvidedType.AddMembers
+    let customTypes = 
+        enums
+        |> List.map (fun enum ->
+            let udtTypeName = sprintf "%s.%s" enum.Schema enum.Name
+            let t = ProvidedTypeDefinition(udtTypeName, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+            for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
+            udtTypeName, t)
+        |> Map.ofList
+        
+    customTypes |> Seq.map (fun s -> s.Value) |> Seq.toList |> cmdProvidedType.AddMembers
     
     let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
     let returnTypes = 
         outputColumns |> List.mapi (fun i cs ->
             QuotationsFactory.GetOutputTypes(
-                cs, 
+                cs,
+                customTypes,
                 resultType, 
                 commandBehaviour, 
                 hasOutputParameters = false, 
@@ -99,7 +104,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
         instantiationFunction = (fun typeName args ->
             cache.GetOrAdd(
                 typeName, 
-                lazy 
+                lazy
                     createRootType(
                         assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
                         unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8]
