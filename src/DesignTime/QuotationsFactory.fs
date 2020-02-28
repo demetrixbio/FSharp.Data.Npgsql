@@ -30,6 +30,10 @@ type internal ReturnType = {
         | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
         | None -> <@@ null: string @@>
 
+type internal ProvidedTypeReuse =
+    | WithCache of Cache<ProvidedTypeDefinition>
+    | NoReuse
+
 type internal QuotationsFactory private() = 
 
     static let (|Arg3|) xs = 
@@ -220,52 +224,63 @@ type internal QuotationsFactory private() =
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
-    static member internal GetRecordType(columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix) =
+    static member internal GetRecordType(columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
         columns 
             |> Seq.groupBy (fun x -> x.Name) 
             |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
-        let recordType = ProvidedTypeDefinition("Record" + typeNameSuffix, baseType = Some typeof<obj>, hideObjectMethods = true)
-        
-        let properties, ctorParameters = 
-            columns
-            |> List.mapi ( fun i col ->
-                let propertyName = col.Name
+        let createType typeName =
+            let recordType = ProvidedTypeDefinition(typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
+            
+            let properties, ctorParameters = 
+                columns
+                |> List.mapi ( fun i col ->
+                    let propertyName = col.Name
 
-                if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
-                    
-                let propType = col.MakeProvidedType(customTypes)
+                    if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
+                        
+                    let propType = col.MakeProvidedType(customTypes)
 
-                let property = 
-                    ProvidedProperty(
-                        propertyName, 
-                        propType, 
-                        fun args -> <@@ %%args.[0] |> unbox |> Map.find<string, obj> propertyName @@>
-                    )
+                    let property = 
+                        ProvidedProperty(
+                            propertyName, 
+                            propType, 
+                            fun args -> <@@ %%args.[0] |> unbox |> Map.find<string, obj> propertyName @@>
+                        )
 
-                let ctorParameter = ProvidedParameter(propertyName, propType)  
+                    let ctorParameter = ProvidedParameter(propertyName, propType)  
 
-                property, ctorParameter
-            )
-            |> List.unzip
+                    property, ctorParameter
+                )
+                |> List.unzip
 
-        recordType.AddMembers properties
+            recordType.AddMembers properties
 
-        let invokeCode args =
-            let pairs =  
-                Seq.zip args properties //Because we need original names in dictionary
-                |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
-                |> List.ofSeq
+            let invokeCode args =
+                let pairs =  
+                    Seq.zip args properties //Because we need original names in dictionary
+                    |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
+                    |> List.ofSeq
 
-            <@@
-                Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
-            @@> 
-        
-        let ctor = ProvidedConstructor(ctorParameters, invokeCode)
-        recordType.AddMember ctor
-        
-        recordType
+                <@@
+                    Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
+                @@> 
+            
+            let ctor = ProvidedConstructor(ctorParameters, invokeCode)
+            recordType.AddMember ctor
+            
+            recordType
+ 
+        match providedTypeReuse with
+        | WithCache cache ->
+            let typeName = columns |> List.map (fun x ->
+                let t = if Map.containsKey x.DataType.FullName customTypes then x.DataType.FullName else x.ClrType.Name
+                if x.Nullable then sprintf "%s:Option<%s>" x.Name t else sprintf "%s:%s" x.Name t) |> List.sort |> String.concat ", "
+
+            cache.GetOrAdd (typeName, Lazy<ProvidedTypeDefinition> (fun () -> createType typeName))
+        | NoReuse ->
+            createType ("Record" + typeNameSuffix)
 
     static member internal GetDataRowPropertyGetterAndSetterCode (column: Column) =
         let name = column.Name
@@ -449,7 +464,8 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, customTypes: Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString, typeNameSuffix) =    
+    static member internal GetOutputTypes(outputColumns, customTypes: Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior, hasOutputParameters, allowDesignTimeConnectionStringReUse,
+                                          designTimeConnectionString, typeNameSuffix, providedTypeReuse) =    
          
         if resultType = ResultType.DataReader
         then 
@@ -487,7 +503,7 @@ type internal QuotationsFactory private() =
 
                 elif resultType = ResultType.Records 
                 then 
-                    let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix)
+                    let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix, providedTypeReuse)
                     let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
                     let mapping = <@@ fun (values: obj[]) -> ((%%names: string[]), values) ||> Array.zip |> Map.ofArray |> box @@>
 
@@ -637,7 +653,7 @@ type internal QuotationsFactory private() =
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>)
 
-    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) =
+    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
         
         let addRedirectToISqlCommandMethod outputType name = 
@@ -652,7 +668,7 @@ type internal QuotationsFactory private() =
             let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
             addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
 
-            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns.Head cmdProvidedType
+            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns.Head typeToAttachTo
         | _ ->
             let resultSetsType = ProvidedTypeDefinition("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
             let props, ctorParams =
@@ -670,7 +686,7 @@ type internal QuotationsFactory private() =
             resultSetsType.AddMember ctor
 
             List.zip outputColumns returnTypes
-            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns resultSetsType)
+            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns typeToAttachTo)
 
             addRedirectToISqlCommandMethod resultSetsType "Execute" 
             

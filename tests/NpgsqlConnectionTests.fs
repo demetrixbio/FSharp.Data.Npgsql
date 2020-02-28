@@ -21,6 +21,8 @@ let openConnection() =
 
 type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
 
+type DvdRentalWithTypeReuse = NpgsqlConnection<connectionStringName, Config = config, ReuseProvidedTypes = true>
+
 [<Fact>]
 let selectLiterals() =
     use cmd = 
@@ -579,6 +581,19 @@ let ``Tuples command prepared``() =
     cmd.Execute("", "") |> ignore
 
     Assert.True(isStatementPrepared conn)
+
+[<Fact>]
+let ``Record type reused regardless of column order`` =
+    use cmd1 = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>(dvdRental)
+    use cmd2 = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film", SingleRow = true>(dvdRental)
+    let actual1 = cmd1.Execute().Value
+    let actual2 = cmd2.Execute().Value
+
+    let test (x: DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public.mpaa_rating>``) (y: DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public.mpaa_rating>``) =
+        Assert.Equal (x.film_id, y.film_id)
+        Assert.Equal (x.rating, y.rating)
+
+    test actual1 actual2
 
 [<Fact>]
 let ``Two selects record``() =
