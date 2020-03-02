@@ -183,15 +183,15 @@ type Column =
         let typeName = 
             let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
             clrType.PartiallyQualifiedName
-     
+        
         let isTimestampTz = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
         let isTimestamp = this.DataType.Name = "timestamp" && this.ClrType = typeof<DateTime>
         let isJson = this.DataType.Name = "json"
         let isJsonb = this.DataType.Name = "jsonb"
         let isEnum = (not this.ClrType.IsArray) && this.DataType.IsUserDefinedType
         
-        <@@ 
-            let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType( typeName, throwOnError = true))
+        <@@
+            let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType(typeName, throwOnError = true))
 
             x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
             x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
@@ -207,8 +207,6 @@ type Column =
                 //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
                 x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.TimestampTz))
             elif isTimestamp then
-                //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
-                x.DateTimeMode <- DataSetDateTime.Local
                 //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
                 x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Timestamp))
             elif isEnum then
@@ -221,7 +219,7 @@ type Column =
             
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.IsKey), %%Expr.Value(box this.PartOfPrimaryKey))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
-            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.DataType), %%Expr.Value(box this.ClrType.PartiallyQualifiedName))
+            x.ExtendedProperties.Add(%%Expr.Value(box "ClrType.PartiallyQualifiedName"), %%Expr.Value(box this.ClrType.PartiallyQualifiedName))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseSchemaName), %%Expr.Value(box this.BaseSchemaName))
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
             x

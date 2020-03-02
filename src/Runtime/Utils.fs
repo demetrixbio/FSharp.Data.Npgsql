@@ -51,11 +51,11 @@ type Utils private() =
                 yield (values, resultSet.ExpectedColumns)
                       ||> Array.map2 (fun obj column ->
                           let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
-                          let columnTypeName = column.ExtendedProperties.[SchemaTableColumn.DataType] |> unbox<string>
-                          let columnType = Type.GetType(columnTypeName, throwOnError = true)
+                          let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] |> unbox<string>
+                          let dataType = Type.GetType(dataTypeName, throwOnError = true)
                           if isNullable then
                               let isSome = Convert.IsDBNull(obj) |> not
-                              Utils.MakeOptionValue columnType obj isSome
+                              Utils.MakeOptionValue dataType obj isSome
                           else
                               obj)
                       |> resultSet.Row2ItemMapping
@@ -85,6 +85,8 @@ type Utils private() =
         selectCommand.Connection <- connection
         if transaction <> null then selectCommand.Transaction <- transaction
 
+        for column in table.Columns do column.ExtendedProperties.Remove("ClrType.PartiallyQualifiedName")
+        
         use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 
