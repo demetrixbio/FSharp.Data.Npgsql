@@ -59,9 +59,9 @@ type internal QuotationsFactory private() =
     [<Literal>]
     static let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
 
-    static let getValueAtIndex = typeof<Array>.GetMethod("GetValue", [| typeof<int> |])
+    static let getValueAtIndex = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod(typeof<obj>)
 
-    static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(arrayExpr, getValueAtIndex, [ Expr.Value index ])
+    static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(getValueAtIndex, [ arrayExpr; Expr.Value index ])
 
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
