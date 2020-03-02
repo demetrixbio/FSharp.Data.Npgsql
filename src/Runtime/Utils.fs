@@ -7,7 +7,15 @@ open System.Runtime.CompilerServices
 open System.ComponentModel
 open Npgsql
 
+[<EditorBrowsable(EditorBrowsableState.Never)>]
+type ResultSetDefinition = {
+    Row2ItemMapping: obj[] -> obj
+    SeqItemTypeName: string
+    ExpectedColumns: DataColumn[]
+}
+
 [<Extension>]
+[<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
     static member private StatementIndexGetter =
@@ -18,16 +26,42 @@ type Utils private() =
     static member GetStatementIndex(cursor: DbDataReader) =
         Utils.StatementIndexGetter.Invoke(cursor, null) :?> int
 
+    static member private CreateOptionType typeParam =
+        typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
+    
+    static member private MakeOptionValue typeParam v isSome =
+        let optionType = Utils.CreateOptionType typeParam
+        let cases = FSharp.Reflection.FSharpType.GetUnionCases(optionType)
+        let cases = cases |> Array.partition (fun x -> x.Name = "Some")
+        let someCase = fst cases |> Array.exactlyOne
+        let noneCase = snd cases |> Array.exactlyOne
+        let relevantCase, args =
+            match isSome with
+            | true -> someCase, [| v |]
+            | false -> noneCase, [| |]
+        FSharp.Reflection.FSharpValue.MakeUnion(relevantCase, args)
+    
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultSet : ResultSetDefinition) = 
         seq {
             let values = Array.zeroCreate cursor.FieldCount
             while cursor.Read() do
                 cursor.GetValues(values) |> ignore
-                yield values |> rowMapping |> unbox<'TItem>
+                yield (values, resultSet.ExpectedColumns)
+                      ||> Array.map2 (fun obj column ->
+                          let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
+                          let columnTypeName = column.ExtendedProperties.[SchemaTableColumn.DataType] |> unbox<string>
+                          let columnType = Type.GetType(columnTypeName, throwOnError = true)
+                          if isNullable then
+                              let isSome = Convert.IsDBNull(obj) |> not
+                              Utils.MakeOptionValue columnType obj isSome
+                          else
+                              obj)
+                      |> resultSet.Row2ItemMapping
+                      |> unbox<'TItem>
         }
-
+    
     [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member DbNull = box DBNull.Value
 

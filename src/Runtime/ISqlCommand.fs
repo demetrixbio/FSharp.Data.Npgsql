@@ -12,13 +12,6 @@ type ISqlCommand =
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
-type ResultSetDefinition = {
-    Row2ItemMapping: obj[] -> obj
-    SeqItemTypeName: string
-    ExpectedColumns: DataColumn[]
-}
-
-[<EditorBrowsable(EditorBrowsableState.Never)>]
 type DesignTimeConfig = {
     SqlStatement: string
     Parameters: NpgsqlParameter[]
@@ -36,7 +29,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     let cmd = new NpgsqlCommand(cfg.SqlStatement, CommandTimeout = commandTimeout)
     do
         cmd.Parameters.AddRange( cfg.Parameters)
-
+    
     let readerBehavior = 
         if cfg.SingleRow then CommandBehavior.SingleRow else CommandBehavior.Default
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
@@ -103,8 +96,8 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                             .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
                             .MakeGenericMethod(itemType)
                             
-                    executeHandle.Invoke(null, [| resultSet.Row2ItemMapping |]) |> unbox >> box, 
-                    asyncExecuteHandle.Invoke(null, [| resultSet.Row2ItemMapping |]) |> unbox >> box
+                    executeHandle.Invoke(null, [| |]) |> unbox >> box, 
+                    asyncExecuteHandle.Invoke(null, [| |]) |> unbox >> box
             | _ ->
                 ``ISqlCommand Implementation``.ExecuteMulti >> box,
                 ``ISqlCommand Implementation``.AsyncExecuteMulti >> box
@@ -248,13 +241,13 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             return ``ISqlCommand Implementation``.LoadDataTable reader (cmd.Clone()) resultSets.[0].ExpectedColumns
         }
 
-    static member internal ExecuteList<'TItem> (rowMapper) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) -> 
+    static member internal ExecuteList<'TItem> () = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
         then
             use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-            let xs = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
+            let xs = reader.MapRowValues<'TItem>(resultSetDefinitions.[0]) |> Seq.toList
 
             if readerBehavior.HasFlag(CommandBehavior.SingleRow)
             then 
@@ -263,7 +256,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 box xs 
         else
             use reader = ``ISqlCommand Implementation``.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-            let resultset = reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
+            let resultset = reader.MapRowValues<'TItem>(resultSetDefinitions.[0]) |> Seq.toList
 
             if hasOutputParameters
             then
@@ -278,7 +271,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     // TODO output params
     static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition) = 
-        let xs = reader.MapRowValues<'TItem>(resultSetDefinition.Row2ItemMapping) |> Seq.toList
+        let xs = reader.MapRowValues<'TItem>(resultSetDefinition) |> Seq.toList
 
         if readerBehavior.HasFlag(CommandBehavior.SingleRow)
         then 
@@ -286,11 +279,11 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         else 
             box xs 
             
-    static member internal AsyncExecuteList<'TItem> (rowMapper) = fun(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare) ->
+    static member internal AsyncExecuteList<'TItem> () = fun(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare) ->
         let xs = 
             async {
                 use! reader = ``ISqlCommand Implementation``.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-                return reader.MapRowValues<'TItem>(rowMapper) |> Seq.toList
+                return reader.MapRowValues<'TItem>(resultSetDefinitions.[0]) |> Seq.toList
             }
 
         if readerBehavior.HasFlag(CommandBehavior.SingleRow)

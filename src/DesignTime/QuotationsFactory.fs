@@ -91,48 +91,6 @@ type internal QuotationsFactory private() =
             x
         @@>
 
-    static member internal MapArrayOptionItemToObj<'T>(arr, index) =
-        <@
-            let values : obj[] = %%arr
-            values.[index] <- match unbox values.[index] with Some (x : 'T) -> box x | None -> null 
-        @> 
-
-    static member internal MapArrayObjItemToOption<'T>(arr, index) =
-        <@
-            let values : obj[] = %%arr
-            values.[index] <- box <| if Convert.IsDBNull(values.[index]) then None else Some(unbox<'T> values.[index])
-        @> 
-
-    static member internal MapArrayNullableItems(outputColumns : Column list, mapper : string) = 
-        let columnTypes, isNullableColumn = 
-            outputColumns |> List.map (fun c -> c.ClrType.PartiallyQualifiedName, c.Nullable) |> List.unzip
-
-        QuotationsFactory.MapArrayNullableItems(columnTypes, isNullableColumn, mapper)            
-
-    static member internal MapArrayNullableItems(columnTypes : string list, isNullableColumn : bool list, mapper : string) = 
-        assert(columnTypes.Length = isNullableColumn.Length)
-        let arr = Var("_", typeof<obj[]>)
-        let body =
-            (columnTypes, isNullableColumn) 
-            ||> List.zip
-            |> List.mapi(fun index (typeName, isNullableColumn) ->
-                if isNullableColumn 
-                then 
-                    typeof<QuotationsFactory>
-                        .GetMethod(mapper, BindingFlags.NonPublic ||| BindingFlags.Static)
-                        .MakeGenericMethod( Type.GetType( typeName, throwOnError = true))
-                        .Invoke(null, [| box(Expr.Var arr); box index |])
-                        |> unbox
-                        |> Some
-                else 
-                    None
-            ) 
-            |> List.choose id
-            |> List.fold (fun acc x ->
-                Expr.Sequential(acc, x)
-            ) <@@ () @@>
-        Expr.Lambda(arr, body)
-
     static member internal GetNullableValueFromDataRow<'T>(exprArgs : Expr list, name : string) =
         <@
             let row : DataRow = %%exprArgs.[0]
@@ -494,8 +452,6 @@ type internal QuotationsFactory private() =
                     let mapping = <@@ Reflection.FSharpValue.PreComputeTupleConstructor( Type.GetType( clrTypeName, throwOnError = true))  @@>
                     providedType, erasedToTupleType, mapping
             
-            let nullsToOptions = QuotationsFactory.MapArrayNullableItems(outputColumns, "MapArrayObjItemToOption") 
-            
             { 
                 Single = 
                     if commandBehaviour.HasFlag(CommandBehavior.SingleRow)  
@@ -507,7 +463,7 @@ type internal QuotationsFactory private() =
                 PerRow = Some { 
                     Provided = providedRowType
                     ErasedTo = erasedToRowType
-                    Mapping = <@@ Utils.GetMapperWithNullsToOptions(%%nullsToOptions, %%rowMapping) @@> 
+                    Mapping = rowMapping
                 }               
             }
 
