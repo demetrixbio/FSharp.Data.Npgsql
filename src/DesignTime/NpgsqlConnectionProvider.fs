@@ -78,7 +78,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                         ResultType = %%Expr.Value(resultType)
                         SingleRow = singleRow
-                        ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
+                        ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes resultType)
                         UseLegacyPostgis = useLegacyPostgis
                         Prepare = prepare
                     } @@>
@@ -130,7 +130,7 @@ let createTableTypes(connectionString: string, customTypes : Map<string, Provide
             do //ctor
                 let invokeCode _ = 
 
-                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
+                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr(true) ]
 
                     let twoPartTableName = 
                         use x = new NpgsqlCommandBuilder()

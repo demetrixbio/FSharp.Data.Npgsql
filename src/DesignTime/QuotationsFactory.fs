@@ -615,13 +615,13 @@ type internal QuotationsFactory private() =
         then
             returnType.Single |> declaringType.AddMember
 
-    static member internal BuildResultSetDefinitions (outputColumns: Column list list) (returnTypes: ReturnType list) =
+    static member internal BuildResultSetDefinitions (outputColumns: Column list list) (returnTypes: ReturnType list) resultType =
         List.zip outputColumns returnTypes
         |> List.map (fun (outputColumns, returnType) ->
             <@@ {
                 Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr((resultType = ResultType.DataTable)) ])
             } @@>)
 
     static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) =

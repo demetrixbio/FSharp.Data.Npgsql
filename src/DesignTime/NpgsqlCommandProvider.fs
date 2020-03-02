@@ -66,7 +66,7 @@ let internal createRootType
                 Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
                 ResultType = resultType
                 SingleRow = singleRow
-                ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
+                ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes resultType)
                 UseLegacyPostgis = useLegacyPostgis
                 Prepare = prepare
             } @@>
