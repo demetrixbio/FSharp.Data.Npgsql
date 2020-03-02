@@ -582,18 +582,49 @@ let ``Tuples command prepared``() =
 
     Assert.True(isStatementPrepared conn)
 
+// Necessary to be able to refer to the reused type in the function below
+let _ = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>
+
+type FilmIdRating = DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public.mpaa_rating>``
+
+let assertEqualFilmIdRating (x: FilmIdRating) (y: FilmIdRating) =
+    Assert.Equal (x.film_id, y.film_id)
+    Assert.Equal (x.rating, y.rating)
+
 [<Fact>]
-let ``Record type reused regardless of column order`` =
+let ``Can instantiated reused type``() =
+    let actual = FilmIdRating(1, Some DvdRentalWithTypeReuse.``public``.Types.mpaa_rating.``PG-13``)
+    Assert.Equal (1, actual.film_id)
+    Assert.True (Option.isSome actual.rating)
+
+[<Fact>]
+let ``Record type reused regardless of column order``() =
     use cmd1 = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>(dvdRental)
     use cmd2 = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film", SingleRow = true>(dvdRental)
     let actual1 = cmd1.Execute().Value
     let actual2 = cmd2.Execute().Value
 
-    let test (x: DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public.mpaa_rating>``) (y: DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public.mpaa_rating>``) =
-        Assert.Equal (x.film_id, y.film_id)
-        Assert.Equal (x.rating, y.rating)
+    assertEqualFilmIdRating actual1 actual2
 
-    test actual1 actual2
+[<Fact>]
+let ``Record type reused within a single command with multiple statements``() =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film limit 1; select film_id, rating from film limit 1">(dvdRental)
+    let res = cmd.Execute()
+    let actual1 = res.ResultSet1.Head
+    let actual2 = res.ResultSet2.Head
+
+    assertEqualFilmIdRating actual1 actual2
+
+[<Fact>]
+let ``Bytea is properly encoded in reused type name``() =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
+    let actual = cmd.Execute().Value
+    let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
+    
+    let assertByteaEqual (actual: DvdRentalWithTypeReuse.``picture:Option<Byte[]>, staff_id:Int32``) =
+        Assert.Equal<byte> (expected, actual.picture.Value)
+
+    assertByteaEqual actual
 
 [<Fact>]
 let ``Two selects record``() =
@@ -724,26 +755,26 @@ let ``One select and two updates reader async``() =
 
     Assert.Equal (1, resultSets)
 
-[<Literal>]
-let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
+//[<Literal>]
+//let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
-type Lims = NpgsqlConnection<lims>
+//type Lims = NpgsqlConnection<lims>
 
-[<Fact>]
-let largeBatchUpdate() =
-    use conn = new Npgsql.NpgsqlConnection(lims)
+//[<Fact>]
+//let largeBatchUpdate() =
+//    use conn = new Npgsql.NpgsqlConnection(lims)
 
-    conn.Open()
-    use tx = conn.BeginTransaction()
-    let parts = 
-        use cmd = Lims.CreateCommand<"SELECT * FROM part.part LIMIT 1000", ResultType.DataTable, XCtor = true>(conn, tx)
-        cmd.Execute()
-    for r in parts.Rows do
-        r.sequence <- r.sequence |> Option.map (fun s -> s + "=test")
+//    conn.Open()
+//    use tx = conn.BeginTransaction()
+//    let parts = 
+//        use cmd = Lims.CreateCommand<"SELECT * FROM part.part LIMIT 1000", ResultType.DataTable, XCtor = true>(conn, tx)
+//        cmd.Execute()
+//    for r in parts.Rows do
+//        r.sequence <- r.sequence |> Option.map (fun s -> s + "=test")
 
-    //let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
-    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.OverwriteChanges, batchTimeout = 60*10)
-    printfn "Records affected: %i" recordsAffected
-    Assert.Equal(parts.Rows.Count, recordsAffected)
+//    //let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
+//    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.OverwriteChanges, batchTimeout = 60*10)
+//    printfn "Records affected: %i" recordsAffected
+//    Assert.Equal(parts.Rows.Count, recordsAffected)
 
 
