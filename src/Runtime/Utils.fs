@@ -7,13 +7,6 @@ open System.Runtime.CompilerServices
 open System.ComponentModel
 open Npgsql
 
-[<EditorBrowsable(EditorBrowsableState.Never)>]
-type ResultSetDefinition = {
-    Row2ItemMapping: obj[] -> obj
-    SeqItemTypeName: string
-    ExpectedColumns: DataColumn[]
-}
-
 [<Extension>]
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
@@ -43,7 +36,16 @@ type Utils private() =
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader, resultSet : ResultSetDefinition) = 
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet : ResultSetDefinition) =
+        let rowMapping =
+            if resultSet.ExpectedColumns.Length = 1 then
+                Array.item 0
+            elif resultType = ResultType.Tuples then
+                let clrTypeName = resultSet.SeqItemTypeName
+                Reflection.FSharpValue.PreComputeTupleConstructor(Type.GetType(clrTypeName, throwOnError = true))
+            else
+                box
+        
         seq {
             let values = Array.zeroCreate cursor.FieldCount
             while cursor.Read() do
@@ -58,7 +60,7 @@ type Utils private() =
                               Utils.MakeOptionValue dataType obj isSome
                           else
                               obj)
-                      |> resultSet.Row2ItemMapping
+                      |> rowMapping
                       |> unbox<'TItem>
         }
     

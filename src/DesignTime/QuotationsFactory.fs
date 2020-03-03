@@ -14,17 +14,17 @@ open InformationSchema
 type internal RowType = {
     Provided: Type
     ErasedTo: Type
-    Mapping: Expr
+    //Mapping: Expr
 }
 
 type internal ReturnType = {
     Single: Type
     PerRow: RowType option
 }  with 
-    member this.Row2ItemMapping = 
+(*    member this.Row2ItemMapping = 
         match this.PerRow with
         | Some x -> x.Mapping
-        | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> 
+        | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> *)
     member this.SeqItemTypeName = 
         match this.PerRow with
         | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
@@ -422,21 +422,18 @@ type internal QuotationsFactory private() =
             { Single = dataTableType; PerRow = None }
 
         else 
-            let providedRowType, erasedToRowType, rowMapping = 
+            let providedRowType, erasedToRowType = 
                 if List.length outputColumns = 1
                 then
                     let column0 = outputColumns.Head
                     let erasedTo = column0.ClrTypeConsideringNullability
                     let provided = column0.MakeProvidedType(customTypes)
-                    let values = Var("values", typeof<obj[]>)
-                    let indexGet = QuotationsFactory.GetValueAtIndexExpr (Expr.Var values) 0
-                    provided, erasedTo, Expr.Lambda(values, indexGet) 
+                    provided, erasedTo
 
                 elif resultType = ResultType.Records 
                 then 
                     let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix)
-                    let values = Var("values", typeof<obj[]>)
-                    upcast provided, typeof<obj>, Expr.Lambda(values, Expr.Coerce(Expr.Var values, typeof<obj>))
+                    upcast provided, typeof<obj>
                 else 
                     let providedType = 
                         match outputColumns with
@@ -448,9 +445,7 @@ type internal QuotationsFactory private() =
                         | [ x ] -> x.ClrTypeConsideringNullability
                         | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
 
-                    let clrTypeName = erasedToTupleType.PartiallyQualifiedName
-                    let mapping = <@@ Reflection.FSharpValue.PreComputeTupleConstructor( Type.GetType( clrTypeName, throwOnError = true))  @@>
-                    providedType, erasedToTupleType, mapping
+                    providedType, erasedToTupleType
             
             { 
                 Single = 
@@ -460,11 +455,7 @@ type internal QuotationsFactory private() =
                     else
                         ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ providedRowType ])
 
-                PerRow = Some { 
-                    Provided = providedRowType
-                    ErasedTo = erasedToRowType
-                    Mapping = rowMapping
-                }               
+                PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType }               
             }
 
     static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
@@ -575,7 +566,6 @@ type internal QuotationsFactory private() =
         List.zip outputColumns returnTypes
         |> List.map (fun (outputColumns, returnType) ->
             <@@ {
-                Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>)
