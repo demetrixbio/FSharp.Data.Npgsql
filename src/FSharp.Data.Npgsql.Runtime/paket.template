@@ -1,5 +1,5 @@
 type file
-id FSharp.Data.Npgsql.Test
+id FSharp.Data.Npgsql
 authors
     Demetrix, Dmitry Morozov
 owners
@@ -19,8 +19,8 @@ description
 tags
     F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql
 files
-    bin/Release/net461/FSharp.Data.Npgsql.Runtime.* ==> lib/net461
-    bin/Release/netstandard2.0/FSharp.Data.Npgsql.Runtime.* ==> lib/netstandard2.0
+    bin/Release/net461/FSharp.Data.Npgsql.* ==> lib/net461
+    bin/Release/netstandard2.0/FSharp.Data.Npgsql.* ==> lib/netstandard2.0
     bin/Release/typeproviders/fsharp41/netstandard2.0/*.dll ==> typeproviders/fsharp41/netstandard2.0
     bin/Release/typeproviders/fsharp41/netcoreapp3.1/*.dll ==> typeproviders/fsharp41/netcoreapp3.1
     bin/Release/typeproviders/fsharp41/net461/*.dll ==> typeproviders/fsharp41/net461
