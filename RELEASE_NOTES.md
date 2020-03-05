@@ -16,3 +16,8 @@
 
 ### 0.1.49-beta - January 13th, 2020
 * DataTable.Update wrong DbParameter type fix in case of multiple update statements.  
+
+### 0.1.50-beta - February 27th, 2020
+* Materialized views support by @kerams
+* Partitioned table support by @kerams
+* Bug fixes to enable enum support in NpgsqlCommand type provider, querying against system catalogs
