@@ -1,11 +1,10 @@
 ﻿namespace FSharp.Data.Npgsql
 
+open DesignTime.InformationSchema
 open System.Reflection
 open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
-open FSharp.Data.Npgsql
 open FSharp.Data.Npgsql.DesignTime
-open FSharp.Data.Npgsql.DesignTime.InformationSchema
 open System.IO
 
 [<TypeProvider>]
@@ -37,6 +36,3 @@ type NpgsqlProviders(config) as this =
                 NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, config.IsHostedExecution, config.ResolutionFolder, cache, schemaCache)
             ]
         )
-        
-[<TypeProviderAssembly>]
-do ()

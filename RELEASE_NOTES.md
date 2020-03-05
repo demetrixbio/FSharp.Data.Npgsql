@@ -24,5 +24,4 @@
 
 ### 0.2.0-beta - March 5th, 2020
 * Quotation optimizations by @kerams
-* Inferring rowmapping/nullability in runtime to remove redundant quotation passing.
-* Switched to new type provider template, paket package management. Modified provided types SDK for better performance. 
+* Inferring rowmapping/nullability in runtime to remove redundant quotation passing. Modified provided types SDK for better performance. 

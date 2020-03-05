@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>FSharp.Data.Npgsql</id>
+    <version>0.2.2-beta</version>
+    <authors>Demetrix; Dmitry Morozov</authors>
+    <owners>Demetrix; Dmitry Morozov</owners>
+    <licenseUrl>https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/demetrixbio/FSharp.Data.Npgsql</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.</description>
+    <copyright>Copyright 2017-2018 Dmitry Morozov</copyright>
+    <tags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</tags>
+    <dependencies>
+      <dependency id="Npgsql" version="4.0.7"/>
+      <dependency id="Npgsql.LegacyPostgis" version="1.0.0"/>
+    </dependencies>
+    <references>
+      <reference file="FSharp.Data.Npgsql.dll" />
+    </references>
+  </metadata>
+  <files>
+    <file src="bin\Release\netstandard2.0\*.dll" target="lib\netstandard2.0" />
+    <file src="bin\Release\netstandard2.0\*.pdb" target="lib\netstandard2.0" />
+    <file src="bin\Release\typeproviders\fsharp41\netcoreapp2.0\*.dll" target="typeproviders\fsharp41\netcoreapp2.0" />
+    <file src="bin\Release\typeproviders\fsharp41\net461\*.dll" target="typeproviders\fsharp41\net461" />
+  </files>
+</package>
+
