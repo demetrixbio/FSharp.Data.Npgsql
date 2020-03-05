@@ -27,7 +27,7 @@ type internal ReturnType = {
         | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> *)
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
+        | Some x -> Expr.Value(x.ErasedTo.PartiallyQualifiedName)
         | None -> <@@ null: string @@>
 
 type internal QuotationsFactory private() = 

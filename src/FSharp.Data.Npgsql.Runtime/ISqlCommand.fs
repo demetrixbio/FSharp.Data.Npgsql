@@ -84,7 +84,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     ``ISqlCommand Implementation``.ExecuteNonQuery >> box, 
                     ``ISqlCommand Implementation``.AsyncExecuteNonQuery >> box
                 else
-                    let itemType = Type.GetType( resultSet.SeqItemTypeName, throwOnError = true)
+                    let itemType = Type.GetType(resultSet.SeqItemTypeName, throwOnError = true)
                     
                     let executeHandle = 
                         typeof<``ISqlCommand Implementation``>
