@@ -1,7 +1,0 @@
-File:ProvidedTypes.fsi
-File:ProvidedTypes.fs
-
-FSharp.Core
-Npgsql
-System.ValueTuple
-Npgsql.LegacyPostgis
