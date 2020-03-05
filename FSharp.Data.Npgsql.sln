@@ -1,11 +1,17 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2010
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Runtime", "src\Runtime\Runtime.fsproj", "{56F25EED-11BF-4892-A93D-132E654D7179}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Data.Npgsql.Runtime", "src\FSharp.Data.Npgsql.Runtime\FSharp.Data.Npgsql.Runtime.fsproj", "{56F25EED-11BF-4892-A93D-132E654D7179}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "DesignTime", "src\DesignTime\DesignTime.fsproj", "{3C3E9A10-898C-4704-ACDC-30A0B96B4B23}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FSharp.Data.Npgsql.DesignTime", "src\FSharp.Data.Npgsql.DesignTime\FSharp.Data.Npgsql.DesignTime.fsproj", "{3C3E9A10-898C-4704-ACDC-30A0B96B4B23}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{1CCDAEDF-7CD4-484B-8B6B-FB59FD070725}"
+ProjectSection(SolutionItems) = preProject
+	README.md = README.md
+	RELEASE_NOTES.md = RELEASE_NOTES.md
+	paket.dependencies = paket.dependencies
+EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,5 +33,7 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2DBC38AD-C45B-4975-A4B6-925760470498}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
 	EndGlobalSection
 EndGlobal

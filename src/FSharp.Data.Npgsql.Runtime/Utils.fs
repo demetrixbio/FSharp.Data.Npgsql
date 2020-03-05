@@ -8,6 +8,7 @@ open System.ComponentModel
 open Npgsql
 
 [<Extension>]
+[<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
     static member private StatementIndexGetter =
@@ -18,16 +19,51 @@ type Utils private() =
     static member GetStatementIndex(cursor: DbDataReader) =
         Utils.StatementIndexGetter.Invoke(cursor, null) :?> int
 
+    static member private CreateOptionType typeParam =
+        typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
+    
+    static member private MakeOptionValue typeParam v isSome =
+        let optionType = Utils.CreateOptionType typeParam
+        let cases = FSharp.Reflection.FSharpType.GetUnionCases(optionType)
+        let cases = cases |> Array.partition (fun x -> x.Name = "Some")
+        let someCase = fst cases |> Array.exactlyOne
+        let noneCase = snd cases |> Array.exactlyOne
+        let relevantCase, args =
+            match isSome with
+            | true -> someCase, [| v |]
+            | false -> noneCase, [| |]
+        FSharp.Reflection.FSharpValue.MakeUnion(relevantCase, args)
+    
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader ,rowMapping) = 
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet : ResultSetDefinition) =
+        let rowMapping =
+            if resultSet.ExpectedColumns.Length = 1 then
+                Array.item 0
+            elif resultType = ResultType.Tuples then
+                let clrTypeName = resultSet.SeqItemTypeName
+                Reflection.FSharpValue.PreComputeTupleConstructor(Type.GetType(clrTypeName, throwOnError = true))
+            else
+                box
+        
         seq {
             let values = Array.zeroCreate cursor.FieldCount
             while cursor.Read() do
                 cursor.GetValues(values) |> ignore
-                yield values |> rowMapping |> unbox<'TItem>
+                yield (values, resultSet.ExpectedColumns)
+                      ||> Array.map2 (fun obj column ->
+                          let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
+                          let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] |> unbox<string>
+                          let dataType = Type.GetType(dataTypeName, throwOnError = true)
+                          if isNullable then
+                              let isSome = Convert.IsDBNull(obj) |> not
+                              Utils.MakeOptionValue dataType obj isSome
+                          else
+                              obj)
+                      |> rowMapping
+                      |> unbox<'TItem>
         }
-
+    
     [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member DbNull = box DBNull.Value
 
@@ -51,6 +87,8 @@ type Utils private() =
         selectCommand.Connection <- connection
         if transaction <> null then selectCommand.Transaction <- transaction
 
+        for column in table.Columns do column.ExtendedProperties.Remove("ClrType.PartiallyQualifiedName")
+        
         use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 

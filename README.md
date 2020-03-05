@@ -466,9 +466,18 @@ Worth noting that `BinaryImport` operation expects _all_ columns including auto-
 
 ## Running tests
 From the repo root folder
-- dotnet build .\src\DesignTime\
-- dotnet build .\src\Runtime\
+- dotnet build .\src\FSharp.Data.Npgsql.DesignTime\
+- dotnet build .\src\FSharp.Data.Npgsql.Runtime\
 - docker build -t pg_dvdrental .\tests\
 - docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
 - dotnet test .\tests\
 
+## Building
+The type provider uses paket to acquire the files of the latest published type provider SDK.
+- dotnet tool restore
+- dotnet paket update
+- dotnet build -c release
+- dotnet test -c release
+
+The type provider also contains the logic necessary to package the type provider:
+- dotnet paket pack nuget --version 0.0.1

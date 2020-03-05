@@ -1,0 +1,37 @@
+type file
+id FSharp.Data.Npgsql.Test
+authors
+    Demetrix, Dmitry Morozov
+owners
+    Demetrix
+projectUrl
+    https://github.com/demetrixbio/FSharp.Data.Npgsql
+iconUrl
+    https://raw.githubusercontent.com/fsprojects/FSharp.Data.Npgsql/master/docs/files/img/logo.png
+licenseUrl
+    https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE
+requireLicenseAcceptance
+    false
+summary
+    F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.
+description
+    F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.
+tags
+    F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql
+files
+    bin/Release/net461/FSharp.Data.Npgsql.Runtime.* ==> lib/net461
+    bin/Release/netstandard2.0/FSharp.Data.Npgsql.Runtime.* ==> lib/netstandard2.0
+    bin/Release/typeproviders/fsharp41/netstandard2.0/*.dll ==> typeproviders/fsharp41/netstandard2.0
+    bin/Release/typeproviders/fsharp41/netcoreapp3.1/*.dll ==> typeproviders/fsharp41/netcoreapp3.1
+    bin/Release/typeproviders/fsharp41/net461/*.dll ==> typeproviders/fsharp41/net461
+references
+    FSharp.Data.Npgsql.Runtime.dll
+dependencies
+  FSharp.Core >= LOCKEDVERSION
+
+# put any package references here
+#  Some.Package
+#  framework: netcoreapp3.1
+#    System.Text.Encoding.CodePages >= LOCKEDVERSION
+#  framework: netstandard2.0
+#    System.Text.Encoding.CodePages >= LOCKEDVERSION

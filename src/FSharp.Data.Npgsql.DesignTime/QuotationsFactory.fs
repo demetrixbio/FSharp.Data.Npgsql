@@ -14,20 +14,20 @@ open InformationSchema
 type internal RowType = {
     Provided: Type
     ErasedTo: Type
-    Mapping: Expr
+    //Mapping: Expr
 }
 
 type internal ReturnType = {
     Single: Type
     PerRow: RowType option
 }  with 
-    member this.Row2ItemMapping = 
+(*    member this.Row2ItemMapping = 
         match this.PerRow with
         | Some x -> x.Mapping
-        | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> 
+        | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> *)
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
+        | Some x -> Expr.Value(x.ErasedTo.PartiallyQualifiedName)
         | None -> <@@ null: string @@>
 
 type internal QuotationsFactory private() = 
@@ -59,7 +59,10 @@ type internal QuotationsFactory private() =
     [<Literal>]
     static let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
 
-    
+    static let getValueAtIndex = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod(typeof<obj>)
+
+    static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(getValueAtIndex, [ arrayExpr; Expr.Value index ])
+
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
         let bodyFactory =   
@@ -87,48 +90,6 @@ type internal QuotationsFactory private() =
 
             x
         @@>
-
-    static member internal MapArrayOptionItemToObj<'T>(arr, index) =
-        <@
-            let values : obj[] = %%arr
-            values.[index] <- match unbox values.[index] with Some (x : 'T) -> box x | None -> null 
-        @> 
-
-    static member internal MapArrayObjItemToOption<'T>(arr, index) =
-        <@
-            let values : obj[] = %%arr
-            values.[index] <- box <| if Convert.IsDBNull(values.[index]) then None else Some(unbox<'T> values.[index])
-        @> 
-
-    static member internal MapArrayNullableItems(outputColumns : Column list, mapper : string) = 
-        let columnTypes, isNullableColumn = 
-            outputColumns |> List.map (fun c -> c.ClrType.PartiallyQualifiedName, c.Nullable) |> List.unzip
-
-        QuotationsFactory.MapArrayNullableItems(columnTypes, isNullableColumn, mapper)            
-
-    static member internal MapArrayNullableItems(columnTypes : string list, isNullableColumn : bool list, mapper : string) = 
-        assert(columnTypes.Length = isNullableColumn.Length)
-        let arr = Var("_", typeof<obj[]>)
-        let body =
-            (columnTypes, isNullableColumn) 
-            ||> List.zip
-            |> List.mapi(fun index (typeName, isNullableColumn) ->
-                if isNullableColumn 
-                then 
-                    typeof<QuotationsFactory>
-                        .GetMethod(mapper, BindingFlags.NonPublic ||| BindingFlags.Static)
-                        .MakeGenericMethod( Type.GetType( typeName, throwOnError = true))
-                        .Invoke(null, [| box(Expr.Var arr); box index |])
-                        |> unbox
-                        |> Some
-                else 
-                    None
-            ) 
-            |> List.choose id
-            |> List.fold (fun acc x ->
-                Expr.Sequential(acc, x)
-            ) <@@ () @@>
-        Expr.Lambda(arr, body)
 
     static member internal GetNullableValueFromDataRow<'T>(exprArgs : Expr list, name : string) =
         <@
@@ -231,18 +192,14 @@ type internal QuotationsFactory private() =
         let properties, ctorParameters = 
             columns
             |> List.mapi ( fun i col ->
-                let propertyName = col.Name
+                let propertyName =
+                    if col.Name = "" then
+                        failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
+                    else
+                        col.Name
 
-                if propertyName = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
-                    
                 let propType = col.MakeProvidedType(customTypes)
-
-                let property = 
-                    ProvidedProperty(
-                        propertyName, 
-                        propType, 
-                        fun args -> <@@ %%args.[0] |> unbox |> Map.find<string, obj> propertyName @@>
-                    )
+                let property = ProvidedProperty(propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
 
                 let ctorParameter = ProvidedParameter(propertyName, propType)  
 
@@ -252,17 +209,7 @@ type internal QuotationsFactory private() =
 
         recordType.AddMembers properties
 
-        let invokeCode args =
-            let pairs =  
-                Seq.zip args properties //Because we need original names in dictionary
-                |> Seq.map (fun (arg,p) -> <@@ (%%Expr.Value(p.Name):string), %%Expr.Coerce(arg, typeof<obj>) @@>)
-                |> List.ofSeq
-
-            <@@
-                Map.ofArray<string, obj>( %%Expr.NewArray( typeof<string * obj>, pairs))
-            @@> 
-        
-        let ctor = ProvidedConstructor(ctorParameters, invokeCode)
+        let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, List.map (fun arg -> Expr.Coerce(arg, typeof<obj>)) args))
         recordType.AddMember ctor
         
         recordType
@@ -475,23 +422,18 @@ type internal QuotationsFactory private() =
             { Single = dataTableType; PerRow = None }
 
         else 
-            let providedRowType, erasedToRowType, rowMapping = 
+            let providedRowType, erasedToRowType = 
                 if List.length outputColumns = 1
                 then
                     let column0 = outputColumns.Head
                     let erasedTo = column0.ClrTypeConsideringNullability
                     let provided = column0.MakeProvidedType(customTypes)
-                    let values = Var("values", typeof<obj[]>)
-                    let indexGet = Expr.Call(Expr.Var values, typeof<Array>.GetMethod("GetValue", [| typeof<int> |]), [ Expr.Value 0 ])
-                    provided, erasedTo, Expr.Lambda(values,  indexGet) 
+                    provided, erasedTo
 
                 elif resultType = ResultType.Records 
                 then 
                     let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix)
-                    let names = Expr.NewArray(typeof<string>, outputColumns |> List.map (fun x -> Expr.Value(x.Name))) 
-                    let mapping = <@@ fun (values: obj[]) -> ((%%names: string[]), values) ||> Array.zip |> Map.ofArray |> box @@>
-
-                    upcast provided, typeof<obj>, mapping
+                    upcast provided, typeof<obj>
                 else 
                     let providedType = 
                         match outputColumns with
@@ -503,11 +445,7 @@ type internal QuotationsFactory private() =
                         | [ x ] -> x.ClrTypeConsideringNullability
                         | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
 
-                    let clrTypeName = erasedToTupleType.PartiallyQualifiedName
-                    let mapping = <@@ Reflection.FSharpValue.PreComputeTupleConstructor( Type.GetType( clrTypeName, throwOnError = true))  @@>
-                    providedType, erasedToTupleType, mapping
-            
-            let nullsToOptions = QuotationsFactory.MapArrayNullableItems(outputColumns, "MapArrayObjItemToOption") 
+                    providedType, erasedToTupleType
             
             { 
                 Single = 
@@ -517,11 +455,7 @@ type internal QuotationsFactory private() =
                     else
                         ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ providedRowType ])
 
-                PerRow = Some { 
-                    Provided = providedRowType
-                    ErasedTo = erasedToRowType
-                    Mapping = <@@ Utils.GetMapperWithNullsToOptions(%%nullsToOptions, %%rowMapping) @@> 
-                }               
+                PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType }               
             }
 
     static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
@@ -632,7 +566,6 @@ type internal QuotationsFactory private() =
         List.zip outputColumns returnTypes
         |> List.map (fun (outputColumns, returnType) ->
             <@@ {
-                Row2ItemMapping = %%returnType.Row2ItemMapping
                 SeqItemTypeName = %%returnType.SeqItemTypeName
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>)
@@ -659,7 +592,7 @@ type internal QuotationsFactory private() =
                 returnTypes
                 |> List.mapi (fun i rt ->
                     let propName = sprintf "ResultSet%d" (i + 1)
-                    let prop = ProvidedProperty(propName, rt.Single, fun args -> <@@ (%%args.[0] |> unbox<obj[]>).[i] @@>)
+                    let prop = ProvidedProperty(propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
                     let ctorParam = ProvidedParameter(propName, rt.Single)
                     prop, ctorParam)
                 |> List.unzip

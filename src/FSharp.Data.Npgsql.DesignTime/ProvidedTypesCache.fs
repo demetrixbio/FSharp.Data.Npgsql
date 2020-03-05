@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module internal FSharp.Data.Npgsql.Cache
+module internal FSharp.Data.Npgsql.DesignTime.Cache
 
 open System.Collections.Concurrent
 
