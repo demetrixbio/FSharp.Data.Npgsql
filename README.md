@@ -98,6 +98,35 @@ There are 4 result types:
  - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
 is the only useful scenario. 
 
+## Reuse of provided records (NpgsqlConnection only)
+
+By default, every `CreateCommand` generates a completely seperate type when using `ResultType.Record`. This can be annoying when you have similar queries that return the same data structurally and you cannot, for instance, use one function to map the results onto your domain model.
+`NpgsqlConnection` exposes the static parameter `ReuseProvidedTypes` to alleviate this issue. When set to true, all commands that return the same columns (**column names and types must match exactly**, while select order does not matter) end up sharing the same provided record type too.
+The following snippet illustrates how you could reuse a single function to map the result of 2 distinct queries onto the `Film` type:
+
+```fsharp
+type DvdRental = NpgsqlConnection<dvdRental, ReuseProvidedTypes = true>
+
+type Film = { Title: string; Rating: DvdRental.``public``.Types.mpaa_rating option }
+
+// CreateCommand returning a type we want to refer to in a function signature has to be 'mentioned' first
+let getAllFilmsWithRatingsCommand = DvdRental.CreateCommand<"select title, rating from film">
+
+// The type with title and rating is now generated and accessible
+let mapFilm (x: DvdRental.``rating:Option<public.mpaa_rating>, title:String``) =
+    { Title = x.title; Rating = x.rating }
+	
+let getAllFilmsWithRatings () =
+    use cmd = getAllFilmsWithRatingsCommand dvdRental
+    let res = cmd.Execute()
+    res |> List.map mapFilm
+	
+let getFilmWithRatingById id =
+    use cmd = DvdRental.CreateCommand<"select title, rating from film where film_id = @id", SingleRow = true>(dvdRental)
+    let res = cmd.Execute(id)
+    res |> Option.map mapFilm
+```
+
 ## NpgsqlConnection or NpgsqlCommand?
 
 It's recommended to use ```NpgsqlConnection``` type provider by default. ```NpgsqlCommand``` type provider exists mainly for flexibility.
