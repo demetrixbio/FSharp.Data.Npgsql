@@ -768,6 +768,13 @@ let ``Bytea is properly encoded in reused type name``() =
 
     assertByteaEqual actual
 
+[<Fact>]
+let ``Record rows contain different values``() =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff">(dvdRental)
+    let actual = cmd.Execute()
+
+    Assert.NotEqual (actual.[0].staff_id, actual.[1].staff_id)
+
 //[<Literal>]
 //let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
