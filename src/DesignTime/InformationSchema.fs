@@ -91,7 +91,7 @@ let getTypeMapping =
     let allMappings = dict (builtins @ spatialTypesMapping)
     fun datatype -> 
         let exists, value = allMappings.TryGetValue(datatype)
-        if exists then value else failwithf "Unsupported datatype %s." datatype 
+        if exists then value else typeof<obj> 
 
 type PostgresType with    
     member this.ToClrType() = 
@@ -107,6 +107,7 @@ type PostgresType with
         | _ -> 
             typeof<obj>
         
+[<CustomEquality; NoComparison>]
 type DataType = {
     Name: string
     Schema: string
@@ -130,6 +131,13 @@ type DataType = {
             Schema = x.Namespace
             ClrType = x.ToClrType()
         }
+
+    override this.GetHashCode() = this.Name.GetHashCode() ^^^ this.Schema.GetHashCode()
+
+    override this.Equals other =
+        match other with
+        | :? DataType as other -> other.Name = this.Name && other.Schema = this.Schema
+        | _ -> false
 
 type Schema =
     { OID : uint32
@@ -228,8 +236,16 @@ type Column =
 type DbSchemaLookupItem =
     { Schema : Schema
       Tables : Dictionary<Table, HashSet<Column>>
-      Enums : Map<string, UDT> }
+      Enums : Map<string, UDT>
+      CompositeTypes : Map<string, ProvidedTypeDefinition> }
     
+type CompositeTypeFieldRow =
+    { Schema : string
+      CompositeTypeName : string
+      FieldName : string
+      FieldType : string
+      FieldTypeSchema : string }
+
 type ColumnLookupKey = { TableOID : uint32; ColumnAttributeNumber : int16 }
     
 type DbSchemaLookups =
@@ -383,6 +399,116 @@ let getDbSchemaLookups(connectionString) =
         )
         |> Map.ofSeq
     
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- """
+        WITH composites AS (
+            SELECT n.nspname, t.oid, t.typrelid, t.typname
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE
+        	    EXISTS (SELECT FROM pg_class c WHERE c.oid = t.typrelid AND c.relkind = 'c')
+                AND NOT EXISTS (SELECT FROM pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+                AND n.nspname <> 'pg_catalog'
+                AND n.nspname <> 'information_schema'
+                AND n.nspname !~ '^pg_toast'
+        )
+        SELECT
+            composites.nspname schema_name,
+            composites.typname composite_type_name,
+            a.attname field_name,
+            t.typname field_type,
+            ns.nspname field_type_schema
+        FROM pg_attribute a
+        JOIN pg_type t ON a.atttypid = t.oid
+        JOIN pg_namespace ns on t.typnamespace = ns.oid
+        JOIN composites ON a.attrelid = composites.typrelid
+        WHERE NOT a.attisdropped
+    """
+
+    let compositeTypeLookup =
+        use cursor = cmd.ExecuteReader()
+        let rows = ResizeArray<CompositeTypeFieldRow>()
+
+        while cursor.Read() do
+            let schema = cursor.GetString(0)
+            let cname = cursor.GetString(1)
+            let fname = cursor.GetString(2)
+            let ftype = cursor.GetString(3)
+            let ftschema = cursor.GetString(4)
+            rows.Add { CompositeTypeName = cname; Schema = schema; FieldName = fname; FieldType = ftype; FieldTypeSchema = ftschema }
+
+        let dictType = typeof<IDictionary<string, obj>>
+
+        rows
+        |> Seq.groupBy (fun x -> x.Schema, x.CompositeTypeName)
+        |> Seq.map (fun ((schema, cname), fields) ->
+            let t = ProvidedTypeDefinition(cname, Some typeof<obj>, hideObjectMethods = true, nonNullable = true)
+
+            let props, ctorParams =
+                fields
+                |> Seq.toList
+                |> List.map (fun field ->
+                    let clrType =
+                        if field.FieldType.StartsWith "_" then
+                            let elemType = getTypeMapping(field.FieldType.TrimStart('_') ) 
+                            elemType.MakeArrayType()
+                        else
+                            getTypeMapping(field.FieldType)
+
+                    // composite type fields are always nullable
+                    let clrTypeOption = typedefof<_ option>.MakeGenericType([| clrType |])
+                    let someCase, noneCase = Utils.GetOptionCaseInfos clrTypeOption
+
+                    let propName = field.FieldName
+
+                    let prop = ProvidedProperty(propName, clrTypeOption, fun args ->
+                        let expando = Var ("e", dictType)
+                        Expr.Let (
+                            expando,
+                            Expr.Coerce (args.[0], dictType),
+                            Expr.IfThenElse (
+                                Expr.Call (
+                                    Expr.Var expando,
+                                    dictType.GetMethod("ContainsKey", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public),
+                                    [ Expr.Value propName ]),
+                                Expr.NewUnionCase (
+                                    someCase,
+                                    [ Expr.Coerce (
+                                        Expr.Call (
+                                            Expr.Var expando,
+                                            dictType.GetMethod("get_Item", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public),
+                                            [ Expr.Value propName ]),
+                                        clrType) ]),
+                                Expr.NewUnionCase (noneCase, []))))
+                    let ctorParam = ProvidedParameter(propName, clrType)
+                    prop, ctorParam)
+                |> List.unzip
+
+            t.AddMembers props
+
+            let invokeCode args =
+                let keys = props |> List.map (fun x -> x.Name)
+                let fill dict list =
+                    List.zip keys list |> List.fold (fun acc (propName, curr) ->
+                        Expr.Sequential (
+                            Expr.Call (
+                                dict,
+                                typeof<Dictionary<string, obj>>.GetMethod("Add"),
+                                [ Expr.Value propName; curr ]), acc)) dict
+
+                let dict = Var ("d", typeof<Dictionary<string, obj>>)
+                Expr.Let (dict, Expr.NewObject (typeof<Dictionary<string, obj>>.GetConstructor [||], []), fill (Expr.Var dict) args)
+
+            let ctor = ProvidedConstructor(ctorParams, invokeCode)
+            t.AddMember ctor
+
+            schema, cname, t)
+        |> Seq.groupBy (fun (schema, _, _) -> schema)
+        |> Seq.map (fun (schema, types) ->
+            schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
+        )
+        |> Map.ofSeq
+
     //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
     use cmd = conn.CreateCommand()
     cmd.CommandText <- """
@@ -438,7 +564,8 @@ let getDbSchemaLookups(connectionString) =
             
             schemas.Add(schema.Name, { Schema = schema
                                        Tables = Dictionary();
-                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty
+                                       CompositeTypes = compositeTypeLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
         match row.["table_oid"] |> Option.ofObj with
         | None -> ()

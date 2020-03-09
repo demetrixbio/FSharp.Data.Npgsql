@@ -201,6 +201,12 @@ let createRootType
                 es.AddMember t
                 let udtTypeName = sprintf "%s.%s" enum.Schema enum.Name
                 yield udtTypeName, t
+
+            for (KeyValue(_, composite)) in schemaLookups.Schemas.[schemaType.Name].CompositeTypes do
+                es.AddMember composite
+                let udtTypeName = sprintf "%s.%s" schemaType.Name composite.Name
+                yield udtTypeName, composite
+
             schemaType.AddMember es
         ] |> Map.ofList
         
