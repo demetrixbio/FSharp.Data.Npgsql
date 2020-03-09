@@ -52,7 +52,8 @@ let internal createRootType
                 hasOutputParameters = false, 
                 allowDesignTimeConnectionStringReUse = (fsx && isHostedExecution),
                 designTimeConnectionString = (if fsx then connectionString else null),
-                typeNameSuffix = if outputColumns.Length > 1 then (i + 1).ToString () else ""))
+                typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
+                providedTypeReuse = NoReuse))
 
     let useLegacyPostgis = 
         (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
@@ -69,6 +70,7 @@ let internal createRootType
                 ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
                 UseLegacyPostgis = useLegacyPostgis
                 Prepare = prepare
+                IsTypeReuseEnabled = false
             } @@>
 
         do
@@ -81,7 +83,7 @@ let internal createRootType
             )
             |> cmdProvidedType.AddMembers
 
-    QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns
+    QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns cmdProvidedType
 
     cmdProvidedType
 

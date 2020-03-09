@@ -13,7 +13,8 @@ open InformationSchema
 
 let methodsCache = Cache<ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes : Map<string, ProvidedTypeDefinition>, dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes : Map<string, ProvidedTypeDefinition>,
+                           dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare, providedTypeReuse) = 
         
     let staticParams = 
         [
@@ -56,14 +57,15 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             hasOutputParameters = false, 
                             allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
                             designTimeConnectionString = (if fsx then connectionString else null),
-                            typeNameSuffix = if outputColumns.Length > 1 then (i + 1).ToString () else ""))
+                            typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
+                            providedTypeReuse = providedTypeReuse))
 
                 let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
                 let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
-                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns
+                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
 
                 commands.AddMember cmdProvidedType
 
@@ -71,6 +73,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
                     ||
                     (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+
+                let isTypeReuseEnabled = providedTypeReuse <> NoReuse
 
                 let designTimeConfig = 
                     <@@ {
@@ -81,6 +85,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
                         UseLegacyPostgis = useLegacyPostgis
                         Prepare = prepare
+                        IsTypeReuseEnabled = isTypeReuseEnabled
                     } @@>
 
 
@@ -168,7 +173,7 @@ let createTableTypes(connectionString: string, customTypes : Map<string, Provide
 let createRootType
     ( 
         assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
-        connectionStringOrName, configType, config, xctor, fsx, prepare
+        connectionStringOrName, configType, config, xctor, fsx, prepare, reuseProvidedTypes, cache
     ) =
 
     if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
@@ -205,7 +210,8 @@ let createRootType
 
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, fsx, isHostedExecution, xctor, prepare)
+    let providedTypeReuse = if reuseProvidedTypes then WithCache cache else NoReuse
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, fsx, isHostedExecution, xctor, prepare, providedTypeReuse)
 
     databaseRootType           
 
@@ -221,7 +227,8 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                 ProvidedStaticParameter("Config", typeof<string>, "") 
                 ProvidedStaticParameter("XCtor", typeof<bool>, false) 
                 ProvidedStaticParameter("Fsx", typeof<bool>, false) 
-                ProvidedStaticParameter("Prepare", typeof<bool>, false) 
+                ProvidedStaticParameter("Prepare", typeof<bool>, false)
+                ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
@@ -229,7 +236,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                     lazy
                         createRootType(
                             assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5]
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], cache
                         )
                 )   
             ) 
@@ -242,6 +249,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
 <param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
 <param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 <param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
+<param name='ReuseProvidedTypes'>Reuse the return type for commands that select data of identical shape. Please see the readme for details.</param>
 """
     providerType
 

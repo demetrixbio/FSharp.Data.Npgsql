@@ -36,7 +36,7 @@ type Utils private() =
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet : ResultSetDefinition) =
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet : ResultSetDefinition, isTypeReuseEnabled) =
         let rowMapping =
             if resultSet.ExpectedColumns.Length = 1 then
                 Array.item 0
@@ -48,20 +48,31 @@ type Utils private() =
         
         seq {
             let values = Array.zeroCreate cursor.FieldCount
+
+            // If type type reuse of records is enabled, columns need to be sorted alphabetically, because records are erased to arrays and thus the insert order
+            // of elements matters
+            let columns =
+                if isTypeReuseEnabled && resultType = ResultType.Records then
+                    resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
+                else
+                    resultSet.ExpectedColumns |> Array.indexed
+
             while cursor.Read() do
                 cursor.GetValues(values) |> ignore
-                yield (values, resultSet.ExpectedColumns)
-                      ||> Array.map2 (fun obj column ->
-                          let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
-                          let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] |> unbox<string>
-                          let dataType = Type.GetType(dataTypeName, throwOnError = true)
-                          if isNullable then
-                              let isSome = Convert.IsDBNull(obj) |> not
-                              Utils.MakeOptionValue dataType obj isSome
-                          else
-                              obj)
-                      |> rowMapping
-                      |> unbox<'TItem>
+
+                columns
+                |> Array.map (fun (i, column) ->
+                    let obj = values.[i]
+                    let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
+                    if isNullable then
+                        let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] |> unbox<string>
+                        let dataType = Type.GetType(dataTypeName, throwOnError = true)
+                        let isSome = Convert.IsDBNull(obj) |> not
+                        Utils.MakeOptionValue dataType obj isSome
+                    else
+                        obj)
+                |> rowMapping
+                |> unbox<'TItem>
         }
     
     [<EditorBrowsable(EditorBrowsableState.Never)>]
