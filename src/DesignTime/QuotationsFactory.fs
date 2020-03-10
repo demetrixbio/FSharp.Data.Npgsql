@@ -198,8 +198,9 @@ type internal QuotationsFactory private() =
                 if sortColumns then columns |> List.sortBy (fun x -> x.Name) else columns
                 |> List.mapi (fun i col ->
                     let propertyName =
-                        if col.Name = "" then
-                            failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
+                        if String.IsNullOrEmpty col.Name then
+                            let originalIndex = List.findIndex (fun x -> x = col) columns
+                            failwithf "Column #%i doesn't have a name. Only named columns are supported. Use an explicit alias." (originalIndex + 1)
                         else
                             col.Name
 
