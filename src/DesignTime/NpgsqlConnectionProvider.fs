@@ -43,7 +43,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 then 
                     invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-                let (parameters, outputColumns, _) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                let (parameters, outputColumns, _, _) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
                 
                 let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
@@ -196,16 +196,16 @@ let createRootType
         [ for schemaType in dbSchemas do
             let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
             for (KeyValue(_, enum)) in schemaLookups.Schemas.[schemaType.Name].Enums do
-                let t = ProvidedTypeDefinition(enum.Name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
-                for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
+                let t = QuotationsFactory.GetEnumType enum enum.Name
                 es.AddMember t
                 let udtTypeName = sprintf "%s.%s" enum.Schema enum.Name
                 yield udtTypeName, t
 
             for (KeyValue(_, composite)) in schemaLookups.Schemas.[schemaType.Name].CompositeTypes do
-                es.AddMember composite
+                let t = QuotationsFactory.GetCompositeType composite composite.Name
+                es.AddMember t
                 let udtTypeName = sprintf "%s.%s" schemaType.Name composite.Name
-                yield udtTypeName, composite
+                yield udtTypeName, t
 
             schemaType.AddMember es
         ] |> Map.ofList

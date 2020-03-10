@@ -637,6 +637,18 @@ let ``Queries against system catalogs work``() =
     let actual = cmd.Execute()
     Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0) 
  
+[<Literal>]
+let selectFromCompositesTableId5 = "select * from table_with_composites where id = 5"
+
+[<Fact>]
+let ``Composite type fields have correct values``() =
+    use cmd = new NpgsqlCommand<selectFromCompositesTableId5, dvdRental>(dvdRental)
+    let actual = cmd.Execute().Head
+    
+    Assert.Equal (Some 42L, actual.simple.some_number)
+    Assert.Equal (None, actual.simple.some_text)
+    Assert.Equal (Some [| 1; 2 |], actual.simple.some_array)
+
 //[<Fact>]
 //let npPkTable() =
 //    use cmd =

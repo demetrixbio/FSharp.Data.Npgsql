@@ -10,6 +10,7 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
+open System.Collections.Generic
 
 type internal RowType = {
     Provided: Type
@@ -628,4 +629,68 @@ type internal QuotationsFactory private() =
 
             cmdProvidedType.AddMember resultSetsType
 
+    static member internal GetEnumType (enum: Enum) typeName =
+        let t = ProvidedTypeDefinition(typeName, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
+        for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
+        t
 
+    static member internal GetCompositeType (composite: Composite) typeName =
+        let dictType = typeof<IDictionary<string, obj>>
+        let containsKeyMi = dictType.GetMethod("ContainsKey", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public)
+        let itemMi = dictType.GetMethod("get_Item", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public)
+
+        let t = ProvidedTypeDefinition(typeName, Some typeof<obj>, hideObjectMethods = true, nonNullable = true)
+
+        let props, ctorParams =
+            composite.Fields
+            |> List.map (fun field ->
+                let clrType =
+                    if field.TypeName.StartsWith "_" then
+                        let elemType = getTypeMapping(field.TypeName.TrimStart('_') ) 
+                        elemType.MakeArrayType()
+                    else
+                        getTypeMapping(field.TypeName)
+
+                // composite type fields are always nullable
+                let clrTypeOption = typedefof<_ option>.MakeGenericType([| clrType |])
+
+                let someCase, noneCase = Utils.GetOptionCaseInfos clrTypeOption
+                let propName = field.Name
+
+                let prop = ProvidedProperty(propName, clrTypeOption, fun args ->
+                    let expando = Var ("e", dictType)
+                    Expr.Let (
+                        expando,
+                        Expr.Coerce (args.[0], dictType),
+                        Expr.IfThenElse (
+                            Expr.Call (Expr.Var expando, containsKeyMi, [ Expr.Value propName ]),
+                            Expr.NewUnionCase (
+                                someCase,
+                                [ Expr.Coerce (
+                                    Expr.Call (Expr.Var expando, itemMi, [ Expr.Value propName ]),
+                                    clrType) ]),
+                            Expr.NewUnionCase (noneCase, []))))
+                let ctorParam = ProvidedParameter(propName, clrType)
+                prop, ctorParam)
+            |> List.unzip
+
+        t.AddMembers props
+        
+        let invokeCode args =
+            let keys = props |> List.map (fun x -> x.Name)
+            let fill dict list =
+                let addMi = dictType.GetMethod("Add", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public)
+
+                List.zip keys list
+                |> List.fold (fun acc (propName, curr) ->
+                    Expr.Sequential (
+                        Expr.Call (dict, addMi, [ Expr.Value propName; Expr.Coerce (curr, typeof<obj>) ]),
+                        acc))
+                    dict
+
+            let dict = Var ("d", dictType)
+            Expr.Let (dict, Expr.Coerce (Expr.NewObject (typeof<System.Dynamic.ExpandoObject>.GetConstructor [||], []), dictType), fill (Expr.Var dict) args)
+
+        let ctor = ProvidedConstructor(ctorParams, invokeCode)
+        t.AddMember ctor
+        t

@@ -107,7 +107,6 @@ type PostgresType with
         | _ -> 
             typeof<obj>
         
-[<CustomEquality; NoComparison>]
 type DataType = {
     Name: string
     Schema: string
@@ -132,13 +131,6 @@ type DataType = {
             ClrType = x.ToClrType()
         }
 
-    override this.GetHashCode() = this.Name.GetHashCode() ^^^ this.Schema.GetHashCode()
-
-    override this.Equals other =
-        match other with
-        | :? DataType as other -> other.Name = this.Name && other.Schema = this.Schema
-        | _ -> false
-
 type Schema =
     { OID : uint32
       Name : string }
@@ -148,10 +140,20 @@ type Table =
       Name : string
       Description : string option }
     
-type UDT =
+type Enum =
     { Schema : string
       Name : string
       Values : string [] }
+
+type CompositeField =
+    { TypeSchema : string
+      Name : string
+      TypeName : string }
+
+type Composite =
+    { Schema : string
+      Name : string
+      Fields : CompositeField list }
     
 type Column =
     { ColumnAttributeNumber : int16
@@ -236,8 +238,8 @@ type Column =
 type DbSchemaLookupItem =
     { Schema : Schema
       Tables : Dictionary<Table, HashSet<Column>>
-      Enums : Map<string, UDT>
-      CompositeTypes : Map<string, ProvidedTypeDefinition> }
+      Enums : Map<string, Enum>
+      CompositeTypes : Map<string, Composite> }
     
 type CompositeTypeFieldRow =
     { Schema : string
@@ -366,7 +368,22 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         ]
         |> List.distinct
 
-    parameters, outputColumns, enums
+    let composites =  
+        outputColumns 
+        |> List.concat
+        |> List.choose (fun c ->
+            if c.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[c.DataType.Schema].CompositeTypes.ContainsKey(c.DataType.UdtTypeShortName) then
+                Some dbSchemaLookups.Schemas.[c.DataType.Schema].CompositeTypes.[c.DataType.UdtTypeShortName]
+            else
+                None)
+        |> List.append [ 
+            for p in parameters do
+                if p.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[p.DataType.Schema].CompositeTypes.ContainsKey(p.DataType.UdtTypeShortName) then
+                    yield dbSchemaLookups.Schemas.[p.DataType.Schema].CompositeTypes.[p.DataType.UdtTypeShortName]
+        ]
+        |> List.distinct
+
+    parameters, outputColumns, enums, composites
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
@@ -437,72 +454,10 @@ let getDbSchemaLookups(connectionString) =
             let ftschema = cursor.GetString(4)
             rows.Add { CompositeTypeName = cname; Schema = schema; FieldName = fname; FieldType = ftype; FieldTypeSchema = ftschema }
 
-        let dictType = typeof<IDictionary<string, obj>>
-
         rows
         |> Seq.groupBy (fun x -> x.Schema, x.CompositeTypeName)
-        |> Seq.map (fun ((schema, cname), fields) ->
-            let t = ProvidedTypeDefinition(cname, Some typeof<obj>, hideObjectMethods = true, nonNullable = true)
-
-            let props, ctorParams =
-                fields
-                |> Seq.toList
-                |> List.map (fun field ->
-                    let clrType =
-                        if field.FieldType.StartsWith "_" then
-                            let elemType = getTypeMapping(field.FieldType.TrimStart('_') ) 
-                            elemType.MakeArrayType()
-                        else
-                            getTypeMapping(field.FieldType)
-
-                    // composite type fields are always nullable
-                    let clrTypeOption = typedefof<_ option>.MakeGenericType([| clrType |])
-                    let someCase, noneCase = Utils.GetOptionCaseInfos clrTypeOption
-
-                    let propName = field.FieldName
-
-                    let prop = ProvidedProperty(propName, clrTypeOption, fun args ->
-                        let expando = Var ("e", dictType)
-                        Expr.Let (
-                            expando,
-                            Expr.Coerce (args.[0], dictType),
-                            Expr.IfThenElse (
-                                Expr.Call (
-                                    Expr.Var expando,
-                                    dictType.GetMethod("ContainsKey", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public),
-                                    [ Expr.Value propName ]),
-                                Expr.NewUnionCase (
-                                    someCase,
-                                    [ Expr.Coerce (
-                                        Expr.Call (
-                                            Expr.Var expando,
-                                            dictType.GetMethod("get_Item", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.Public),
-                                            [ Expr.Value propName ]),
-                                        clrType) ]),
-                                Expr.NewUnionCase (noneCase, []))))
-                    let ctorParam = ProvidedParameter(propName, clrType)
-                    prop, ctorParam)
-                |> List.unzip
-
-            t.AddMembers props
-
-            let invokeCode args =
-                let keys = props |> List.map (fun x -> x.Name)
-                let fill dict list =
-                    List.zip keys list |> List.fold (fun acc (propName, curr) ->
-                        Expr.Sequential (
-                            Expr.Call (
-                                dict,
-                                typeof<Dictionary<string, obj>>.GetMethod("Add"),
-                                [ Expr.Value propName; curr ]), acc)) dict
-
-                let dict = Var ("d", typeof<Dictionary<string, obj>>)
-                Expr.Let (dict, Expr.NewObject (typeof<Dictionary<string, obj>>.GetConstructor [||], []), fill (Expr.Var dict) args)
-
-            let ctor = ProvidedConstructor(ctorParams, invokeCode)
-            t.AddMember ctor
-
-            schema, cname, t)
+        |> Seq.map (fun ((schema, name), fields) ->
+            schema, name, { Schema = schema; Name = name; Fields = fields |> Seq.map (fun f -> { TypeSchema = f.FieldTypeSchema; TypeName = f.FieldType; Name = f.FieldName }) |> Seq.toList })
         |> Seq.groupBy (fun (schema, _, _) -> schema)
         |> Seq.map (fun (schema, types) ->
             schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
@@ -582,7 +537,7 @@ let getDbSchemaLookups(connectionString) =
             | -1s -> ()
             | attnum ->
                 let udtName = string row.["col_udt_name"]
-                let isUdt =
+                let isEnum =
                     schemas.[schema.Name].Enums
                     |> Map.tryFind udtName
                     |> Option.isSome
@@ -596,9 +551,9 @@ let getDbSchemaLookups(connectionString) =
                         let elemType = getTypeMapping(udtName.TrimStart('_') ) 
                         elemType.MakeArrayType()
                     | "USER-DEFINED" ->
-                        if isUdt then typeof<string> else typeof<obj>
+                        if isEnum then typeof<string> else typeof<obj>
                     | "" -> // possibly a column of a materialized view
-                        if isUdt then typeof<string> else getTypeMapping(udtName)
+                        if isEnum then typeof<string> else getTypeMapping(udtName)
                     | dataType -> 
                         getTypeMapping(dataType)
                 
@@ -618,8 +573,7 @@ let getDbSchemaLookups(connectionString) =
                       BaseSchemaName = schema.Name
                       BaseTableName = string row.["table_name"] }
                  
-                if not <| schemas.[schema.Name].Tables.[table].Contains(column) then
-                    schemas.[schema.Name].Tables.[table].Add(column) |> ignore
+                schemas.[schema.Name].Tables.[table].Add(column) |> ignore
                 
                 let lookupKey = { TableOID = table.OID
                                   ColumnAttributeNumber = column.ColumnAttributeNumber }

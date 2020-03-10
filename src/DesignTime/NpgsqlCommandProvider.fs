@@ -27,15 +27,20 @@ let internal createRootType
 
     let cmdProvidedType = ProvidedTypeDefinition(assembly, nameSpace, typeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
     
-    let (parameters, outputColumns, enums) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, schemaLookups)
+    let (parameters, outputColumns, enums, composites) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, schemaLookups)
 
     let customTypes = 
         enums
         |> List.map (fun enum ->
             let udtTypeName = sprintf "%s.%s" enum.Schema enum.Name
-            let t = ProvidedTypeDefinition(udtTypeName, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
-            for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
+            let t = QuotationsFactory.GetEnumType enum udtTypeName
             udtTypeName, t)
+        |> List.append (
+            composites
+            |> List.map (fun composite ->
+                let udtTypeName = sprintf "%s.%s" composite.Schema composite.Name
+                let t = QuotationsFactory.GetCompositeType composite udtTypeName
+                udtTypeName, t))
         |> Map.ofList
         
     customTypes |> Seq.map (fun s -> s.Value) |> Seq.toList |> cmdProvidedType.AddMembers

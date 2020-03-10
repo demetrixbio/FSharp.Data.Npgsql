@@ -775,6 +775,26 @@ let ``Record rows contain different values``() =
 
     Assert.NotEqual (actual.[0].staff_id, actual.[1].staff_id)
 
+[<Fact>]
+let ``Can instantiate composite type``() =
+    let arr = [| 3 |]
+    let num = 50L
+    let text = "blah"
+    let actual = DvdRental.``public``.Types.simple_type (arr, text, num)
+
+    Assert.Equal (Some num, actual.some_number)
+    Assert.Equal (Some text, actual.some_text)
+    Assert.Equal (Some arr, actual.some_array)
+
+[<Fact>]
+let ``Composite type fields have correct values``() =
+    use cmd = DvdRental.CreateCommand<selectFromCompositesTableId5>(dvdRental)
+    let actual = cmd.Execute().Head
+    
+    Assert.Equal (Some 42L, actual.simple.some_number)
+    Assert.Equal (None, actual.simple.some_text)
+    Assert.Equal (Some [| 1; 2 |], actual.simple.some_array)
+
 //[<Literal>]
 //let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 
