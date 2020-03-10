@@ -23,18 +23,13 @@
     <Compile Include="DesignTime.fs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Scripts\NpgsqlGetStarted.fsx">
-      <Pack>false</Pack>
-    </Content>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="FSharp.Data.Npgsql.nuspec" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="4.5.0" />
     <PackageReference Include="Npgsql" Version="4.1.3" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql.LegacyPostgis" Version="1.0.0" />
+    <PackageReference Include="Npgsql.LegacyPostgis" Version="4.1.3" />
   </ItemGroup>
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netcoreapp2.0" />

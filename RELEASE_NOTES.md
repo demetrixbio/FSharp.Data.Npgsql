@@ -25,3 +25,6 @@
 ### 0.2.0-beta - March 5th, 2020
 * Quotation optimizations by @kerams
 * Inferring rowmapping/nullability in runtime to remove redundant quotation passing. Modified provided types SDK for better performance. 
+
+### 0.2.3-beta - March 10th, 2020
+* Provided record reuse support by @kerams
