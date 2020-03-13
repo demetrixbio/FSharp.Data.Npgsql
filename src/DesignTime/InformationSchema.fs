@@ -262,7 +262,8 @@ type Parameter =
       Precision: byte
       Scale : byte
       Optional: bool
-      DataType: DataType }
+      DataType: DataType
+      IsComposite: bool }
     with
    
     member this.Size = this.MaxLength
@@ -351,7 +352,8 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
               Precision = p.Precision
               Scale = p.Scale
               Optional = allParametersOptional 
-              DataType = DataType.Create(p.PostgresType) } ]
+              DataType = DataType.Create(p.PostgresType)
+              IsComposite = p.PostgresType :? PostgresCompositeType } ]
     
     let enums =  
         outputColumns 

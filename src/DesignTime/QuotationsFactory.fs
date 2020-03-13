@@ -85,16 +85,19 @@ type internal QuotationsFactory private() =
         let dbType = p.NpgsqlDbType
         let isFixedLength = p.DataType.IsFixedLength
 
-        <@@ 
-            let x = NpgsqlParameter(name, dbType, Direction = %%Expr.Value p.Direction)
+        if p.IsComposite then
+            <@@ NpgsqlParameter(ParameterName = %%Expr.Value name, Direction = %%Expr.Value p.Direction, DataTypeName = %%Expr.Value p.DataType.FullName) @@>
+        else
+            <@@ 
+                let x = NpgsqlParameter(name, dbType, Direction = %%Expr.Value p.Direction)
 
-            if not isFixedLength then x.Size <- %%Expr.Value p.Size 
+                if not isFixedLength then x.Size <- %%Expr.Value p.Size 
 
-            x.Precision <- %%Expr.Value p.Precision
-            x.Scale <- %%Expr.Value p.Scale
+                x.Precision <- %%Expr.Value p.Precision
+                x.Scale <- %%Expr.Value p.Scale
 
-            x
-        @@>
+                x
+            @@>
 
     static member internal GetNullableValueFromDataRow<'T>(exprArgs : Expr list, name : string) =
         <@
