@@ -22,12 +22,16 @@ type Utils private() =
     static member private CreateOptionType typeParam =
         typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
     
-    static member private MakeOptionValue typeParam v isSome =
-        let optionType = Utils.CreateOptionType typeParam
+    static member GetOptionCaseInfos optionType =
         let cases = FSharp.Reflection.FSharpType.GetUnionCases(optionType)
         let cases = cases |> Array.partition (fun x -> x.Name = "Some")
         let someCase = fst cases |> Array.exactlyOne
         let noneCase = snd cases |> Array.exactlyOne
+        someCase, noneCase
+
+    static member private MakeOptionValue typeParam v isSome =
+        let optionType = Utils.CreateOptionType typeParam
+        let someCase, noneCase = Utils.GetOptionCaseInfos optionType
         let relevantCase, args =
             match isSome with
             | true -> someCase, [| v |]

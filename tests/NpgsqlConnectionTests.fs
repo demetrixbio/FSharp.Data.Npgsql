@@ -775,6 +775,51 @@ let ``Record rows contain different values``() =
 
     Assert.NotEqual (actual.[0].staff_id, actual.[1].staff_id)
 
+[<Fact>]
+let ``Can instantiate composite type``() =
+    let arr = [| 3 |]
+    let num = 50L
+    let text = "blah"
+    let actual = DvdRental.``public``.Types.simple_type (arr, text, num)
+
+    Assert.Equal (Some num, actual.some_number)
+    Assert.Equal (Some text, actual.some_text)
+    Assert.Equal (Some arr, actual.some_array)
+
+[<Fact>]
+let ``Composite type fields have correct values``() =
+    use cmd = DvdRental.CreateCommand<selectFromCompositesTableId5>(dvdRental)
+    let actual = cmd.Execute().Head
+    
+    Assert.Equal (Some 42L, actual.simple.some_number)
+    Assert.Equal (None, actual.simple.some_text)
+    Assert.Equal (Some [| 1; 2 |], actual.simple.some_array)
+
+[<Fact>]
+let ``Composite type fields have correct values tuple``() =
+    use cmd = DvdRental.CreateCommand<selectFromCompositesTableId5, ResultType = ResultType.Tuples>(dvdRental)
+    let (actual, _, _) = cmd.Execute().Head
+    
+    Assert.Equal (Some 42L, actual.some_number)
+    Assert.Equal (None, actual.some_text)
+    Assert.Equal (Some [| 1; 2 |], actual.some_array)
+
+[<Fact>]
+let ``Composite type fields have correct values data table``() =
+    use cmd = DvdRental.CreateCommand<selectFromCompositesTableId5, ResultType = ResultType.DataTable>(dvdRental)
+    let actual = cmd.Execute().Rows.[0]
+    
+    Assert.Equal (Some 42L, actual.simple.some_number)
+    Assert.Equal (None, actual.simple.some_text)
+    Assert.Equal (Some [| 1; 2 |], actual.simple.some_array)
+
+[<Fact>]
+let ``Can pass composite type as parameter to update``() =
+    use cmd = DvdRental.CreateCommand<"update table_with_composites set  simple = @simple where id = 1">(dvdRental)
+    let actual = cmd.Execute(DvdRental.``public``.Types.simple_type ([| 1; 2 |], "blah", 42L))
+    
+    Assert.Equal (1, actual)
+
 //[<Literal>]
 //let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
 

@@ -91,7 +91,7 @@ let getTypeMapping =
     let allMappings = dict (builtins @ spatialTypesMapping)
     fun datatype -> 
         let exists, value = allMappings.TryGetValue(datatype)
-        if exists then value else failwithf "Unsupported datatype %s." datatype 
+        if exists then value else typeof<obj> 
 
 type PostgresType with    
     member this.ToClrType() = 
@@ -140,10 +140,20 @@ type Table =
       Name : string
       Description : string option }
     
-type UDT =
+type Enum =
     { Schema : string
       Name : string
       Values : string [] }
+
+type CompositeField =
+    { TypeSchema : string
+      Name : string
+      TypeName : string }
+
+type Composite =
+    { Schema : string
+      Name : string
+      Fields : CompositeField list }
     
 type Column =
     { ColumnAttributeNumber : int16
@@ -228,8 +238,16 @@ type Column =
 type DbSchemaLookupItem =
     { Schema : Schema
       Tables : Dictionary<Table, HashSet<Column>>
-      Enums : Map<string, UDT> }
+      Enums : Map<string, Enum>
+      CompositeTypes : Map<string, Composite> }
     
+type CompositeTypeFieldRow =
+    { Schema : string
+      CompositeTypeName : string
+      FieldName : string
+      FieldType : string
+      FieldTypeSchema : string }
+
 type ColumnLookupKey = { TableOID : uint32; ColumnAttributeNumber : int16 }
     
 type DbSchemaLookups =
@@ -244,7 +262,8 @@ type Parameter =
       Precision: byte
       Scale : byte
       Optional: bool
-      DataType: DataType }
+      DataType: DataType
+      IsComposite: bool }
     with
    
     member this.Size = this.MaxLength
@@ -333,7 +352,8 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
               Precision = p.Precision
               Scale = p.Scale
               Optional = allParametersOptional 
-              DataType = DataType.Create(p.PostgresType) } ]
+              DataType = DataType.Create(p.PostgresType)
+              IsComposite = p.PostgresType :? PostgresCompositeType } ]
     
     let enums =  
         outputColumns 
@@ -350,7 +370,22 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         ]
         |> List.distinct
 
-    parameters, outputColumns, enums
+    let composites =  
+        outputColumns 
+        |> List.concat
+        |> List.choose (fun c ->
+            if c.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[c.DataType.Schema].CompositeTypes.ContainsKey(c.DataType.UdtTypeShortName) then
+                Some dbSchemaLookups.Schemas.[c.DataType.Schema].CompositeTypes.[c.DataType.UdtTypeShortName]
+            else
+                None)
+        |> List.append [ 
+            for p in parameters do
+                if p.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[p.DataType.Schema].CompositeTypes.ContainsKey(p.DataType.UdtTypeShortName) then
+                    yield dbSchemaLookups.Schemas.[p.DataType.Schema].CompositeTypes.[p.DataType.UdtTypeShortName]
+        ]
+        |> List.distinct
+
+    parameters, outputColumns, enums, composites
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
@@ -383,6 +418,54 @@ let getDbSchemaLookups(connectionString) =
         )
         |> Map.ofSeq
     
+    use cmd = conn.CreateCommand()
+    cmd.CommandText <- """
+        WITH composites AS (
+            SELECT n.nspname, t.oid, t.typrelid, t.typname
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE
+        	    EXISTS (SELECT FROM pg_class c WHERE c.oid = t.typrelid AND c.relkind = 'c')
+                AND NOT EXISTS (SELECT FROM pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+                AND n.nspname <> 'pg_catalog'
+                AND n.nspname <> 'information_schema'
+                AND n.nspname !~ '^pg_toast'
+        )
+        SELECT
+            composites.nspname schema_name,
+            composites.typname composite_type_name,
+            a.attname field_name,
+            t.typname field_type,
+            ns.nspname field_type_schema
+        FROM pg_attribute a
+        JOIN pg_type t ON a.atttypid = t.oid
+        JOIN pg_namespace ns on t.typnamespace = ns.oid
+        JOIN composites ON a.attrelid = composites.typrelid
+        WHERE NOT a.attisdropped
+    """
+
+    let compositeTypeLookup =
+        use cursor = cmd.ExecuteReader()
+        let rows = ResizeArray<CompositeTypeFieldRow>()
+
+        while cursor.Read() do
+            let schema = cursor.GetString(0)
+            let cname = cursor.GetString(1)
+            let fname = cursor.GetString(2)
+            let ftype = cursor.GetString(3)
+            let ftschema = cursor.GetString(4)
+            rows.Add { CompositeTypeName = cname; Schema = schema; FieldName = fname; FieldType = ftype; FieldTypeSchema = ftschema }
+
+        rows
+        |> Seq.groupBy (fun x -> x.Schema, x.CompositeTypeName)
+        |> Seq.map (fun ((schema, name), fields) ->
+            schema, name, { Schema = schema; Name = name; Fields = fields |> Seq.map (fun f -> { TypeSchema = f.FieldTypeSchema; TypeName = f.FieldType; Name = f.FieldName }) |> Seq.toList })
+        |> Seq.groupBy (fun (schema, _, _) -> schema)
+        |> Seq.map (fun (schema, types) ->
+            schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
+        )
+        |> Map.ofSeq
+
     //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
     use cmd = conn.CreateCommand()
     cmd.CommandText <- """
@@ -438,7 +521,8 @@ let getDbSchemaLookups(connectionString) =
             
             schemas.Add(schema.Name, { Schema = schema
                                        Tables = Dictionary();
-                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty
+                                       CompositeTypes = compositeTypeLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
         match row.["table_oid"] |> Option.ofObj with
         | None -> ()
@@ -455,7 +539,7 @@ let getDbSchemaLookups(connectionString) =
             | -1s -> ()
             | attnum ->
                 let udtName = string row.["col_udt_name"]
-                let isUdt =
+                let isEnum =
                     schemas.[schema.Name].Enums
                     |> Map.tryFind udtName
                     |> Option.isSome
@@ -469,9 +553,9 @@ let getDbSchemaLookups(connectionString) =
                         let elemType = getTypeMapping(udtName.TrimStart('_') ) 
                         elemType.MakeArrayType()
                     | "USER-DEFINED" ->
-                        if isUdt then typeof<string> else typeof<obj>
+                        if isEnum then typeof<string> else typeof<obj>
                     | "" -> // possibly a column of a materialized view
-                        if isUdt then typeof<string> else getTypeMapping(udtName)
+                        if isEnum then typeof<string> else getTypeMapping(udtName)
                     | dataType -> 
                         getTypeMapping(dataType)
                 
@@ -491,8 +575,7 @@ let getDbSchemaLookups(connectionString) =
                       BaseSchemaName = schema.Name
                       BaseTableName = string row.["table_name"] }
                  
-                if not <| schemas.[schema.Name].Tables.[table].Contains(column) then
-                    schemas.[schema.Name].Tables.[table].Add(column) |> ignore
+                schemas.[schema.Name].Tables.[table].Add(column) |> ignore
                 
                 let lookupKey = { TableOID = table.OID
                                   ColumnAttributeNumber = column.ColumnAttributeNumber }
