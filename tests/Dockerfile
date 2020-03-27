@@ -1,4 +1,5 @@
-FROM mdillon/postgis:11
+#FROM mdillon/postgis:12-master
+FROM postgis/postgis:12-master
 
 ENV POSTGRES_DB dvdrental
 
