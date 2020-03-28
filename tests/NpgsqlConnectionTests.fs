@@ -32,16 +32,18 @@ let selectLiterals() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 [<Fact>]
 let selectSingleRow() =
+    // per https://www.postgresql.org/docs/12/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT
+    // CURRENT_TIME and CURRENT_TIMESTAMP deliver values with time zone
     use cmd = DvdRental.CreateCommand<"        
         SELECT 42 AS Answer, current_date as today
     ", SingleRow = true>(dvdRentalRuntime.Value)
 
     Assert.Equal(
-        Some( Some 42, Some DateTime.UtcNow.Date), 
+        Some( Some 42, Some DateTime.Now.Date), 
         cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
     )
 
@@ -52,7 +54,7 @@ let selectTuple() =
     ", ResultType.Tuples>(dvdRentalRuntime.Value)
 
     Assert.Equal<_ list>(
-        [ Some 42, Some DateTime.UtcNow.Date ],
+        [ Some 42, Some DateTime.Now.Date ],
         cmd.Execute() |>  Seq.toList
     )
 
@@ -349,7 +351,7 @@ let selectLiteralsWithConnObject() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 
 type DvdRentalWithConn = NpgsqlConnection<NpgsqlCmdTests.dvdRental, XCtor = true>
@@ -361,7 +363,7 @@ let selectLiteralsWithConnObjectGlobalSet() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
 
@@ -774,6 +776,35 @@ let ``Record rows contain different values``() =
     let actual = cmd.Execute()
 
     Assert.NotEqual (actual.[0].staff_id, actual.[1].staff_id)
+
+[<Fact>]
+let ``Interval update works``() =
+    let entryId = Guid.NewGuid()
+    use insertCommand = DvdRental.CreateCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}','22 hours')">(dvdRental)
+    insertCommand.Execute(entryId) |> ignore
+
+
+    // Now select for update
+    use cmdLog = DvdRental.CreateCommand<"SELECT * FROM public.logs WHERE id = @entry_id", ResultType.DataTable>(dvdRental)
+    let tblLog = cmdLog.Execute(entry_id = entryId)
+    let logRow = tblLog.Rows.[0]
+
+    // Now change it to 33 hours
+    let newTimespan = TimeSpan.FromHours 33.
+
+    logRow.modified <- newTimespan
+
+    let updatedRows = tblLog.Update(dvdRental)
+    Assert.Equal(1,updatedRows)
+    
+    // Now check one last time what row 2 is
+    use cmd = DvdRental.CreateCommand<"SELECT id, modified FROM public.logs WHERE id = @entry_id",SingleRow=true>(dvdRental)
+    let row = cmd.Execute(entry_id = entryId)
+    let expectedTS = TimeSpan(1,9,0,0) // 33 hours
+    Assert.Equal(expectedTS, row.Value.modified)
+    
+    use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
+    cleanupCommand.Execute(entryId) |> ignore
 
 //[<Literal>]
 //let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"

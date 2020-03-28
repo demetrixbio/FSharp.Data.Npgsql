@@ -5,7 +5,7 @@ open Xunit
 open System.Reflection
 
 [<Literal>]
-let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
+let dvdRental = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
 
 module Connection = 
     open Npgsql
@@ -36,7 +36,7 @@ let selectLiterals() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 [<Fact>]
 let selectSingleRow() =
@@ -45,7 +45,7 @@ let selectSingleRow() =
     ", dvdRental, SingleRow = true>(dvdRental)
 
     Assert.Equal(
-        Some( Some 42, Some DateTime.UtcNow.Date), 
+        Some( Some 42, Some DateTime.Now.Date), 
         cmd.Execute() |> Option.map ( fun x ->  x.answer, x.today )
     )
 
@@ -56,7 +56,7 @@ let selectTuple() =
     ", dvdRental, ResultType.Tuples>(dvdRental)
 
     Assert.Equal<_ list>(
-        [ Some 42, Some DateTime.UtcNow.Date ],
+        [ Some 42, Some DateTime.Now.Date ],
         cmd.Execute() |>  Seq.toList
     )
 
@@ -274,7 +274,7 @@ let selectLiteralsConnStrFromJsonConfig() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 //[<Fact>]
 //let selectLiteralsConnStrFromEnvironmentVariables() =
@@ -315,7 +315,7 @@ let selectLiteralsWithConnObject() =
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
-    Assert.Equal(Some DateTime.UtcNow.Date, x.today)
+    Assert.Equal(Some DateTime.Now.Date, x.today)
 
 [<Fact>]
 let fsx() =
@@ -637,6 +637,20 @@ let ``Queries against system catalogs work``() =
     let actual = cmd.Execute()
     Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0) 
  
+[<Fact>]
+let ``Interval insert and retrieval works``() =
+    let entryId = Guid.NewGuid()
+    let modified = TimeSpan(0,22,0,0)
+    use insertCommand = new NpgsqlCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}', @interval)", dvdRental>(dvdRental)
+    insertCommand.Execute(entryId, modified) |> ignore
+    
+    use cmd = new NpgsqlCommand<"SELECT id, modified FROM public.logs WHERE id = @id", dvdRental,SingleRow=true>(dvdRental)
+    let row = cmd.Execute(entryId)
+    Assert.Equal(modified, row.Value.modified)
+    
+    use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
+    cleanupCommand.Execute(entryId) |> ignore
+
 //[<Fact>]
 //let npPkTable() =
 //    use cmd =

@@ -196,7 +196,7 @@ type Column =
             x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
             x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
             x.ReadOnly <- %%Expr.Value(this.ReadOnly)
-
+            
             if x.DataType = typeof<string> then x.MaxLength <- %%Expr.Value(this.MaxLength)
             
             // control flow must be specified via simple bool switches as we are inside of quotation expression.
@@ -395,6 +395,7 @@ let getDbSchemaLookups(connectionString) =
              attr.attnum AS col_number,
              attr.attname AS col_name,
              coalesce(col.udt_name, typ.typname) AS col_udt_name,
+             typ_ns.nspname AS col_data_type_ns,
              col.data_type AS col_data_type,
              attr.attnotnull AS col_not_null,
              col.character_maximum_length AS col_max_length,
@@ -415,6 +416,8 @@ let getDbSchemaLookups(connectionString) =
 
         LEFT JOIN pg_attribute AS attr ON attr.attrelid = cls.oid AND attr.atttypid <> 0 AND attr.attnum > 0 AND NOT attr.attisdropped
         LEFT JOIN pg_type AS typ ON typ.oid = attr.atttypid
+        LEFT JOIN pg_namespace AS typ_ns ON typ_ns.oid = typ.typnamespace
+        
         LEFT JOIN information_schema.columns AS col ON col.table_schema = ns.nspname AND
            col.table_name = relname AND
            col.column_name = attname
@@ -422,7 +425,7 @@ let getDbSchemaLookups(connectionString) =
            cls.relkind IN ('r', 'v', 'm', 'p') AND
            ns.nspname !~ '^pg_' AND
            ns.nspname <> 'information_schema'
-        ORDER BY nspname, relname;
+        ORDER BY ns.nspname, relname;
     """
     
     let schemas = Dictionary<string, DbSchemaLookupItem>()
@@ -455,11 +458,10 @@ let getDbSchemaLookups(connectionString) =
             | -1s -> ()
             | attnum ->
                 let udtName = string row.["col_udt_name"]
-                let isUdt =
-                    schemas.[schema.Name].Enums
-                    |> Map.tryFind udtName
-                    |> Option.isSome
-                
+                // column data type namespace is not the same as table schema.
+                let typeSchema = string row.["col_data_type_ns"]
+                let isUdt = schemas.ContainsKey(typeSchema) && schemas.[typeSchema].Enums.ContainsKey(udtName)
+
                 let clrType =
                     match string row.["col_data_type"] with
                     | "ARRAY" ->
@@ -479,7 +481,7 @@ let getDbSchemaLookups(connectionString) =
                     { ColumnAttributeNumber = attnum
                       Name = string row.["col_name"]
                       DataType = { Name = udtName
-                                   Schema = schema.Name
+                                   Schema = typeSchema
                                    ClrType = clrType }
                       Nullable = row.["col_not_null"] |> unbox |> not
                       MaxLength = row.GetValueOrDefault("col_max_length", -1)
