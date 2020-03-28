@@ -28,3 +28,6 @@
 
 ### 0.2.3-beta - March 10th, 2020
 * Provided record reuse support by @kerams
+
+### 0.2.4-beta - March 28th, 2020
+* Interval insert/update fix for DataTable api. Correct schema inferred for user defined types.
