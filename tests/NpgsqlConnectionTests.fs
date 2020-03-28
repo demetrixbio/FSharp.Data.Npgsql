@@ -779,17 +779,14 @@ let ``Record rows contain different values``() =
 
 [<Fact>]
 let ``Interval update works``() =
-    // wipe test row
-    use clearCommand = new NpgsqlCommand<"delete from mylog where id=2",dvdRental>(dvdRental)
-    clearCommand.Execute() |> ignore
-    
-    // insert a row id=2 with modified = 22 hour timespan
-    use insertCommand = new NpgsqlCommand<"insert into mylog(id,modified) values (2,'22 hours')",dvdRental>(dvdRental)
-    insertCommand.Execute() |> ignore
-    
+    let entryId = Guid.NewGuid()
+    use insertCommand = DvdRental.CreateCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}','22 hours')">(dvdRental)
+    insertCommand.Execute(entryId) |> ignore
+
+
     // Now select for update
-    use cmdLog = DvdRental.CreateCommand<"select * from mylog where id = @PeriodId", ResultType.DataTable>(dvdRental)
-    let tblLog = cmdLog.Execute(PeriodId = 2L)
+    use cmdLog = DvdRental.CreateCommand<"SELECT * FROM public.logs WHERE id = @entry_id", ResultType.DataTable>(dvdRental)
+    let tblLog = cmdLog.Execute(entry_id = entryId)
     let logRow = tblLog.Rows.[0]
 
     // Now change it to 33 hours
@@ -801,10 +798,13 @@ let ``Interval update works``() =
     Assert.Equal(1,updatedRows)
     
     // Now check one last time what row 2 is
-    use cmd = new NpgsqlCommand<"SELECT id,modified FROM mylog WHERE id = 2", dvdRental,SingleRow=true>(dvdRental)
-    let row = cmd.Execute()
+    use cmd = DvdRental.CreateCommand<"SELECT id, modified FROM public.logs WHERE id = @entry_id",SingleRow=true>(dvdRental)
+    let row = cmd.Execute(entry_id = entryId)
     let expectedTS = TimeSpan(1,9,0,0) // 33 hours
-    Assert.True(row.Value.modified = expectedTS)
+    Assert.Equal(expectedTS, row.Value.modified)
+    
+    use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
+    cleanupCommand.Execute(entryId) |> ignore
 
 //[<Literal>]
 //let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"

@@ -638,29 +638,18 @@ let ``Queries against system catalogs work``() =
     Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0) 
  
 [<Fact>]
-let ``Interval retrieval works``() =
-    use cmd = new NpgsqlCommand<"SELECT id,modified FROM mylog WHERE id = 1", dvdRental,SingleRow=true>(dvdRental)
-    let row = cmd.Execute()
-    let expectedTS = TimeSpan(0,22,0,0)
-    Assert.True(row.Value.modified = expectedTS)
-
-[<Fact>]
-let ``Interval insert works``() =
+let ``Interval insert and retrieval works``() =
+    let entryId = Guid.NewGuid()
+    let modified = TimeSpan(0,22,0,0)
+    use insertCommand = new NpgsqlCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}', @interval)", dvdRental>(dvdRental)
+    insertCommand.Execute(entryId, modified) |> ignore
     
-    // wipe test row
-    use clearCommand = new NpgsqlCommand<"delete from mylog where id=2",dvdRental>(dvdRental)
-    clearCommand.Execute() |> ignore
+    use cmd = new NpgsqlCommand<"SELECT id, modified FROM public.logs WHERE id = @id", dvdRental,SingleRow=true>(dvdRental)
+    let row = cmd.Execute(entryId)
+    Assert.Equal(modified, row.Value.modified)
     
-    // insert a row id=2
-    use insertCommand = new NpgsqlCommand<"insert into mylog(id,modified) values (2,'22 hours')",dvdRental>(dvdRental)
-    insertCommand.Execute() |> ignore
-    
-    // can we get it back unchanged?
-    use cmd = new NpgsqlCommand<"SELECT id,modified FROM mylog WHERE id = 2", dvdRental,SingleRow=true>(dvdRental)
-    let row = cmd.Execute()
-    let expectedTS = TimeSpan(0,22,0,0)
-    Assert.True(row.Value.modified = expectedTS)
-
+    use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
+    cleanupCommand.Execute(entryId) |> ignore
 
 //[<Fact>]
 //let npPkTable() =
