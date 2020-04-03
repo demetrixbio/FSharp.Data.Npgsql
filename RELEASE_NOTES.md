@@ -31,3 +31,6 @@
 
 ### 0.2.4-beta - March 28th, 2020
 * Interval insert/update fix for DataTable api. Correct schema inferred for user defined types.
+
+### 0.2.5-beta - April 3rd, 2020
+* Switch from netcore2.0 to netstandard2.0. Updated dependencies, switched tests to netcore3.1
