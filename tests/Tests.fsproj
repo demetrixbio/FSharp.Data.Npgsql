@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
+    <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
   </PropertyGroup>
 
   <!--<Import Project="fsc.props" />-->

@@ -34,3 +34,6 @@
 
 ### 0.2.5-beta - April 3rd, 2020
 * Switch from netcore2.0 to netstandard2.0. Updated dependencies, switched tests to netcore3.1
+
+### 0.2.6-beta - April 3rd, 2020
+* Removed net461 framework dependency.

@@ -33,17 +33,12 @@
   </ItemGroup>
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
   </Target>
   <Target Name="AfterBuild">
     <CreateItem Include="..\DesignTime\bin\$(Configuration)\netstandard2.0\*.dll;..\DesignTime\bin\$(Configuration)\netstandard2.0\*.pdb">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries1" />
     </CreateItem>
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll;..\DesignTime\bin\$(Configuration)\net461\*.pdb">
-      <Output TaskParameter="Include" ItemName="DesignTimeBinaries2" />
-    </CreateItem>
     <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netstandard2.0" />
-    <Copy SourceFiles="@(DesignTimeBinaries2)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/net461" />
   </Target>
   <Target Name="IncludeAllDlls">
     <ItemGroup>
