@@ -1,18 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
-    <!--<IsWindows Condition="'$(OS)' == 'Windows_NT'">true</IsWindows>-->
   </PropertyGroup>
 
   <!--<Import Project="fsc.props" />-->
 
   <ItemGroup>
-    <None Include="fsc.props" />
+    <!--<None Include="fsc.props" />-->
     <Compile Include="NpgsqlCmdTests.fs" />
     <Compile Include="NpgsqlConnectionTests.fs" />
-    <Compile Include="Program.fs" Condition="'$(TargetFramework)' == 'netcoreapp2.1' " />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,14 +25,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.7.1" />
     <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.1.3" />
+    <PackageReference Include="Npgsql" Version="4.1.3.1" />
     <PackageReference Include="Npgsql.LegacyPostgis" Version="4.1.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.8.0" />
-    <PackageReference Include="xunit" Version="2.4.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
-    <!--<ProjectReference Condition="'$(Configuration)'=='Release'" Include="..\src\Runtime\Runtime.fsproj" />-->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.3" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
+    <PackageReference Include="xunit" Version="2.4.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,7 +40,6 @@
       <HintPath>..\src\Runtime\bin\$(Configuration)\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
       <Private>true</Private>
     </Reference>
-    <Reference Include="System.Transactions" />
   </ItemGroup>
 
 </Project>

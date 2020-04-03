@@ -12,7 +12,7 @@
     <copyright>Copyright 2017-2018 Dmitry Morozov</copyright>
     <tags>F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql</tags>
     <dependencies>
-      <dependency id="Npgsql" version="4.1.3"/>
+      <dependency id="Npgsql" version="4.1.3.1"/>
       <dependency id="Npgsql.LegacyPostgis" version="4.1.3"/>
     </dependencies>
     <references>
@@ -22,7 +22,7 @@
   <files>
     <file src="bin\Release\netstandard2.0\*.dll" target="lib\netstandard2.0" />
     <file src="bin\Release\netstandard2.0\*.pdb" target="lib\netstandard2.0" />
-    <file src="bin\Release\typeproviders\fsharp41\netcoreapp2.0\*.dll" target="typeproviders\fsharp41\netcoreapp2.0" />
+    <file src="bin\Release\typeproviders\fsharp41\netstandard2.0\*.dll" target="typeproviders\fsharp41\netstandard2.0" />
     <file src="bin\Release\typeproviders\fsharp41\net461\*.dll" target="typeproviders\fsharp41\net461" />
   </files>
 </package>
