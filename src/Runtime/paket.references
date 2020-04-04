@@ -1,0 +1,4 @@
+FSharp.Core
+Npgsql
+System.ValueTuple
+Npgsql.LegacyPostgis

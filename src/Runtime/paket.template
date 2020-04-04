@@ -1,0 +1,20 @@
+type project
+id FSharp.Data.Npgsql
+version 0.2.7-beta
+authors Demetrix; Dmitry Morozov
+owners Demetrix; Dmitry Morozov
+licenseUrl https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE
+projectUrl https://github.com/demetrixbio/FSharp.Data.Npgsql
+requireLicenseAcceptance false
+description F# type providers to support statically typed access to input parameters and result set of sql statement in idiomatic F# way. Data modifications via statically typed tables.
+copyright Copyright 2017-2018 Dmitry Morozov
+tags F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql
+files
+  ..\..\packages\tpsdk\NETStandard.Library.NETFramework\build\net461\lib\netstandard.dll ==> lib/netstandard2.0
+  ..\..\packages\tpsdk\NETStandard.Library.NETFramework\build\net461\lib\System.Reflection.dll ==> lib/netstandard2.0
+  ..\..\packages\tpsdk\NETStandard.Library.NETFramework\build\net461\lib\System.Runtime.dll ==> lib/netstandard2.0
+  bin/Release/netstandard2.0/*.dll ==> lib/netstandard2.0 
+  bin/Release/netstandard2.0/*.pdb ==> lib/netstandard2.0 
+  bin/Release/typeproviders/fsharp41/netstandard2.0/*.dll ==> typeproviders/fsharp41/netstandard2.0
+references
+  FSharp.Data.Npgsql.dll

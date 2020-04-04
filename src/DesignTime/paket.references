@@ -1,0 +1,8 @@
+FSharp.Core
+Npgsql
+System.ValueTuple
+Npgsql.LegacyPostgis
+Microsoft.Extensions.Configuration.Json
+Microsoft.Extensions.Configuration.EnvironmentVariables
+Microsoft.Extensions.Configuration.UserSecrets
+System.Xml.XDocument
