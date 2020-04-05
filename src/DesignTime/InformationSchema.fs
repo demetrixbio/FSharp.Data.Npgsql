@@ -21,6 +21,10 @@ type internal NpgsqlDataReader with
     member cursor.GetValueOrDefault(name: string, defaultValue) =    
         let i = cursor.GetOrdinal(name)
         if cursor.IsDBNull( i) then defaultValue else cursor.GetFieldValue( i)
+        
+    member cursor.GetOptionalValue(name: string) =    
+        let i = cursor.GetOrdinal(name)
+        if cursor.IsDBNull( i) then None else Some <| cursor.GetValue( i)
 
 type internal Type with
     member this.PartiallyQualifiedName = 
@@ -80,6 +84,9 @@ let private builtins = [
     "oidvector", typeof<UInt32[]>
     "name", typeof<string>
     "char", typeof<string>
+    
+    "regtype", typeof<UInt32>
+    "regclass", typeof<UInt32>
     //"range", typeof<NpgsqlRange>, NpgsqlDbType.Range)
 ]
 
@@ -443,7 +450,7 @@ let getDbSchemaLookups(connectionString) =
                                        Tables = Dictionary();
                                        Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
-        match row.["table_oid"] |> Option.ofObj with
+        match row.GetOptionalValue("table_oid") with
         | None -> ()
         | Some oid ->
             let table =
