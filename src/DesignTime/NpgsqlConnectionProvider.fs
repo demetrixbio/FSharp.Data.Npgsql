@@ -69,10 +69,10 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
                 commands.AddMember cmdProvidedType
 
-                let useLegacyPostgis = 
-                    (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+                let useNetTopologySuite = 
+                    (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
                     ||
-                    (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+                    (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let isTypeReuseEnabled = providedTypeReuse <> NoReuse
 
@@ -83,7 +83,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         ResultType = %%Expr.Value(resultType)
                         SingleRow = singleRow
                         ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
-                        UseLegacyPostgis = useLegacyPostgis
+                        UseNetTopologySuite = useNetTopologySuite
                         Prepare = prepare
                         IsTypeReuseEnabled = isTypeReuseEnabled
                     } @@>

@@ -1,7 +1,7 @@
 FSharp.Core
 System.ValueTuple
 Npgsql
-Npgsql.LegacyPostgis
+Npgsql.NetTopologySuite
 Microsoft.Extensions.Configuration.Json
 Microsoft.NET.Test.Sdk
 xunit

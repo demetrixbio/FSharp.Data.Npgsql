@@ -91,7 +91,7 @@ let private builtins = [
 ]
 
 let mutable private spatialTypesMapping = [
-    "geometry", typeof<LegacyPostgis.PostgisGeometry>
+    "geometry", typeof<NetTopologySuite.Geometries.Geometry>
 ]
 
 let getTypeMapping = 
