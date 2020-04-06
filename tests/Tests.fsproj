@@ -1,45 +1,29 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
     <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
   </PropertyGroup>
-
   <!--<Import Project="fsc.props" />-->
-
   <ItemGroup>
     <!--<None Include="fsc.props" />-->
     <Compile Include="NpgsqlCmdTests.fs" />
     <Compile Include="NpgsqlConnectionTests.fs" />
   </ItemGroup>
-
   <ItemGroup>
     <Content Include="development.settings.json" />
   </ItemGroup>
-
   <ItemGroup>
     <None Include="Dockerfile" />
     <None Include="restore_dvdrental.sh" />
     <None Include="Scripts\TestCommandProvider.fsx" />
     <None Include="Scripts\TestSingleRootProvider.fsx" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.7.1" />
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.1.3.1" />
-    <PackageReference Include="Npgsql.LegacyPostgis" Version="4.1.3" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.3" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
-  </ItemGroup>
-
   <ItemGroup>
     <Reference Include="FSharp.Data.Npgsql">
       <HintPath>..\src\Runtime\bin\$(Configuration)\netstandard2.0\FSharp.Data.Npgsql.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
-
+  <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>
