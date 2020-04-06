@@ -37,3 +37,7 @@
 
 ### 0.2.6-beta - April 3rd, 2020
 * Removed net461 framework dependency.
+
+### 0.2.7-beta - April 6th, 2020
+* Use paket for builds / nuget publish. Github CI actions by @swoorup
+* Timescaledb fix by @swoorup
