@@ -37,11 +37,6 @@ jobs:
           sudo apt-get update
           sudo apt-get -yq install libpq-dev postgresql-client-12 postgresql-12-postgis-3 postgresql-12-postgis-3-scripts
 
-      - name: Restoring test database
-        run: pg_restore -h localhost -p 32768 -U postgres -d dvdrental -F t ./tests/dvdrental.tar
-        env:
-          PGPASSWORD: postgres
-
       - name: Setup dotnet
         uses: actions/setup-dotnet@v1
         with:
@@ -50,5 +45,5 @@ jobs:
       - name: Build
         run: ./build.sh
 
-      - name: Run Test
-        run: dotnet test Tests.sln
+      - name: Run Tests
+        run: ./run-tests.sh
