@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <UserSecretsId>e0db9c78-0c59-4e4f-9d15-ed0c2848e94e</UserSecretsId>
-    <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
   <!--<Import Project="fsc.props" />-->
   <ItemGroup>
@@ -16,8 +16,6 @@
   <ItemGroup>
     <None Include="Dockerfile" />
     <None Include="restore_dvdrental.sh" />
-    <None Include="Scripts\TestCommandProvider.fsx" />
-    <None Include="Scripts\TestSingleRootProvider.fsx" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Data.Npgsql">

@@ -1,13 +1,12 @@
 source https://www.nuget.org/api/v2
 
 nuget FSharp.Core 4.7.1
-nuget FSharp.Data.Npgsql 0.1.42-beta prerelease
 nuget Microsoft.Extensions.Configuration.EnvironmentVariables 3.1.3
 nuget Microsoft.Extensions.Configuration.Json 3.1.3
 nuget Microsoft.Extensions.Configuration.UserSecrets 3.1.3
 nuget Microsoft.NET.Test.Sdk 16.5.0
 nuget Npgsql 4.1.3.1
-nuget Npgsql.LegacyPostgis 4.1.3
+nuget Npgsql.NetTopologySuite 4.1.3
 nuget System.ValueTuple 4.5.0
 nuget System.Xml.XDocument 4.3.0
 nuget xunit 2.4.1

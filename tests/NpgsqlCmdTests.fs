@@ -15,9 +15,9 @@ module Connection =
         conn.Open()
         conn
 
-    let getWithPostGis() = 
+    let getWithNetTopologySuite() = 
         let conn = get()
-        conn.TypeMapper.UseLegacyPostgis() |> ignore
+        conn.TypeMapper.UseNetTopologySuite() |> ignore
         conn
 
 open FSharp.Data.Npgsql
@@ -399,18 +399,18 @@ let asyncUpdateTable() =
     Assert.Equal(1, actors.Update(conn, tx))
 
 [<Fact>]
-let postGisSimpleSelectPoint() =
-    use conn = Connection.getWithPostGis()
+let netTopologySuiteSimpleSelectPoint() =
+    use conn = Connection.getWithNetTopologySuite()
     use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(0 0)'::geometry", dvdRental, SingleRow = true>(conn)
     let actual = cmd.Execute().Value.Value
-    let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
+    let expected = NetTopologySuite.Geometries.Point(x = 0., y = 0., SRID = 4)
     Assert.Equal(expected, downcast actual)
 
 [<Fact>]
-let postGisSimpleSelectPointConnStr() =
+let netTopologySuiteSimpleSelectPointConnStr() =
     use cmd = new NpgsqlCommand<"SELECT 'SRID=4;POINT(0 0)'::geometry", dvdRental, SingleRow = true>(dvdRental)
     let actual = cmd.Execute().Value.Value
-    let expected = Npgsql.LegacyPostgis.PostgisPoint(x = 0., y = 0., SRID = 4u)
+    let expected = NetTopologySuite.Geometries.Point(x = 0., y = 0., SRID = 4)
     Assert.Equal(expected, downcast actual)
 
 type UpdateMovieRating = NpgsqlCommand<"UPDATE public.film SET rating = @rating WHERE rating = @oldRating AND title = @title", dvdRental>

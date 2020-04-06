@@ -1,0 +1,49 @@
+name: Run Integration Test
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  container-job:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:12-master
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dvdrental
+        ports:
+        - 5432/tcp
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Install PostgreSQL client tools required for restoring databases
+        run: |
+          sudo bash -c "echo deb http://apt.postgresql.org/pub/repos/apt/ bionic-pgdg main >> /etc/apt/sources.list.d/pgdg.list"
+          wget --quiet -O - http://apt.postgresql.org/pub/repos/apt/ACCC4CF8.asc | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get -yq install libpq-dev postgresql-client-12 postgresql-12-postgis-3 postgresql-12-postgis-3-scripts
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '3.1.102'
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Run Tests
+        run: ./run-tests.sh
