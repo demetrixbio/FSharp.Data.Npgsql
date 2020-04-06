@@ -628,6 +628,6 @@ NUGET
   remote: https://api.nuget.org/v3/index.json
     NETStandard.Library.NETFramework (2.0.0-preview2-25405-01)
 GITHUB
-  remote: fsprojects/FSharp.TypeProviders.SDK
-    src/ProvidedTypes.fs (6e3933d4e5c83049cbd2e51237ebf1faae9e657d)
-    src/ProvidedTypes.fsi (6e3933d4e5c83049cbd2e51237ebf1faae9e657d)
+  remote: demetrixbio/FSharp.TypeProviders.SDK
+    src/ProvidedTypes.fs (190f78e4aec2b388c48f9ee79205d5a315a3cc2c)
+    src/ProvidedTypes.fsi (190f78e4aec2b388c48f9ee79205d5a315a3cc2c)

@@ -806,26 +806,4 @@ let ``Interval update works``() =
     use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
     cleanupCommand.Execute(entryId) |> ignore
 
-//[<Literal>]
-//let lims = "Host=localhost;Username=postgres;Password=postgres;Database=lims"
-
-//type Lims = NpgsqlConnection<lims>
-
-//[<Fact>]
-//let largeBatchUpdate() =
-//    use conn = new Npgsql.NpgsqlConnection(lims)
-
-//    conn.Open()
-//    use tx = conn.BeginTransaction()
-//    let parts = 
-//        use cmd = Lims.CreateCommand<"SELECT * FROM part.part LIMIT 1000", ResultType.DataTable, XCtor = true>(conn, tx)
-//        cmd.Execute()
-//    for r in parts.Rows do
-//        r.sequence <- r.sequence |> Option.map (fun s -> s + "=test")
-
-//    //let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.CompareAllSearchableValues, batchTimeout = 60*10)
-//    let recordsAffected = parts.Update(conn, batchSize = 500, conflictOption = Data.ConflictOption.OverwriteChanges, batchTimeout = 60*10)
-//    printfn "Records affected: %i" recordsAffected
-//    Assert.Equal(parts.Rows.Count, recordsAffected)
-
 

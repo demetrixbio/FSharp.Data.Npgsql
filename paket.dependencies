@@ -18,6 +18,6 @@ group tpsdk
   storage packages
   source https://api.nuget.org/v3/index.json
 
-  github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-  github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+  github demetrixbio/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+  github demetrixbio/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
   nuget NETStandard.Library.NETFramework
