@@ -24,8 +24,8 @@
     <Compile Include="..\Runtime\ISqlCommand.fs">
       <Link>ISqlCommand.fs</Link>
     </Compile>
-    <Compile Include="..\..\paket-files\tpsdk\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi" Link="ProvidedTypes.fsi" />
-    <Compile Include="..\..\paket-files\tpsdk\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs" Link="ProvidedTypes.fs" />
+    <Compile Include="..\..\paket-files\tpsdk\demetrixbio\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi" Link="ProvidedTypes.fsi" />
+    <Compile Include="..\..\paket-files\tpsdk\demetrixbio\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs" Link="ProvidedTypes.fs" />
     <Compile Include="ProvidedTypesCache.fs" />
     <Compile Include="Configuration.fs" />
     <Compile Include="InformationSchema.fs" />
