@@ -41,3 +41,6 @@
 ### 0.2.7-beta - April 6th, 2020
 * Use paket for builds / nuget publish. Github CI actions by @swoorup
 * Timescaledb fix by @swoorup
+
+### 0.2.8-beta - April 7th, 2020
+* Switch from LegacyPostgis to NetTopologySuite by @swoorup
