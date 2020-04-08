@@ -482,12 +482,13 @@ type internal QuotationsFactory private() =
                 //let parameterName = p.Name.Substring 1
                 let parameterName = p.Name
 
-                let t = 
-                    if p.DataType.IsUserDefinedType
-                    then
-                        let t = customTypes.[p.DataType.UdtTypeName]
-                        if p.DataType.ClrType.IsArray then t.MakeArrayType() else upcast t 
-                    else p.DataType.ClrType
+                let t =
+                    let customType = customTypes.TryFind p.DataType.UdtTypeName
+                    
+                    match p.DataType.IsUserDefinedType, customType with
+                    | true, Some t -> 
+                        if p.DataType.ClrType.IsArray then t.MakeArrayType() else upcast t
+                    | _ -> p.DataType.ClrType
 
                 if p.Optional 
                 then 
