@@ -1,0 +1,11 @@
+# Use postgres/example user/password credentials
+version: '3.1'
+
+services:
+  db:
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+    image: test-db
+    ports:
+    - 32768:5432
