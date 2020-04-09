@@ -92,6 +92,7 @@ let private builtins = [
 
 let mutable private spatialTypesMapping = [
     "geometry", typeof<NetTopologySuite.Geometries.Geometry>
+    "geography", typeof<NetTopologySuite.Geometries.Geometry>
 ]
 
 let getTypeMapping = 
