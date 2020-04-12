@@ -268,9 +268,6 @@ let inline openConnection connectionString =
 let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
     use conn = openConnection(connectionString)
     
-    // deduce postgis types
-    conn.TypeMapper.UseNetTopologySuite() |> ignore
-    
     use cmd = new NpgsqlCommand(commandText, conn)
     NpgsqlCommandBuilder.DeriveParameters(cmd)
     for p in cmd.Parameters do p.Value <- DBNull.Value

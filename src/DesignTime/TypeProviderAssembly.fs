@@ -6,6 +6,7 @@ open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql.DesignTime
 open System.IO
+open Npgsql
 
 [<TypeProvider>]
 type NpgsqlProviders(config) as this = 
@@ -17,8 +18,12 @@ type NpgsqlProviders(config) as this =
     
     let cache = Cache<ProvidedTypeDefinition>()
     let schemaCache = Cache<DbSchemaLookups>()
+    
 
     do 
+        // register extension mappings
+        Npgsql.NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
+    
         this.Disposing.Add <| fun _ ->
             try 
                 NpgsqlConnectionProvider.methodsCache.Clear()
