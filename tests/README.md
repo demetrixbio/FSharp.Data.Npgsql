@@ -2,13 +2,8 @@
 
 You need to build a postgres-gis image (need v12 for compatibility with restore)
 
-
-## Making the docker image
-`docker build`  to create an image
-
-
-## Running docker image and mapping postgres port to 32768 (avoids any local postgres instances)
-`docker run -p 32768:5432 "-e POSTGRES_PASSWORD=postgres" <image id>`
+## Running docker image 
+Run `docker-compose up` in the tests directory.
 
 This should start up and successfully restore the dvdrental database inside the docker image (copies in file then runs `pg_restore`.  If either of those steps fails you won't have a working database.
 

@@ -1,5 +1,4 @@
-FSharp.Core
-System.ValueTuple
+FSharp.Core 
 Npgsql
 Npgsql.NetTopologySuite
 Microsoft.Extensions.Configuration.Json
