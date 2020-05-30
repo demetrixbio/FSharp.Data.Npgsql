@@ -44,3 +44,7 @@
 
 ### 0.2.8-beta - April 7th, 2020
 * Switch from LegacyPostgis to NetTopologySuite by @swoorup
+
+### 0.2.9-beta - May 30th, 2020
+* Fix postgis params issue by @swoorup
+* Generated column support for DataTable api

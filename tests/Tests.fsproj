@@ -8,6 +8,7 @@
     <Content Include="development.settings.json" />
     <None Include="Dockerfile" />
     <None Include="restore_dvdrental.sh" />
+    <Content Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="FSharp.Data.Npgsql">

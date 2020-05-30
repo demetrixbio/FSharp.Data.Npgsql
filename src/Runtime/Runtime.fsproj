@@ -21,6 +21,8 @@
     <Compile Include="Utils.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="DesignTime.fs" />
+    <Content Include="paket.template" />
+    <Content Include="paket.references" />
   </ItemGroup>
   <Target Name="BeforeBuild">
     <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />

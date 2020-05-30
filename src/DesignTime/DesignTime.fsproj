@@ -33,6 +33,7 @@
     <Compile Include="NpgsqlCommandProvider.fs" />
     <Compile Include="NpgsqlConnectionProvider.fs" />
     <Compile Include="TypeProviderAssembly.fs" />
+    <Content Include="paket.references" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
