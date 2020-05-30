@@ -406,7 +406,7 @@ let getDbSchemaLookups(connectionString) =
              col.data_type AS col_data_type,
              attr.attnotnull AS col_not_null,
              col.character_maximum_length AS col_max_length,
-             CASE WHEN col.is_updatable = 'YES' THEN true ELSE false END AS col_is_updatable,
+             CASE WHEN col.is_updatable = 'YES' AND col.is_generated <> 'ALWAYS' THEN false ELSE true END AS col_is_readonly,
              CASE WHEN col.is_identity = 'YES' THEN true else false END AS col_is_identity,
              CASE WHEN attr.atthasdef THEN (SELECT pg_get_expr(adbin, cls.oid) FROM pg_attrdef WHERE adrelid = cls.oid AND adnum = attr.attnum) ELSE NULL END AS col_default,
              pg_catalog.col_description(attr.attrelid, attr.attnum) AS col_description,
@@ -492,7 +492,7 @@ let getDbSchemaLookups(connectionString) =
                                    ClrType = clrType }
                       Nullable = row.["col_not_null"] |> unbox |> not
                       MaxLength = row.GetValueOrDefault("col_max_length", -1)
-                      ReadOnly = row.["col_is_updatable"] |> unbox |> not
+                      ReadOnly = row.["col_is_readonly"] |> unbox
                       AutoIncrement = unbox row.["col_is_identity"]
                       DefaultConstraint = row.GetValueOrDefault("col_default", "")
                       Description = row.GetValueOrDefault("col_description", "")
