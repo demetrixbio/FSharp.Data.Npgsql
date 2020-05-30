@@ -397,7 +397,7 @@ let asyncUpdateTable() =
         actors.Rows.[0].last_update <- DateTime.UtcNow
     
     Assert.Equal(1, actors.Update(conn, tx))
-
+    
 [<Fact>]
 let netTopologySuiteSimpleSelectPoint() =
     use conn = Connection.getWithNetTopologySuite()
@@ -412,6 +412,14 @@ let netTopologySuiteSimpleSelectPointConnStr() =
     let actual = cmd.Execute().Value.Value
     let expected = NetTopologySuite.Geometries.Point(x = 0., y = 0., SRID = 4)
     Assert.Equal(expected, downcast actual)
+
+[<Fact>]
+let netTopologySuiteSimpleParms() =
+    use conn = Connection.getWithNetTopologySuite()
+    use cmd = new NpgsqlCommand<"SELECT st_distance(@point, ST_GeomFromText('POINT(-12.5842 24.4944)',4))", dvdRental, SingleRow=true>(dvdRental)
+    let actual = cmd.Execute(point=NetTopologySuite.Geometries.Point(x = -12.5842, y = 24.4944, SRID = 4)).Value.Value
+    let expected = 0.0
+    Assert.Equal(expected, actual)
 
 type UpdateMovieRating = NpgsqlCommand<"UPDATE public.film SET rating = @rating WHERE rating = @oldRating AND title = @title", dvdRental>
 
