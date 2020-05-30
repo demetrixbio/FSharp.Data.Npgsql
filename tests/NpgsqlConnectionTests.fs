@@ -807,3 +807,11 @@ let ``Interval update works``() =
     cleanupCommand.Execute(entryId) |> ignore
 
 
+[<Fact>]
+let ``Insert does skip computed columns``() =
+    use table = new DvdRental.``public``.Tables.table_with_computed_columns()
+    let row = table.NewRow(operand_1 = 10, operand_2 = 20)
+    table.Rows.Add(row)
+    table.Update(dvdRental) |> ignore
+    
+    
