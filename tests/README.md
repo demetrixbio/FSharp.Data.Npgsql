@@ -20,5 +20,6 @@ E.g. for bash on windows
 
 * Create working database
 * Connect and alter schema
+* Dump and rename dvdrentalnew.tar to dvdrental.tar when it looks good
 
-`$ winpty /c/Program\ Files/PostgreSQL/12/bin/pg_dump -U postgres -h 127.0.0.1 -p 32768 -F t -f dvdrentalnew.tar dvdrental`
+`$ winpty /c/Program\ Files/PostgreSQL/12/bin/pg_dump -U postgres -h 127.0.0.1 -p 32768 --schema public -F t -f dvdrentalnew.tar dvdrental`
