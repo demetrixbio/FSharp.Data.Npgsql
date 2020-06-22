@@ -28,3 +28,23 @@
 
 ### 0.2.3-beta - March 10th, 2020
 * Provided record reuse support by @kerams
+
+### 0.2.4-beta - March 28th, 2020
+* Interval insert/update fix for DataTable api. Correct schema inferred for user defined types.
+
+### 0.2.5-beta - April 3rd, 2020
+* Switch from netcore2.0 to netstandard2.0. Updated dependencies, switched tests to netcore3.1
+
+### 0.2.6-beta - April 3rd, 2020
+* Removed net461 framework dependency.
+
+### 0.2.7-beta - April 6th, 2020
+* Use paket for builds / nuget publish. Github CI actions by @swoorup
+* Timescaledb fix by @swoorup
+
+### 0.2.8-beta - April 7th, 2020
+* Switch from LegacyPostgis to NetTopologySuite by @swoorup
+
+### 0.2.9-beta - May 30th, 2020
+* Fix postgis params issue by @swoorup
+* Generated column support for DataTable api

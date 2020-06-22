@@ -21,6 +21,10 @@ type internal NpgsqlDataReader with
     member cursor.GetValueOrDefault(name: string, defaultValue) =    
         let i = cursor.GetOrdinal(name)
         if cursor.IsDBNull( i) then defaultValue else cursor.GetFieldValue( i)
+        
+    member cursor.GetOptionalValue(name: string) =    
+        let i = cursor.GetOrdinal(name)
+        if cursor.IsDBNull( i) then None else Some <| cursor.GetValue( i)
 
 type internal Type with
     member this.PartiallyQualifiedName = 
@@ -80,11 +84,15 @@ let private builtins = [
     "oidvector", typeof<UInt32[]>
     "name", typeof<string>
     "char", typeof<string>
+    
+    "regtype", typeof<UInt32>
+    "regclass", typeof<UInt32>
     //"range", typeof<NpgsqlRange>, NpgsqlDbType.Range)
 ]
 
 let mutable private spatialTypesMapping = [
-    "geometry", typeof<LegacyPostgis.PostgisGeometry>
+    "geometry", typeof<NetTopologySuite.Geometries.Geometry>
+    "geography", typeof<NetTopologySuite.Geometries.Geometry>
 ]
 
 let getTypeMapping = 
@@ -196,7 +204,7 @@ type Column =
             x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
             x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
             x.ReadOnly <- %%Expr.Value(this.ReadOnly)
-
+            
             if x.DataType = typeof<string> then x.MaxLength <- %%Expr.Value(this.MaxLength)
             
             // control flow must be specified via simple bool switches as we are inside of quotation expression.
@@ -395,10 +403,11 @@ let getDbSchemaLookups(connectionString) =
              attr.attnum AS col_number,
              attr.attname AS col_name,
              coalesce(col.udt_name, typ.typname) AS col_udt_name,
+             typ_ns.nspname AS col_data_type_ns,
              col.data_type AS col_data_type,
              attr.attnotnull AS col_not_null,
              col.character_maximum_length AS col_max_length,
-             CASE WHEN col.is_updatable = 'YES' THEN true ELSE false END AS col_is_updatable,
+             CASE WHEN col.is_updatable = 'YES' AND col.is_generated <> 'ALWAYS' THEN false ELSE true END AS col_is_readonly,
              CASE WHEN col.is_identity = 'YES' THEN true else false END AS col_is_identity,
              CASE WHEN attr.atthasdef THEN (SELECT pg_get_expr(adbin, cls.oid) FROM pg_attrdef WHERE adrelid = cls.oid AND adnum = attr.attnum) ELSE NULL END AS col_default,
              pg_catalog.col_description(attr.attrelid, attr.attnum) AS col_description,
@@ -415,6 +424,8 @@ let getDbSchemaLookups(connectionString) =
 
         LEFT JOIN pg_attribute AS attr ON attr.attrelid = cls.oid AND attr.atttypid <> 0 AND attr.attnum > 0 AND NOT attr.attisdropped
         LEFT JOIN pg_type AS typ ON typ.oid = attr.atttypid
+        LEFT JOIN pg_namespace AS typ_ns ON typ_ns.oid = typ.typnamespace
+        
         LEFT JOIN information_schema.columns AS col ON col.table_schema = ns.nspname AND
            col.table_name = relname AND
            col.column_name = attname
@@ -422,7 +433,7 @@ let getDbSchemaLookups(connectionString) =
            cls.relkind IN ('r', 'v', 'm', 'p') AND
            ns.nspname !~ '^pg_' AND
            ns.nspname <> 'information_schema'
-        ORDER BY nspname, relname;
+        ORDER BY ns.nspname, relname;
     """
     
     let schemas = Dictionary<string, DbSchemaLookupItem>()
@@ -440,7 +451,7 @@ let getDbSchemaLookups(connectionString) =
                                        Tables = Dictionary();
                                        Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
-        match row.["table_oid"] |> Option.ofObj with
+        match row.GetOptionalValue("table_oid") with
         | None -> ()
         | Some oid ->
             let table =
@@ -455,11 +466,10 @@ let getDbSchemaLookups(connectionString) =
             | -1s -> ()
             | attnum ->
                 let udtName = string row.["col_udt_name"]
-                let isUdt =
-                    schemas.[schema.Name].Enums
-                    |> Map.tryFind udtName
-                    |> Option.isSome
-                
+                // column data type namespace is not the same as table schema.
+                let typeSchema = string row.["col_data_type_ns"]
+                let isUdt = schemas.ContainsKey(typeSchema) && schemas.[typeSchema].Enums.ContainsKey(udtName)
+
                 let clrType =
                     match string row.["col_data_type"] with
                     | "ARRAY" ->
@@ -479,11 +489,11 @@ let getDbSchemaLookups(connectionString) =
                     { ColumnAttributeNumber = attnum
                       Name = string row.["col_name"]
                       DataType = { Name = udtName
-                                   Schema = schema.Name
+                                   Schema = typeSchema
                                    ClrType = clrType }
                       Nullable = row.["col_not_null"] |> unbox |> not
                       MaxLength = row.GetValueOrDefault("col_max_length", -1)
-                      ReadOnly = row.["col_is_updatable"] |> unbox |> not
+                      ReadOnly = row.["col_is_readonly"] |> unbox
                       AutoIncrement = unbox row.["col_is_identity"]
                       DefaultConstraint = row.GetValueOrDefault("col_default", "")
                       Description = row.GetValueOrDefault("col_description", "")

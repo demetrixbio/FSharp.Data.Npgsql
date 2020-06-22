@@ -55,10 +55,10 @@ let internal createRootType
                 typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
                 providedTypeReuse = NoReuse))
 
-    let useLegacyPostgis = 
-        (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+    let useNetTopologySuite = 
+        (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
         ||
-        (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<LegacyPostgis.PostgisGeometry>))
+        (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
     do  //ctors
         let designTimeConfig = 
@@ -68,7 +68,7 @@ let internal createRootType
                 ResultType = resultType
                 SingleRow = singleRow
                 ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
-                UseLegacyPostgis = useLegacyPostgis
+                UseNetTopologySuite = useNetTopologySuite
                 Prepare = prepare
                 IsTypeReuseEnabled = false
             } @@>

@@ -18,7 +18,7 @@ type DesignTimeConfig = {
     ResultType: ResultType
     SingleRow: bool
     ResultSets: ResultSetDefinition[]
-    UseLegacyPostgis: bool
+    UseNetTopologySuite: bool
     Prepare: bool
     IsTypeReuseEnabled: bool
 }
@@ -45,7 +45,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | Choice1Of2 connectionString -> 
             cmd.Connection <- new NpgsqlConnection(connectionString)
             cmd.Connection.Open()
-            if cfg.UseLegacyPostgis then cmd.Connection.TypeMapper.UseLegacyPostgis() |> ignore
+            if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite() |> ignore
             upcast cmd.Connection
         
     let asyncSetupConnection() = 
@@ -56,7 +56,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             | Choice1Of2 connectionString -> 
                 cmd.Connection <- new NpgsqlConnection(connectionString)
                 do! cmd.Connection.OpenAsync() |> Async.AwaitTask
-                if cfg.UseLegacyPostgis then cmd.Connection.TypeMapper.UseLegacyPostgis() |> ignore
+                if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite() |> ignore
                 return upcast cmd.Connection
         }
 

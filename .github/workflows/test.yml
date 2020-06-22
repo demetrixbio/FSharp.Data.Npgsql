@@ -1,0 +1,29 @@
+name: Run Integration Test
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v2
+
+      - name: Setup docker compose
+        run: docker-compose -f tests/docker-compose.yml build && docker-compose -f tests/docker-compose.yml up -d
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '3.1.102'
+
+      - name: Build
+        run: ./build.sh
+
+      - name: Run Tests
+        run: ./run-tests.sh

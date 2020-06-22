@@ -1,10 +1,10 @@
-﻿<Project>
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
   <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>FSharp.Data.Npgsql</AssemblyName>
     <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);IncludeAllDlls</TargetsForTfmSpecificBuildOutput>
-    <Nuspecfile>FSharp.Data.Npgsql.nuspec</Nuspecfile>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
@@ -21,33 +21,22 @@
     <Compile Include="Utils.fs" />
     <Compile Include="ISqlCommand.fs" />
     <Compile Include="DesignTime.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="FSharp.Data.Npgsql.nuspec" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.5.0" />
-    <PackageReference Include="Npgsql" Version="4.1.3" />
-    <PackageReference Include="System.ValueTuple" Version="4.5.0" />
-    <PackageReference Include="Npgsql.LegacyPostgis" Version="4.1.3" />
+    <Content Include="paket.template" />
+    <Content Include="paket.references" />
   </ItemGroup>
   <Target Name="BeforeBuild">
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netcoreapp2.0" />
-    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=net461" />
+    <MSBuild Projects="..\DesignTime\DesignTime.fsproj" Targets="Build" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0" />
   </Target>
   <Target Name="AfterBuild">
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.dll;..\DesignTime\bin\$(Configuration)\netcoreapp2.0\*.pdb">
+    <CreateItem Include="..\DesignTime\bin\$(Configuration)\netstandard2.0\*.dll;..\DesignTime\bin\$(Configuration)\netstandard2.0\*.pdb">
       <Output TaskParameter="Include" ItemName="DesignTimeBinaries1" />
     </CreateItem>
-    <CreateItem Include="..\DesignTime\bin\$(Configuration)\net461\*.dll;..\DesignTime\bin\$(Configuration)\net461\*.pdb">
-      <Output TaskParameter="Include" ItemName="DesignTimeBinaries2" />
-    </CreateItem>
-    <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netcoreapp2.0" />
-    <Copy SourceFiles="@(DesignTimeBinaries2)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/net461" />
+    <Copy SourceFiles="@(DesignTimeBinaries1)" DestinationFolder="$(OutputPath)/../typeproviders/fsharp41/netstandard2.0" />
   </Target>
   <Target Name="IncludeAllDlls">
     <ItemGroup>
       <BuildOutputInPackage Include="$(OutputPath)\*.dll" Exclude="$(OutputPath)\$(AssemblyName).dll" />
     </ItemGroup>
   </Target>
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
