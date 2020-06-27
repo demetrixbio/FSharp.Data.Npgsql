@@ -48,3 +48,7 @@
 ### 0.2.9-beta - May 30th, 2020
 * Fix postgis params issue by @swoorup
 * Generated column support for DataTable api
+
+### 0.2.10-beta - Jun 26th, 2020
+* #93 - @sandeepc24 fix for geometry column
+
