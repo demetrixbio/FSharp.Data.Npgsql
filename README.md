@@ -498,3 +498,17 @@ From the repo root folder
 - docker run -d -p 32768:5432 --name dvdrental pg_dvdrental
 - dotnet test .\tests\
 
+## Releasing package
+
+(Notes to self)
+```
+cd src/Design
+dotnet build -c Release
+cd ../Runtime
+dotnet build -c Release
+vi paket.template 
+bump version number
+paket pack
+paket push FSharp.Data.Npgsql.<versionNumber>.nupkg --api-key <insert api key>
+```
+
