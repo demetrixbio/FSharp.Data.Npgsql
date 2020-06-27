@@ -147,8 +147,9 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             let maybeEnum = expectedType = typeof<string> && actualType = typeof<obj>
             let maybeArray = (expectedType = typeof<Array> || expectedType.IsArray) && (actualType = typeof<Array> || actualType.IsArray)
             let typeless = expectedType = typeof<obj> && actualType = typeof<string>
-            if (expectedName <> "" && actualName <> expectedName) 
-                || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless)
+            let isGeometry = actualType = typeof<NetTopologySuite.Geometries.Geometry>
+            if (expectedName <> "" && actualName <> expectedName)
+                || (actualType <> expectedType && not (maybeArray || maybeEnum) && not typeless && not isGeometry)
             then 
                 let message = sprintf """Expected column "%s" of type "%A" at position %i (0-based indexing) but received column "%s" of type "%A".""" expectedName expectedType i actualName actualType
                 cursor.Close()
