@@ -1,6 +1,6 @@
 type project
 id FSharp.Data.Npgsql
-version 0.2.9-beta
+version 0.2.10-beta
 authors Demetrix; Dmitry Morozov
 owners Demetrix; Dmitry Morozov
 licenseUrl https://github.com/demetrixbio/FSharp.Data.Npgsql/blob/master/LICENSE
