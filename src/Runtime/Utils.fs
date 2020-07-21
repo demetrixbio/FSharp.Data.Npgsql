@@ -4,6 +4,7 @@ open System
 open System.Data
 open System.Data.Common
 open System.Runtime.CompilerServices
+open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
 
@@ -11,28 +12,30 @@ open Npgsql
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
-    static member private StatementIndexGetter =
+    static let optionCtorCache =
+        ConcurrentDictionary<Type, obj -> bool -> obj> ()
+
+    static let statementIndexGetter =
         typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member GetStatementIndex(cursor: DbDataReader) =
-        Utils.StatementIndexGetter.Invoke(cursor, null) :?> int
+        statementIndexGetter.Invoke(cursor, null) :?> int
 
     static member private CreateOptionType typeParam =
         typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
     
-    static member private MakeOptionValue typeParam v isSome =
-        let optionType = Utils.CreateOptionType typeParam
-        let cases = FSharp.Reflection.FSharpType.GetUnionCases(optionType)
-        let cases = cases |> Array.partition (fun x -> x.Name = "Some")
-        let someCase = fst cases |> Array.exactlyOne
-        let noneCase = snd cases |> Array.exactlyOne
-        let relevantCase, args =
-            match isSome with
-            | true -> someCase, [| v |]
-            | false -> noneCase, [| |]
-        FSharp.Reflection.FSharpValue.MakeUnion(relevantCase, args)
+    static member private MakeOptionValue (typeParam: Type) v isSome =
+        match optionCtorCache.TryGetValue typeParam with
+        | true, ctor ->
+            ctor v isSome
+        | _ ->
+            let cases =  Utils.CreateOptionType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
+            let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
+            let noneCtor = snd cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
+
+            optionCtorCache.GetOrAdd (typeParam, fun v isSome -> if isSome then someCtor [| v |] else noneCtor [| |]) v isSome
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
