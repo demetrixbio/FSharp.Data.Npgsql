@@ -1,7 +1,7 @@
 FROM postgis/postgis:12-master
 
 #ENV POSTGRES_DB dvdrental
-ENV POSTGRES_PASSWORD postgres
+ENV POSTGRES_PASSWORD Administrator1
 
 COPY ./dvdrental.tar /var/lib/postgresql/backup/dvdrental.tar
 COPY ./restore_dvdrental.sh /docker-entrypoint-initdb.d/restore_dvdrental.sh
