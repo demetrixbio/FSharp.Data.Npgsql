@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
-docker ps -a
+docker logs tests_db_1
 dotnet test Tests.sln
