@@ -97,7 +97,7 @@ type Utils private() =
 
         for column in table.Columns do column.ExtendedProperties.Remove("ClrType.PartiallyQualifiedName")
         
-        use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = int batchSize, ContinueUpdateOnError = continueUpdateOnError)
+        use dataAdapter = new BatchDataAdapter(selectCommand, batchTimeout, UpdateBatchSize = batchSize, ContinueUpdateOnError = continueUpdateOnError)
         use commandBuilder = new CommandBuilder(table, DataAdapter = dataAdapter, ConflictOption = conflictOption)
 
         use __ = dataAdapter.RowUpdating.Subscribe(fun args ->
