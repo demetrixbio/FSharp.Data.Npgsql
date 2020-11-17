@@ -81,7 +81,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         | ResultType.Records | ResultType.Tuples ->
             match cfg.ResultSets with
             | [| resultSet |] ->
-                if isNull resultSet.SeqItemTypeName (*|| isNull (box resultSet.Row2ItemMapping)*) then
+                if isNull resultSet.SeqItemTypeName then
                     ``ISqlCommand Implementation``.ExecuteNonQuery >> box, 
                     ``ISqlCommand Implementation``.AsyncExecuteNonQuery >> box
                 else

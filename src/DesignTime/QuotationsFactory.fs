@@ -58,11 +58,6 @@ type internal QuotationsFactory private() =
 
     static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
 
-    [<Literal>] 
-    static let reuseDesignTimeConnectionString = "reuse design-time connection string"
-    [<Literal>]
-    static let prohibitDesignTimeConnStrReUse = "Design-time connection string re-use allowed at run-time only when executed inside FSI."
-
     static let getValueAtIndex = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod(typeof<obj>)
 
     static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(getValueAtIndex, [ arrayExpr; Expr.Value index ])
@@ -87,7 +82,7 @@ type internal QuotationsFactory private() =
         <@@ 
             let x = NpgsqlParameter(name, dbType, Direction = %%Expr.Value p.Direction)
 
-            if not isFixedLength then x.Size <- %%Expr.Value p.Size 
+            if not isFixedLength then x.Size <- %%Expr.Value p.MaxLength 
 
             x.Precision <- %%Expr.Value p.Precision
             x.Scale <- %%Expr.Value p.Scale
@@ -139,11 +134,10 @@ type internal QuotationsFactory private() =
                         let t = param.DataType.ClrType
 
                         if t.IsArray
-                        then Expr.Value(Array.CreateInstance(t.GetElementType(), param.Size))
+                        then Expr.Value(Array.CreateInstance(t.GetElementType(), param.MaxLength))
                         else Expr.Value(Activator.CreateInstance(t), t)
 
-                <@@ (%%Expr.Value(param.Name) : string), %%Expr.Coerce(value, typeof<obj>) @@>
-            )
+                Expr.NewTuple [ Expr.Value param.Name; Expr.Coerce (value, typeof<obj>) ])
 
         let invokeCode exprArgs =
             let methodInfo = typeof<ISqlCommand>.GetMethod(name)
@@ -151,7 +145,7 @@ type internal QuotationsFactory private() =
             let paramValues = Expr.NewArray( typeof<string * obj>, elements = vals)
             if not hasOutputParameters
             then 
-                Expr.Call( Expr.Coerce( exprArgs.[0], erasedType), methodInfo, [ paramValues ])    
+                Expr.Call(Expr.Coerce(exprArgs.[0], erasedType), methodInfo, [ paramValues ])    
             else
                 let mapOutParamValues = 
                     let arr = Var("parameters", typeof<(string * obj)[]>)
@@ -247,7 +241,7 @@ type internal QuotationsFactory private() =
         columns 
         |> List.mapi(fun i col ->
 
-            if col.Name = "" then failwithf "Column #%i doesn't have name. Only columns with names accepted. Use explicit alias." (i + 1)
+            if col.Name = "" then failwithf "Column #%i doesn't have a name. Please use an explicit alias." (i + 1)
 
             let propertyType = col.MakeProvidedType(customTypes)
 
@@ -268,9 +262,7 @@ type internal QuotationsFactory private() =
             typeName, 
             dataRowType: ProvidedTypeDefinition,
             customTypes: Map<string, ProvidedTypeDefinition>,
-            outputColumns: Column list, 
-            allowDesignTimeConnectionStringReUse: bool,
-            designTimeConnectionString: string
+            outputColumns: Column list
         ) =
 
         let tableType = ProvidedTypeDefinition(typeName, Some( ProvidedTypeBuilder.MakeGenericType(typedefof<_ DataTable>, [ dataRowType ])))
@@ -372,26 +364,15 @@ type internal QuotationsFactory private() =
                 ProvidedParameter("batchTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
-            let connectionStringDefault = if string designTimeConnectionString <> "" then Some(box reuseDesignTimeConnectionString) else None
-
             tableType.AddMembers [
 
                 ProvidedMethod(
                     "Update", 
-                    ProvidedParameter("connectionString", typeof<string>, ?optionalValue = connectionStringDefault) :: commonParams, 
+                    ProvidedParameter("connectionString", typeof<string>) :: commonParams, 
                     typeof<int>,
                     fun (Arg6(table, connectionString, batchSize, continueUpdateOnError, conflictOption, batchTimeout)) -> 
                         <@@ 
-                            let runTimeConnectionString = 
-                                if %%connectionString = reuseDesignTimeConnectionString
-                                then 
-                                    if allowDesignTimeConnectionStringReUse 
-                                    then designTimeConnectionString
-                                    else failwith prohibitDesignTimeConnStrReUse
-                                else
-                                    %%connectionString
-
-                            let conn = new NpgsqlConnection(runTimeConnectionString)
+                            let conn = new NpgsqlConnection(%%connectionString)
                             Utils.UpdateDataTable(%%table, conn, null, %%batchSize, %%continueUpdateOnError, %%conflictOption, %%batchTimeout)
                         @@>
                 )
@@ -413,7 +394,7 @@ type internal QuotationsFactory private() =
         tableType
 
     static member internal GetOutputTypes(outputColumns, customTypes: Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior,
-                                          hasOutputParameters, allowDesignTimeConnectionStringReUse, designTimeConnectionString, typeNameSuffix, providedTypeReuse) =    
+                                          typeNameSuffix, providedTypeReuse) =    
          
         if resultType = ResultType.DataReader
         then 
@@ -429,10 +410,7 @@ type internal QuotationsFactory private() =
                     "Table" + typeNameSuffix, 
                     dataRowType,
                     customTypes,
-                    outputColumns, 
-                    allowDesignTimeConnectionStringReUse,
-                    designTimeConnectionString
-                )
+                    outputColumns)
 
             dataTableType.AddMember dataRowType
 
@@ -510,8 +488,6 @@ type internal QuotationsFactory private() =
         (
             cmdProvidedType: ProvidedTypeDefinition, 
             designTimeConfig, 
-            allowDesignTimeConnectionStringReUse: bool,            
-            ?connectionString: string, 
             ?factoryMethodName
         ) = 
 
@@ -519,28 +495,12 @@ type internal QuotationsFactory private() =
             let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
 
             let parameters1 = [ 
-                ProvidedParameter(
-                    "connectionString", 
-                    typeof<string>, 
-                    ?optionalValue = (connectionString |> Option.map (fun _ -> box reuseDesignTimeConnectionString))
-                ) 
+                ProvidedParameter("connectionString", typeof<string>) 
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
             ]
 
             let body1 (args: _ list) = 
-                let designTimeConnectionString = defaultArg connectionString ""
-                let runTimeConnectionString = 
-                    <@@
-                        if %%args.Head = reuseDesignTimeConnectionString
-                        then 
-                            if allowDesignTimeConnectionStringReUse 
-                            then designTimeConnectionString
-                            else failwith prohibitDesignTimeConnStrReUse
-                        else
-                            %%args.Head
-                    @@>
-
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%runTimeConnectionString @@> :: args.Tail)
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%args.Head @@> :: args.Tail)
 
             yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
             

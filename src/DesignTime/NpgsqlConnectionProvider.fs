@@ -14,7 +14,7 @@ open InformationSchema
 let methodsCache = Cache<ProvidedMethod>()
 
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes : Map<string, ProvidedTypeDefinition>,
-                           dbSchemaLookups : DbSchemaLookups, fsx, isHostedExecution, globalXCtor, globalPrepare, providedTypeReuse) = 
+                           dbSchemaLookups : DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse) = 
         
     let staticParams = 
         [
@@ -27,7 +27,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             yield ProvidedStaticParameter("Prepare", typeof<bool>, globalPrepare)   
         ]
 
-    let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
+    let m = ProvidedMethod("CreateCommand", [ ProvidedParameter ("connectionString", typeof<string>) ], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
         methodsCache.GetOrAdd(
             methodName,
@@ -53,10 +53,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             cs,
                             customTypes,
                             resultType, 
-                            commandBehaviour, 
-                            hasOutputParameters = false, 
-                            allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                            designTimeConnectionString = (if fsx then connectionString else null),
+                            commandBehaviour,
                             typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
                             providedTypeReuse = providedTypeReuse))
 
@@ -93,8 +90,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     QuotationsFactory.GetCommandCtors(
                         cmdProvidedType, 
                         designTimeConfig, 
-                        allowDesignTimeConnectionStringReUse = (isHostedExecution && fsx),
-                        ?connectionString  = (if fsx then Some connectionString else None), 
                         factoryMethodName = methodName
                     )
                 assert (ctorsAndFactories.Length = 4)
@@ -104,7 +99,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
     ))
     rootType.AddMember m
 
-let createTableTypes(connectionString: string, customTypes : Map<string, ProvidedTypeDefinition>, item: DbSchemaLookupItem, fsx, isHostedExecution) = 
+let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: DbSchemaLookupItem) = 
     let tables = ProvidedTypeDefinition("Tables", Some typeof<obj>)
     tables.AddMembersDelayed <| fun() ->
         
@@ -119,12 +114,10 @@ let createTableTypes(connectionString: string, customTypes : Map<string, Provide
             //type data table
             let dataTableType = 
                 QuotationsFactory.GetDataTableType(
-                    tableName, 
+                    tableName,
                     dataRowType,
                     customTypes,
-                    columns, 
-                    isHostedExecution && fsx,
-                    designTimeConnectionString = (if fsx then connectionString else null)
+                    columns
                 )
 
             dataTableType.AddMember dataRowType
@@ -159,7 +152,7 @@ let createTableTypes(connectionString: string, customTypes : Map<string, Provide
                     ProvidedMethod(
                         "BinaryImport", 
                         [ ProvidedParameter("connection", typeof<NpgsqlConnection> ) ],
-                        typeof<Void>,
+                        typeof<uint64>,
                         invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
                     )
                 dataTableType.AddMember binaryImport
@@ -172,12 +165,11 @@ let createTableTypes(connectionString: string, customTypes : Map<string, Provide
 
 let createRootType
     ( 
-        assembly, nameSpace: string, typeName, isHostedExecution, resolutionFolder, schemaCache: Cache<DbSchemaLookups>,
-        connectionStringOrName, configType, config, xctor, fsx, prepare, reuseProvidedTypes, cache
+        assembly, nameSpace: string, typeName, schemaCache: Cache<DbSchemaLookups>,
+        connectionString, xctor, prepare, reuseProvidedTypes, cache
     ) =
 
-    if String.IsNullOrWhiteSpace connectionStringOrName then invalidArg "Connection" "Value is empty!" 
-    let connectionString = Configuration.readConnectionString(connectionStringOrName, configType, config, resolutionFolder)
+    if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
 
@@ -206,16 +198,16 @@ let createRootType
         
     for schemaType in dbSchemas do
         schemaType.AddMemberDelayed <| fun () ->
-            createTableTypes(connectionString, customTypes, schemaLookups.Schemas.[schemaType.Name], fsx, isHostedExecution)
+            createTableTypes(customTypes, schemaLookups.Schemas.[schemaType.Name])
 
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
     let providedTypeReuse = if reuseProvidedTypes then WithCache cache else NoReuse
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, fsx, isHostedExecution, xctor, prepare, providedTypeReuse)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse)
 
     databaseRootType           
 
-let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionFolder, cache: Cache<ProvidedTypeDefinition>, schemaCache : Cache<DbSchemaLookups>) = 
+let internal getProviderType(assembly, nameSpace, cache: Cache<ProvidedTypeDefinition>, schemaCache : Cache<DbSchemaLookups>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -223,10 +215,7 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
         providerType.DefineStaticParameters(
             parameters = [ 
                 ProvidedStaticParameter("Connection", typeof<string>) 
-                ProvidedStaticParameter("ConfigType", typeof<ConfigType>, ConfigType.JsonFile) 
-                ProvidedStaticParameter("Config", typeof<string>, "") 
                 ProvidedStaticParameter("XCtor", typeof<bool>, false) 
-                ProvidedStaticParameter("Fsx", typeof<bool>, false) 
                 ProvidedStaticParameter("Prepare", typeof<bool>, false)
                 ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
             ],
@@ -235,8 +224,8 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
                     typeName,
                     lazy
                         createRootType(
-                            assembly, nameSpace, typeName, isHostedExecution, resolutionFolder, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], cache
+                            assembly, nameSpace, typeName, schemaCache,
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], cache
                         )
                 )   
             ) 
@@ -245,9 +234,6 @@ let internal getProviderType(assembly, nameSpace, isHostedExecution, resolutionF
         providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
 <param name='Connection'>String used to open a Postgresql database or the name of the connection string in the configuration file in the form of “name=&lt;connection string name&gt;”.</param>
-<param name='Fsx'>Re-use design time connection string for the type provider instantiation from *.fsx files.</param>
-<param name='ConfigType'>JsonFile, Environment or UserStore. Default is JsonFile.</param>
-<param name='Config'>JSON configuration file with connection string information. Matches 'Connection' parameter as name in 'ConnectionStrings' section.</param>
 <param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
 <param name='ReuseProvidedTypes'>Reuse the return type for commands that select data of identical shape. Please see the readme for details.</param>
 """

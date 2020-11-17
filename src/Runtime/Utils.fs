@@ -13,7 +13,7 @@ open Npgsql
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
     static let optionCtorCache =
-        ConcurrentDictionary<Type, obj -> bool -> obj> ()
+        ConcurrentDictionary<Type, obj -> obj> ()
 
     static let statementIndexGetter =
         typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
@@ -26,20 +26,21 @@ type Utils private() =
     static member private CreateOptionType typeParam =
         typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
     
-    static member private MakeOptionValue (typeParam: Type) v isSome =
+    static member private MakeOptionValue (typeParam: Type) v =
         match optionCtorCache.TryGetValue typeParam with
         | true, ctor ->
-            ctor v isSome
+            ctor v
         | _ ->
             let cases =  Utils.CreateOptionType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
             let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
             let noneCtor = snd cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
+            let noneValue = noneCtor [| |]
 
-            optionCtorCache.GetOrAdd (typeParam, fun v isSome -> if isSome then someCtor [| v |] else noneCtor [| |]) v isSome
+            optionCtorCache.GetOrAdd (typeParam, fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]) v
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet : ResultSetDefinition, isTypeReuseEnabled) =
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet: ResultSetDefinition, isTypeReuseEnabled) =
         let rowMapping =
             if resultSet.ExpectedColumns.Length = 1 then
                 Array.item 0
@@ -66,12 +67,11 @@ type Utils private() =
                 columns
                 |> Array.map (fun (i, column) ->
                     let obj = values.[i]
-                    let isNullable = column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] |> unbox<bool>
-                    if isNullable then
-                        let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] |> unbox<string>
+
+                    if column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] :?> bool then
+                        let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] :?> string
                         let dataType = Type.GetType(dataTypeName, throwOnError = true)
-                        let isSome = Convert.IsDBNull(obj) |> not
-                        Utils.MakeOptionValue dataType obj isSome
+                        Utils.MakeOptionValue dataType obj
                     else
                         obj)
                 |> rowMapping

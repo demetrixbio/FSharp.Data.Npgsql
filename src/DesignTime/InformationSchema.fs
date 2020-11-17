@@ -16,7 +16,7 @@ open ProviderImplementation.ProvidedTypes
 open System.Collections
 open System.Net
 
-type internal NpgsqlDataReader with
+type internal DbDataReader with
 
     member cursor.GetValueOrDefault(name: string, defaultValue) =    
         let i = cursor.GetOrdinal(name)
@@ -253,12 +253,6 @@ type Parameter =
       Scale : byte
       Optional: bool
       DataType: DataType }
-    with
-   
-    member this.Size = this.MaxLength
-        //match this.TypeInfo.DbType with
-        //| DbType.NChar | SqlDbType.NText | SqlDbType.NVarChar -> this.MaxLength / 2
-        //| _ -> this.MaxLength
 
 let inline openConnection connectionString =  
     let conn = new NpgsqlConnection(connectionString)
@@ -386,9 +380,7 @@ let getDbSchemaLookups(connectionString) =
                 yield schema, name, { Schema = schema; Name = name; Values = values }
         ]
         |> Seq.groupBy (fun (schema, _, _) -> schema)
-        |> Seq.map (fun (schema, types) ->
-            schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq
-        )
+        |> Seq.map (fun (schema, types) -> schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq)
         |> Map.ofSeq
     
     //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382

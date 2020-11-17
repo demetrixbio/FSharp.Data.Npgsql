@@ -16,14 +16,8 @@ type ResultType =
     ///<summary>raw DataReader</summary>
     | DataReader = 3
 
-type ConfigType =
-    | JsonFile = 1
-    | Environment = 2
-    | UserStore = 3
-    
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ResultSetDefinition = {
-    //Row2ItemMapping: obj[] -> obj
     SeqItemTypeName: string
     ExpectedColumns: DataColumn[]
 }

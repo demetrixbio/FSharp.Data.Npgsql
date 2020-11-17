@@ -2,33 +2,62 @@ module NpgsqlConnectionTests
 
 open System
 open Xunit
-open Microsoft.Extensions.Configuration
 open FSharp.Data.Npgsql
-open NpgsqlCmdTests
+open System.Reflection
+
+let isStatementPrepared (connection: Npgsql.NpgsqlConnection) =
+    let pool = typeof<Npgsql.NpgsqlConnection>.GetProperty("Pool", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connection)
+    let connectors = pool.GetType().GetField("_connectors", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(pool) :?> obj[]
+    let connector = connectors.[0]
+    let psManager = connector.GetType().GetField("PreparedStatementManager", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connector)
+    let preparedStatements = psManager.GetType().GetProperty("BySql", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(psManager)
+    preparedStatements.GetType().GetProperty("Count", BindingFlags.Public ||| BindingFlags.Instance).GetMethod.Invoke(preparedStatements, [||]) :?> int = 1
 
 [<Literal>]
-let config = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
+let selectFromPartitionedTable = "select * from logs where log_time between '2019-01-01' and '2019-12-31'"
 
 [<Literal>]
-let connectionStringName ="dvdRental"
+let selectFromSpecificPartition = "select * from logs_2019 where log_time between '2019-01-01' and '2019-12-31'"
 
-let dvdRentalRuntime = lazy ConfigurationBuilder().AddJsonFile(config).Build().GetConnectionString(connectionStringName)
+[<Literal>]
+let selectFromMaterializedView = "select some_data, title from long_films"
+
+[<Literal>]
+let getActorsAndFilms = "select * from actor limit 5; select * from film limit 5"
+
+[<Literal>]
+let getActorsUpdateActorsGetFilms = "select * from actor limit 5; update actor set actor_id = 1 where actor_id = 1; select * from film limit 5"
+
+[<Literal>]
+let fourSelects = "SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10); SELECT * FROM generate_series(1, 10)"
+
+[<Literal>]
+let updateActorsUpdateSelectActorsUpdateFilms = "update actor set actor_id = actor_id where actor_id in (2, 3); select * from actor limit 5; update film set film_id = 1 where film_id = 1"
+
+[<Literal>]
+let getActorByName = "
+    SELECT first_name, last_name
+    FROM public.actor 
+    WHERE first_name = @firstName AND last_name = @lastName "
+
+[<Literal>]
+let connectionString = "Host=localhost;Username=postgres;Password=Administrator1;Database=dvdrental;Port=5432"
 
 let openConnection() = 
-    let conn = new Npgsql.NpgsqlConnection(dvdRentalRuntime.Value)
+    let conn = new Npgsql.NpgsqlConnection(connectionString)
     conn.Open()
     conn
 
-type DvdRental = NpgsqlConnection<connectionStringName, Config = config>
+type DvdRental = NpgsqlConnection<connectionString>
 
-type DvdRentalWithTypeReuse = NpgsqlConnection<connectionStringName, Config = config, ReuseProvidedTypes = true>
+type DvdRentalWithTypeReuse = NpgsqlConnection<connectionString, ReuseProvidedTypes = true>
 
 [<Fact>]
 let selectLiterals() =
-    use cmd = 
+    use cmd =
         DvdRental.CreateCommand<"        
             SELECT 42 AS Answer, current_date as today 
-        ">(dvdRentalRuntime.Value)
+        ">(connectionString)
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
@@ -40,7 +69,7 @@ let selectSingleRow() =
     // CURRENT_TIME and CURRENT_TIMESTAMP deliver values with time zone
     use cmd = DvdRental.CreateCommand<"        
         SELECT 42 AS Answer, current_date as today
-    ", SingleRow = true>(dvdRentalRuntime.Value)
+    ", SingleRow = true>(connectionString)
 
     Assert.Equal(
         Some( Some 42, Some DateTime.Now.Date), 
@@ -48,24 +77,13 @@ let selectSingleRow() =
     )
 
 [<Fact>]
-let selectTuple() =
-    use cmd = DvdRental.CreateCommand<"    
-        SELECT 42 AS Answer, current_date as today
-    ", ResultType.Tuples>(dvdRentalRuntime.Value)
-
-    Assert.Equal<_ list>(
-        [ Some 42, Some DateTime.Now.Date ],
-        cmd.Execute() |>  Seq.toList
-    )
-
-[<Fact>]
 let selectSingleNull() =
-    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(dvdRentalRuntime.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(connectionString)
     Assert.Equal(Some None, cmd.Execute())
 
 [<Fact>]
 let selectSingleColumn() =
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(dvdRentalRuntime.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)">(connectionString)
 
     Assert.Equal<_ seq>(
         { 0 .. 10 }, 
@@ -77,7 +95,7 @@ let paramInFilter() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) AS xs(value) WHERE value % @div = 0
-        ">(dvdRentalRuntime.Value)
+        ">(connectionString)
 
     Assert.Equal<_ seq>(
         { 0 .. 2 .. 10 }, 
@@ -89,7 +107,7 @@ let paramInLimit() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM generate_series(0, 10) LIMIT @limit
-        ">(dvdRentalRuntime.Value)
+        ">(connectionString)
 
     let limit = 5
     Assert.Equal<_ seq>(
@@ -108,7 +126,7 @@ let dateTableWithUpdate() =
     use cmd = 
         DvdRental.CreateCommand<"
             SELECT * FROM rental WHERE rental_id = @rental_id
-        ", ResultType.DataTable>(dvdRentalRuntime.Value) 
+        ", ResultType.DataTable>(connectionString) 
         
     let t = cmd.Execute(rental_id)
     Assert.Equal(1, t.Rows.Count)
@@ -118,17 +136,17 @@ let dateTableWithUpdate() =
     try
         let new_return_date = Some DateTime.Now.Date
         r.return_date <- new_return_date
-        rowsAffected := t.Update(dvdRentalRuntime.Value)
+        rowsAffected := t.Update(connectionString)
         Assert.Equal(1, !rowsAffected)
 
-        use cmd = DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value)
+        use cmd = DvdRental.CreateCommand<getRentalById>(connectionString)
         Assert.Equal( new_return_date, cmd.Execute( rental_id) |> Seq.exactlyOne ) 
 
     finally
         if !rowsAffected = 1
         then 
             r.return_date <- return_date
-            t.Update(dvdRentalRuntime.Value) |>  ignore      
+            t.Update(connectionString) |>  ignore      
             
 [<Fact>]
 let dateTableWithUpdateAndTx() =
@@ -159,7 +177,7 @@ let dateTableWithUpdateAndTx() =
 
     Assert.Equal(
         return_date, 
-        DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value).Execute( rental_id) |> Seq.exactlyOne
+        DvdRental.CreateCommand<getRentalById>(connectionString).Execute( rental_id) |> Seq.exactlyOne
     ) 
 
 [<Fact>]
@@ -195,7 +213,7 @@ let dateTableWithUpdateWithConflictOptionCompareAllSearchableValues() =
 let deleteWithTx() =
     let rental_id = 2
 
-    use cmd = DvdRental.CreateCommand<getRentalById>(dvdRentalRuntime.Value)
+    use cmd = DvdRental.CreateCommand<getRentalById>(connectionString)
     Assert.Equal(1, cmd.Execute( rental_id) |> Seq.length) 
 
     do 
@@ -214,14 +232,14 @@ let deleteWithTx() =
     
 [<Fact>]
 let ``Select from partitioned table``() =
-    use cmd = DvdRental.CreateCommand<selectFromPartitionedTable>(dvdRental)
+    use cmd = DvdRental.CreateCommand<selectFromPartitionedTable>(connectionString)
     let actual = cmd.Execute()
     Assert.Equal(2, actual.Length)
     Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
 
 [<Fact>]
 let ``Select from specific partition``() =
-    use cmd = DvdRental.CreateCommand<selectFromSpecificPartition>(dvdRental)
+    use cmd = DvdRental.CreateCommand<selectFromSpecificPartition>(connectionString)
     let actual = cmd.Execute()
     Assert.Equal(2, actual.Length)
     Assert.Equal<int[]>([|1;2;3|], actual.Head.some_data)
@@ -237,7 +255,7 @@ let selectEnum() =
             SELECT * 
             FROM UNNEST( enum_range(NULL::mpaa_rating)) AS X 
             WHERE X <> @exclude;          
-        ">(dvdRentalRuntime.Value)
+        ">(connectionString)
     Assert.Equal<_ list>(
         [ Rating.G; Rating.PG; Rating.R; Rating.``NC-17`` ],
         [ for x in cmd.Execute(exclude = Rating.``PG-13``) -> x.Value ]
@@ -247,7 +265,7 @@ let selectEnum() =
 let selectEnumWithArray() =
     use cmd = DvdRental.CreateCommand<"
         SELECT COUNT(*)  FROM film WHERE ARRAY[rating] <@ @xs::text[]::mpaa_rating[];
-    ", SingleRow = true>(dvdRentalRuntime.Value)
+    ", SingleRow = true>(connectionString)
 
     Assert.Equal( Some( Some 223L), cmd.Execute([| "PG-13" |])) 
 
@@ -256,7 +274,7 @@ let allParametersOptional() =
     let cmd = 
         DvdRental.CreateCommand<"
             SELECT coalesce(@x, 'Empty') AS x
-        ", AllParametersOptional = true, SingleRow = true>(dvdRentalRuntime.Value)
+        ", AllParametersOptional = true, SingleRow = true>(connectionString)
     Assert.Equal(Some( Some "test"), cmd.Execute(Some "test")) 
     Assert.Equal(Some( Some "Empty"), cmd.Execute()) 
 
@@ -265,7 +283,7 @@ let tableInsert() =
     
     let rental_id = 2
     
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRentalRuntime.Value)  
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(connectionString)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
     use conn = openConnection()
@@ -301,7 +319,7 @@ let tableInsertViaAddRow() =
     
     let rental_id = 2
     
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(dvdRentalRuntime.Value)  
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM rental WHERE rental_id = @rental_id", SingleRow = true>(connectionString)  
     let x = cmd.AsyncExecute(rental_id) |> Async.RunSynchronously |> Option.get
         
     use conn = openConnection()
@@ -335,7 +353,7 @@ let tableInsertViaAddRow() =
   
 [<Fact>]
 let selectEnumWithArray2() =
-    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(dvdRentalRuntime.Value)
+    use cmd = DvdRental.CreateCommand<"SELECT @ratings::mpaa_rating[];", SingleRow = true>(connectionString)
 
     let ratings = [| 
         DvdRental.``public``.Types.mpaa_rating.``PG-13``
@@ -347,36 +365,23 @@ let selectEnumWithArray2() =
 [<Fact>]
 let selectLiteralsWithConnObject() =
     use cmd = 
-        DvdRental.CreateCommand<"SELECT 42 AS Answer, current_date as today", XCtor = true>( Connection.get())
+        DvdRental.CreateCommand<"SELECT 42 AS Answer, current_date as today", XCtor = true>(openConnection ())
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
     Assert.Equal(Some DateTime.Now.Date, x.today)
 
 
-type DvdRentalWithConn = NpgsqlConnection<NpgsqlCmdTests.dvdRental, XCtor = true>
+type DvdRentalWithConn = NpgsqlConnection<connectionString, XCtor = true>
 
 [<Fact>]
 let selectLiteralsWithConnObjectGlobalSet() =
     use cmd = 
-        DvdRentalWithConn.CreateCommand<"SELECT 42 AS Answer, current_date as today">( Connection.get())
+        DvdRentalWithConn.CreateCommand<"SELECT 42 AS Answer, current_date as today">(openConnection ())
 
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer) 
     Assert.Equal(Some DateTime.Now.Date, x.today)
-
-type DvdRentalForScripting = NpgsqlConnection<NpgsqlCmdTests.dvdRental, Fsx = true>
-
-[<Fact>]
-let fsx() =
-    let why = Assert.Throws<exn>(fun()  -> 
-        use cmd = DvdRentalForScripting.CreateCommand<"SELECT 42 AS Answer">()        
-        cmd.Execute() |> ignore
-    )
-    Assert.Equal(
-        "Design-time connection string re-use allowed at run-time only when executed inside FSI.",
-        why.Message
-    )
 
 [<Fact>]
 let ``AddRow/NewRow preserve order``() =
@@ -449,12 +454,13 @@ let binaryImport() =
             cmd.Execute() |> Option.flatten 
         
         actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
-        actors.BinaryImport(conn)
+        let importedCount = actors.BinaryImport(conn)
+        Assert.Equal(1UL, importedCount)
 
         use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true>(conn, tx)
         Assert.Equal(1, cmd.Execute(firstName, lastName) |> Seq.length)
     do 
-        use cmd = DvdRental.CreateCommand<getActorByName>(dvdRentalRuntime.Value)
+        use cmd = DvdRental.CreateCommand<getActorByName>(connectionString)
         Assert.Equal(0, cmd.Execute(firstName, lastName) |> Seq.length)
 
 [<Fact>]
@@ -468,8 +474,9 @@ let batchSize() =
     Assert.Equal(actors.Rows.Count, i)
 
     for row in actors.Rows do 
-        use cmd = DvdRental.CreateCommand<getActorByName, ResultType.Tuples, SingleRow = true, XCtor = true>(conn, tx)
-        Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
+        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true, XCtor = true>(conn, tx)
+        let res = cmd.Execute(row.first_name, row.last_name) |> Option.map (fun x -> x.first_name, x.last_name)
+        Assert.Equal(Some(row.first_name, row.last_name), res)
 
 [<Fact>]
 let batchSizeConflictOptionCompareAllSearchableValue() =
@@ -482,8 +489,9 @@ let batchSizeConflictOptionCompareAllSearchableValue() =
     Assert.Equal(actors.Rows.Count, i)
 
     for row in actors.Rows do 
-        use cmd = DvdRental.CreateCommand<getActorByName, ResultType.Tuples, SingleRow = true, XCtor = true>(conn, tx)
-        Assert.Equal(Some(row.first_name, row.last_name), cmd.Execute(row.first_name, row.last_name))
+        use cmd = DvdRental.CreateCommand<getActorByName, SingleRow = true, XCtor = true>(conn, tx)
+        let res = cmd.Execute(row.first_name, row.last_name) |> Option.map (fun x -> x.first_name, x.last_name)
+        Assert.Equal(Some(row.first_name, row.last_name), res)
 
 [<Fact>]
 let ``column "p1_00" does not exist``() =
@@ -522,14 +530,14 @@ let ``column "p1_00" does not exist``() =
 
 [<Fact>]
 let selectBytea() =
-    use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(connectionString)
     let actual = cmd.Execute().Value.Value
     let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
     Assert.Equal<byte>(expected, actual)
 
 [<Fact>]
 let ``Select from materialized view``() =
-    use cmd = DvdRental.CreateCommand<selectFromMaterializedView, SingleRow = true>(dvdRental)
+    use cmd = DvdRental.CreateCommand<selectFromMaterializedView, SingleRow = true>(connectionString)
     let actual = cmd.Execute().Value
     Assert.Equal<int[]>([|1;2;3|], actual.some_data.Value)
     Assert.True(String.IsNullOrWhiteSpace actual.title.Value |> not)
@@ -586,20 +594,20 @@ let ``Tuples command prepared``() =
 
 [<Fact>]
 let ``Two selects record``() =
-    use cmd = DvdRental.CreateCommand<getActorsAndFilms>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms>(connectionString)
     let actual = cmd.Execute()
     Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
     Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.title) |> List.length)
     
 [<Fact>]
 let ``Queries against system catalogs work``() =
-    use cmd = DvdRental.CreateCommand<"SELECT * FROM pg_timezone_names">(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM pg_timezone_names">(connectionString)
     let actual = cmd.Execute()
     Assert.True(actual |> List.map (fun x -> x.name.Value) |> List.length > 0)    
 
 [<Fact>]
 let ``Two selects tuple``() =
-    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.Tuples>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1 |> List.length)
@@ -607,7 +615,7 @@ let ``Two selects tuple``() =
 
 [<Fact>]
 let ``Two selects data table``() =
-    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataTable>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataTable>(connectionString)
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
@@ -615,7 +623,7 @@ let ``Two selects data table``() =
 
 [<Fact>]
 let ``Two selects data reader``() =
-    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataReader>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsAndFilms, ResultType = ResultType.DataReader>(connectionString)
     let actual = cmd.Execute()
 
     let mutable resultSets = 1
@@ -627,7 +635,7 @@ let ``Two selects data reader``() =
 
 [<Fact>]
 let ``Two selects and nonquery record``() =
-    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms>(connectionString)
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
@@ -636,7 +644,7 @@ let ``Two selects and nonquery record``() =
 
 [<Fact>]
 let ``Two selects and nonquery tuple``() =
-    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.Tuples>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1 |> List.length)
@@ -645,7 +653,7 @@ let ``Two selects and nonquery tuple``() =
 
 [<Fact>]
 let ``Two selects and nonquery data table``() =
-    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataTable>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataTable>(connectionString)
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
@@ -654,7 +662,7 @@ let ``Two selects and nonquery data table``() =
 
 [<Fact>]
 let ``Two selects and nonquery data reader``() =
-    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataReader>(dvdRental)
+    use cmd = DvdRental.CreateCommand<getActorsUpdateActorsGetFilms, ResultType = ResultType.DataReader>(connectionString)
     let actual = cmd.Execute()
 
     let mutable resultSets = 1
@@ -666,7 +674,7 @@ let ``Two selects and nonquery data reader``() =
 
 [<Fact>]
 let ``Four single-column selects async``() =
-    use cmd = DvdRental.CreateCommand<fourSelects>(dvdRental)
+    use cmd = DvdRental.CreateCommand<fourSelects>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
     Assert.Equal (10, actual.ResultSet1 |> Seq.map (fun x -> x.Value) |> Seq.length)
@@ -676,7 +684,7 @@ let ``Four single-column selects async``() =
 
 [<Fact>]
 let ``One select and two updates record async``() =
-    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms>(dvdRental)
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
     Assert.Equal (2, actual.ResultSet1)
@@ -685,7 +693,7 @@ let ``One select and two updates record async``() =
 
 [<Fact>]
 let ``One select and two updates tuple async``() =
-    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(dvdRental)
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
     Assert.Equal (2, actual.ResultSet1)
@@ -694,7 +702,7 @@ let ``One select and two updates tuple async``() =
 
 [<Fact>]
 let ``One select and two updates data table async``() =
-    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataTable>(dvdRental)
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataTable>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
     Assert.Equal (2, actual.ResultSet1)
@@ -703,7 +711,7 @@ let ``One select and two updates data table async``() =
 
 [<Fact>]
 let ``One select and two updates reader async``() =
-    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataReader>(dvdRental)
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataReader>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
     let mutable resultSets = 1
@@ -743,8 +751,8 @@ let ``Can instantiated reused type``() =
 
 [<Fact>]
 let ``Record type reused regardless of column order``() =
-    use cmd1 = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>(dvdRental)
-    use cmd2 = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film", SingleRow = true>(dvdRental)
+    use cmd1 = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>(connectionString)
+    use cmd2 = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film", SingleRow = true>(connectionString)
     let actual1 = cmd1.Execute().Value
     let actual2 = cmd2.Execute().Value
 
@@ -752,7 +760,7 @@ let ``Record type reused regardless of column order``() =
 
 [<Fact>]
 let ``Record type reused within a single command with multiple statements``() =
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film limit 1; select film_id, rating from film limit 1">(dvdRental)
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select rating, film_id from film limit 1; select film_id, rating from film limit 1">(connectionString)
     let res = cmd.Execute()
     let actual1 = res.ResultSet1.Head
     let actual2 = res.ResultSet2.Head
@@ -761,7 +769,7 @@ let ``Record type reused within a single command with multiple statements``() =
 
 [<Fact>]
 let ``Bytea is properly encoded in reused type name``() =
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(dvdRental)
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(connectionString)
     let actual = cmd.Execute().Value
     let expected = [|137uy; 80uy; 78uy; 71uy; 13uy; 10uy; 90uy; 10uy|]
 
@@ -772,7 +780,7 @@ let ``Bytea is properly encoded in reused type name``() =
 
 [<Fact>]
 let ``Record rows contain different values``() =
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff">(dvdRental)
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT staff_id, picture FROM public.staff">(connectionString)
     let actual = cmd.Execute()
 
     Assert.NotEqual (actual.[0].staff_id, actual.[1].staff_id)
@@ -780,12 +788,12 @@ let ``Record rows contain different values``() =
 [<Fact>]
 let ``Interval update works``() =
     let entryId = Guid.NewGuid()
-    use insertCommand = DvdRental.CreateCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}','22 hours')">(dvdRental)
+    use insertCommand = DvdRental.CreateCommand<"INSERT INTO public.logs (id, log_time, some_data, modified) VALUES (@id, now(), '{2}','22 hours')">(connectionString)
     insertCommand.Execute(entryId) |> ignore
 
 
     // Now select for update
-    use cmdLog = DvdRental.CreateCommand<"SELECT * FROM public.logs WHERE id = @entry_id", ResultType.DataTable>(dvdRental)
+    use cmdLog = DvdRental.CreateCommand<"SELECT * FROM public.logs WHERE id = @entry_id", ResultType.DataTable>(connectionString)
     let tblLog = cmdLog.Execute(entry_id = entryId)
     let logRow = tblLog.Rows.[0]
 
@@ -794,16 +802,16 @@ let ``Interval update works``() =
 
     logRow.modified <- newTimespan
 
-    let updatedRows = tblLog.Update(dvdRental)
+    let updatedRows = tblLog.Update(connectionString)
     Assert.Equal(1,updatedRows)
     
     // Now check one last time what row 2 is
-    use cmd = DvdRental.CreateCommand<"SELECT id, modified FROM public.logs WHERE id = @entry_id",SingleRow=true>(dvdRental)
+    use cmd = DvdRental.CreateCommand<"SELECT id, modified FROM public.logs WHERE id = @entry_id",SingleRow=true>(connectionString)
     let row = cmd.Execute(entry_id = entryId)
     let expectedTS = TimeSpan(1,9,0,0) // 33 hours
     Assert.Equal(expectedTS, row.Value.modified)
-    
-    use cleanupCommand = new NpgsqlCommand<"DELETE FROM public.logs WHERE id = @id", dvdRental>(dvdRental)
+
+    use cleanupCommand = DvdRental.CreateCommand<"DELETE FROM public.logs WHERE id = @id">(connectionString)
     cleanupCommand.Execute(entryId) |> ignore
 
 
@@ -812,6 +820,4 @@ let ``Insert does skip computed columns``() =
     use table = new DvdRental.``public``.Tables.table_with_computed_columns()
     let row = table.NewRow(operand_1 = 10, operand_2 = 20)
     table.Rows.Add(row)
-    table.Update(dvdRental) |> ignore
-    
-    
+    table.Update(connectionString) |> ignore

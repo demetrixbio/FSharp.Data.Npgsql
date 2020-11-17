@@ -1,10 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
+    <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="NpgsqlCmdTests.fs" />
     <Compile Include="NpgsqlConnectionTests.fs" />
+    <Compile Include="Program.fs" />
     <Content Include="development.settings.json" />
     <None Include="Dockerfile" />
     <None Include="restore_dvdrental.sh" />

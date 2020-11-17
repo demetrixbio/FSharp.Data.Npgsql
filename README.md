@@ -31,20 +31,6 @@ do
     for x in cmd.Execute() do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
-Alternatevly using inline ```NpgsqlCommand``` definition.
-```fsharp
-do
-    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
-    //...
-```
-Or using ```NpgsqlCommand``` with explicit type alias. `Create` factory method can be used in addition to traditional constructor. It mainly exists to work around [Intellisense deficiency]().
-
-```fsharp
-type BasicQuery = NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
-do 
-    use cmd = BasicQuery.Create(dvdRental)
-    //...
-```
 
 ## Parameterized query
 
@@ -55,15 +41,6 @@ do
     let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
     printfn "Movies longer than %A:\n%A" longerThan xs
 ```
-```NpgsqlCommand``` version:
-```fsharp
-do
-    use cmd = new NpgsqlCommand<"SELECT title FROM public.film WHERE length > @longer_than", dvdRental>(dvdRental)
-    let longerThan = System.TimeSpan.FromHours(3.)
-    cmd.Execute(longer_than = int16 longerThan.TotalMinutes)
-    |> Seq.toList 
-    |> printfn "Movies longer than %A:\n%A" longerThan 
-```
 
 ## Retrieve singleton record
 Specify "SingleRow = true" to retrieve single row result. Command execution throws an exception if result set contains more than one row.
@@ -71,12 +48,6 @@ Specify "SingleRow = true" to retrieve single row result. Command execution thro
 ```fsharp
 do
     use cmd = DvdRental.CreateCommand<"SELECT current_date as today", SingleRow = true>(dvdRental)
-    cmd.Execute() |> printfn "Today is: %A"
-```
-
-```fsharp
-do 
-    use cmd = new NpgsqlCommand<"SELECT current_date as today", dvdRental, SingleRow = true>(dvdRental)
     cmd.Execute() |> printfn "Today is: %A"
 ```
 
@@ -95,7 +66,7 @@ There are 4 result types:
  - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
 is the only useful scenario. 
 
-## Reuse of provided records (NpgsqlConnection only)
+## Reuse of provided records
 
 By default, every `CreateCommand` generates a completely seperate type when using `ResultType.Record`. This can be annoying when you have similar queries that return the same data structurally and you cannot, for instance, use one function to map the results onto your domain model.
 `NpgsqlConnection` exposes the static parameter `ReuseProvidedTypes` to alleviate this issue. When set to true, all commands that return the same columns (**column names and types must match exactly**, while select order does not matter) end up sharing the same provided record type too.
@@ -124,23 +95,11 @@ let getFilmWithRatingById id =
     res |> Option.map mapFilm
 ```
 
-## NpgsqlConnection or NpgsqlCommand?
-
-It's recommended to use ```NpgsqlConnection``` type provider by default. ```NpgsqlCommand``` type provider exists mainly for flexibility.
-```NpgsqlConnection``` reduces design-time configuration bloat by having it all in one place. 
-
-But, but ... because ```NpgsqlConnection``` relies on fairly new F# compiler feature [statically parametrized TP methods](https://github.com/fsharp/fslang-design/blob/master/FSharp-4.0/StaticMethodArgumentsDesignAndSpec.md) Intellisense often fails. It  shows red squiggles even though code compiles just fine. Hopefully it will be fixed soon. Pick you poison: better code or better development experience. 
-
 ## Naming 
 
-Both type providers have local type names that collide with types from Npgsql library. I admit it's slightly controversial decision but naming is too important to be compromised on. I believe both names best communicate the intent. 
-If you'll end up having following error message :
-```
-...
-FS0033	The non-generic type 'Npgsql.NpgsqlCommand' does not expect any type arguments, but here is given 3 type argument(s)
-...
-```
-or
+The type provider's local type names collide with types from Npgsql library. I admit it's a slightly controversial decision but naming is too important to be compromised on. 
+If you end up having following error message:
+
 ```
 ...
 FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type arguments, but here is given 2 type argument(s)	
@@ -151,30 +110,20 @@ It means that types from Npgsql shadowed the type providers because ```open FSha
 
 There are several ways to work around the issue:
 
- - Use fully qualified names for type providers. For example:
+ - Use fully qualified names for the type provider. For example:
 
 ```fsharp
-type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<connectionStringName, Config = config>
-
-type BasicQuery = FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>
-//or
-do
-    use cmd = new FSharp.Data.Npgsql.NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
+type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<connectionString>
 ```
- 
-It's good solution for ```NpgsqlConnection``` provider but for ```NpgsqlCommand``` provider it will cause a lot of extra typing and reduce readability a little. 
 
- - Use fully qualified names for `Npgsql.NpgsqlConnection` and `Npgsql.NpgsqlCommand`
+ - Use a fully qualified name for `Npgsql.NpgsqlConnection`
 
- - Use type alias for `Npgsql.NpgsqlConnection` and `Npgsql.NpgsqlCommand`
+ - Use a type alias for `Npgsql.NpgsqlConnection`
 ```fsharp
 type PgConnectoin = Npgsql.NpgsqlConnection
-type PgCommand = Npgsql.NpgsqlCommand
 ```
 
 - Isolate usage by module or file  
-
-I expect once you commit to the `NpgsqlCommand` type provider usage of `Npgsql.NpgsqlCommand` type will be very limited so name collision is not an issue.  
 
 `Npgsql.NpgsqlConnection` collision can be solved by a simple helper function:
 ```fsharp
@@ -185,18 +134,11 @@ let openConnection(connectionString) =
 ```
 
 ## Async execution
-Every instance of generated command has async counterpart of `Execute` method - `AsyncExecute`.
+Every instance of a generated command has async counterpart of `Execute` method - `AsyncExecute`.
 
 ```fsharp
 do
     use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
-    for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
-```
-
-```fsharp
-do
-    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", dvdRental>(dvdRental)
     for x in cmd.AsyncExecute() |> Async.RunSynchronously do   
         printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
@@ -222,87 +164,10 @@ do
 
 ```
 
-```fsharp
-do 
-    // Will be prepared
-    use cmd = new NpgsqlCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = true>(dvdRental)
-	for x in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
-```
-
 ## Configuration
 _Design-time type providers configuration is never passed to run-time._
 
-Command constructor/factory method expects run-time connection parameter. 
-A notable exception is [Fsx](#scripting) flag.
-Library doesn't have any support to simplify run-time confirmation but there is machinery to share design-time configuration.  
-
-Configuring instance of `NpgsqlConnection` type provider is simple but configuring numerous instances of `NpgsqlCommand` can be tedious. `Config` and `ConfigFile` properties allow to externalize and therefore share configuration. It also helps to avoid exposing sensitive information in connection string literals. 
-
-- `ConfigType.JsonFile`
-```fsharp
-[<Literal>]
-let jsonConfig = __SOURCE_DIRECTORY__ + "/" + "development.settings.json"
-
-type DvdRental = NpgsqlConnection<connectionStringName, Config = jsonConfig>
-
-// NpgsqlCommand
-do
-    use cmd = new NpgsqlCommand<"        
-        SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", Config = jsonConfig >(dvdRental)  
-    //...
-```
-The type provider will look for connection string named `dvdRental` in file that should have content like:
-```json
-{
-  "ConnectionStrings": {
-    "dvdRental": "Host=localhost;Username=postgres;Database=dvdrental;Port=32768"
-  }
-}
-```
-- `ConfigType.Environment`
-
-Reads configuration from `ConnectionStrings:dvdRental` environment variable.
-```fsharp
-type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.Environment>
-
-// NpgsqlCommand
-do
-    use cmd = new NpgsqlCommand<"        
-        SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", ConfigType = ConfigType.Environment>(dvdRental)
-```
-- `ConfigType.UserStore`
-
-Reads design time connection string from user store. 
-```fsharp
-type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore>
-
-// NpgsqlCommand
-do
-    use cmd = new NpgsqlCommand<"        
-        SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", ConfigType = ConfigType.UserStore>(dvdRental)
-```
-
-For the code above the type provider will try to find _single_ F# project in resolution folder and parse it to extract value of <UserSecretsId> element. This approach relies on several assumptions. Unfortunately more robust way via reading [UserSecretsIdAttribute](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.configuration.usersecrets.usersecretsidattribute?view=aspnetcore-2.0) is not available for the type provider because final assembly is not generated yet. To address this UserSecretsId can be supplied via Config parameter.  
- 
-```fsharp
-type DvdRental = NpgsqlConnection<connectionStringName, ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">
-
-// NpgsqlCommand
-do
-    use cmd = new NpgsqlCommand<"        
-        SELECT 42 AS Answer, current_date as today
-    ", "dvdRental", ConfigType = ConfigType.UserStore, Config = "e0db9c78-0c59-4e4f-9d15-ed0c2848e94e">(dvdRental)
-    //...
-```
-User store id is just file name so it can be practically any text.
-
-I hope you see that `NpgsqlConnection` has much simple configuration story.
-
-More on .NET Core configuration is [here](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/configuration/?tabs=basicconfiguration).
+`CreateCommand` expects a run-time connection parameter. A notable exception is [Fsx](#scripting) flag.
 
 ## Data modifications
 - Hand-written statements
