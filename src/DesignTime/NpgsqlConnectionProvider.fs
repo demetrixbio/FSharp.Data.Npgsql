@@ -10,11 +10,12 @@ open Npgsql
 
 open FSharp.Data.Npgsql
 open InformationSchema
+open System.Collections.Concurrent
 
-let methodsCache = Cache<ProvidedMethod>()
+let methodsCache = ConcurrentDictionary<string, ProvidedMethod>()
 
-let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes : Map<string, ProvidedTypeDefinition>,
-                           dbSchemaLookups : DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse) = 
+let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
+                           dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse) = 
         
     let staticParams = 
         [
@@ -27,11 +28,11 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             yield ProvidedStaticParameter("Prepare", typeof<bool>, globalPrepare)   
         ]
 
-    let m = ProvidedMethod("CreateCommand", [ ProvidedParameter ("connectionString", typeof<string>) ], typeof<obj>, isStatic = true)
+    let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
         methodsCache.GetOrAdd(
             methodName,
-            lazy
+            fun methodName ->
                 let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor, prepare  = 
                     if not globalXCtor
                     then 
@@ -85,17 +86,10 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         IsTypeReuseEnabled = isTypeReuseEnabled
                     } @@>
 
+                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
 
-                let ctorsAndFactories = 
-                    QuotationsFactory.GetCommandCtors(
-                        cmdProvidedType, 
-                        designTimeConfig, 
-                        factoryMethodName = methodName
-                    )
-                assert (ctorsAndFactories.Length = 4)
-                let impl: ProvidedMethod = downcast ctorsAndFactories.[if xctor then 3 else 1] 
-                rootType.AddMember impl
-                impl)
+                rootType.AddMember method
+                method)
     ))
     rootType.AddMember m
 
@@ -151,7 +145,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
                 let binaryImport = 
                     ProvidedMethod(
                         "BinaryImport", 
-                        [ ProvidedParameter("connection", typeof<NpgsqlConnection> ) ],
+                        [ ProvidedParameter("connection", typeof<NpgsqlConnection>) ],
                         typeof<uint64>,
                         invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
                     )
@@ -165,7 +159,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 
 let createRootType
     ( 
-        assembly, nameSpace: string, typeName, schemaCache: Cache<DbSchemaLookups>,
+        assembly, nameSpace: string, typeName, schemaCache: ConcurrentDictionary<string, DbSchemaLookups>,
         connectionString, xctor, prepare, reuseProvidedTypes, cache
     ) =
 
@@ -176,7 +170,7 @@ let createRootType
     let schemaLookups =
         schemaCache.GetOrAdd(
             connectionString,
-            lazy InformationSchema.getDbSchemaLookups(connectionString))
+            fun connectionString -> InformationSchema.getDbSchemaLookups(connectionString))
     
     let dbSchemas = schemaLookups.Schemas
                     |> Seq.map (fun s -> ProvidedTypeDefinition(s.Key, baseType = Some typeof<obj>, hideObjectMethods = true))
@@ -207,7 +201,7 @@ let createRootType
 
     databaseRootType           
 
-let internal getProviderType(assembly, nameSpace, cache: Cache<ProvidedTypeDefinition>, schemaCache : Cache<DbSchemaLookups>) = 
+let internal getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<string, ProvidedTypeDefinition>, schemaCache: ConcurrentDictionary<string, DbSchemaLookups>) = 
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
@@ -222,11 +216,9 @@ let internal getProviderType(assembly, nameSpace, cache: Cache<ProvidedTypeDefin
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName,
-                    lazy
-                        createRootType(
-                            assembly, nameSpace, typeName, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], cache
-                        )
+                    fun typeName ->
+                        createRootType (assembly, nameSpace, typeName, schemaCache,
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], cache)
                 )   
             ) 
         )

@@ -10,28 +10,25 @@ open ProviderImplementation.ProvidedTypes
 open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
+open System.Collections.Concurrent
 
 type internal RowType = {
     Provided: Type
     ErasedTo: Type
-    //Mapping: Expr
 }
 
 type internal ReturnType = {
     Single: Type
     PerRow: RowType option
 }  with 
-(*    member this.Row2ItemMapping = 
-        match this.PerRow with
-        | Some x -> x.Mapping
-        | None -> Expr.Value Unchecked.defaultof<obj[] -> obj> *)
+
     member this.SeqItemTypeName = 
         match this.PerRow with
         | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
         | None -> <@@ null: string @@>
 
 type internal ProvidedTypeReuse =
-    | WithCache of Cache<ProvidedTypeDefinition>
+    | WithCache of ConcurrentDictionary<string, ProvidedTypeDefinition>
     | NoReuse
 
 type internal QuotationsFactory private() = 
@@ -116,9 +113,7 @@ type internal QuotationsFactory private() =
             .Invoke(null, [| box value|])
             |> unbox        
 
-    static member internal AddGeneratedMethod
-        (sqlParameters: Parameter list, hasOutputParameters, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
-
+    static member internal AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
         let mappedInputParamValues (exprArgs: Expr list) = 
             (exprArgs.Tail, sqlParameters)
             ||> List.map2 (fun expr param ->
@@ -143,39 +138,7 @@ type internal QuotationsFactory private() =
             let methodInfo = typeof<ISqlCommand>.GetMethod(name)
             let vals = mappedInputParamValues(exprArgs)
             let paramValues = Expr.NewArray( typeof<string * obj>, elements = vals)
-            if not hasOutputParameters
-            then 
-                Expr.Call(Expr.Coerce(exprArgs.[0], erasedType), methodInfo, [ paramValues ])    
-            else
-                let mapOutParamValues = 
-                    let arr = Var("parameters", typeof<(string * obj)[]>)
-                    let body = 
-                        (sqlParameters, exprArgs.Tail)
-                        ||> List.zip
-                        |> List.mapi (fun index (sqlParam, argExpr) ->
-                            if sqlParam.Direction.HasFlag( ParameterDirection.Output)
-                            then 
-                                let mi = 
-                                    typeof<Utils>
-                                        .GetMethod("SetRef")
-                                        .MakeGenericMethod( sqlParam.DataType.ClrType)
-                                Expr.Call(mi, [ argExpr; Expr.Var arr; Expr.Value index ]) |> Some
-                            else 
-                                None
-                        ) 
-                        |> List.choose id
-                        |> List.fold (fun acc x -> Expr.Sequential(acc, x)) <@@ () @@>
-
-                    Expr.Lambda(arr, body)
-
-                let xs = Var("parameters", typeof<(string * obj)[]>)
-                let execute = Expr.Lambda(xs , Expr.Call( Expr.Coerce( exprArgs.[0], erasedType), methodInfo, [ Expr.Var xs ]))
-                <@@
-                    let ps: (string * obj)[] = %%paramValues
-                    let result = (%%execute) ps
-                    ps |> %%mapOutParamValues
-                    result
-                @@>
+            Expr.Call(Expr.Coerce(exprArgs.[0], erasedType), methodInfo, [ paramValues ])    
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
@@ -220,7 +183,7 @@ type internal QuotationsFactory private() =
                 let t = if Map.containsKey x.DataType.FullName customTypes then x.DataType.FullName else x.ClrType.Name
                 if x.Nullable then sprintf "%s:Option<%s>" x.Name t else sprintf "%s:%s" x.Name t) |> List.sort |> String.concat ", "
 
-            cache.GetOrAdd (typeName, Lazy<ProvidedTypeDefinition> (fun () -> createType typeName true))
+            cache.GetOrAdd (typeName, fun typeName -> createType typeName true)
         | NoReuse ->
             createType ("Record" + typeNameSuffix) false
 
@@ -456,8 +419,6 @@ type internal QuotationsFactory private() =
     static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
         [
             for p in sqlParameters do
-                //assert p.Name.StartsWith("@")
-                //let parameterName = p.Name.Substring 1
                 let parameterName = p.Name
 
                 let t =
@@ -484,38 +445,11 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
-    static member internal GetCommandCtors
-        (
-            cmdProvidedType: ProvidedTypeDefinition, 
-            designTimeConfig, 
-            ?factoryMethodName
-        ) = 
+    static member internal GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
+        let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
 
-        [
-            let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
-
-            let parameters1 = [ 
-                ProvidedParameter("connectionString", typeof<string>) 
-                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
-            ]
-
-            let body1 (args: _ list) = 
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%args.Head @@> :: args.Tail)
-
-            yield ProvidedConstructor(parameters1, invokeCode = body1) :> MemberInfo
-            
-            if factoryMethodName.IsSome
-            then 
-                yield upcast ProvidedMethod(factoryMethodName.Value, parameters1, returnType = cmdProvidedType, invokeCode = body1, isStatic = true)
-           
-            let parameters2 = 
-                    [ 
-                        ProvidedParameter("connection", typeof<NpgsqlConnection>) 
-                        ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
-                        ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
-                    ]
-
-            let body2 (Arg3(connection, transaction, commandTimeout)) = 
+        if isExtended then
+            let body (Arg3(connection, transaction, commandTimeout)) = 
                 let arguments = [  
                     designTimeConfig
                     <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice2Of2(%%connection, %%transaction) @@>
@@ -523,12 +457,22 @@ type internal QuotationsFactory private() =
                 ]
                 Expr.NewObject(ctorImpl, arguments)
                     
-            yield upcast ProvidedConstructor(parameters2, invokeCode = body2)
-            if factoryMethodName.IsSome
-            then 
-                yield upcast ProvidedMethod(factoryMethodName.Value, parameters2, returnType = cmdProvidedType, invokeCode = body2, isStatic = true)
-        ]
+            let parameters = [ 
+                ProvidedParameter("connection", typeof<NpgsqlConnection>) 
+                ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
+                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
 
+            ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
+        else
+            let body (args: _ list) = 
+                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%args.Head @@> :: args.Tail)
+
+            let parameters = [ 
+                ProvidedParameter("connectionString", typeof<string>) 
+                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
+
+            ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
+       
     static member internal AddProvidedTypeToDeclaring resultType returnType outputColumns (declaringType: ProvidedTypeDefinition) =
         if resultType = ResultType.Records 
         then
@@ -552,8 +496,7 @@ type internal QuotationsFactory private() =
         let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
         
         let addRedirectToISqlCommandMethod outputType name = 
-            let hasOutputParameters = false
-            QuotationsFactory.AddGeneratedMethod(parameters, hasOutputParameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+            QuotationsFactory.AddGeneratedMethod(parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
             |> cmdProvidedType.AddMember
 
         match returnTypes with

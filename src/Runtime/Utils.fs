@@ -23,15 +23,12 @@ type Utils private() =
     static member GetStatementIndex(cursor: DbDataReader) =
         statementIndexGetter.Invoke(cursor, null) :?> int
 
-    static member private CreateOptionType typeParam =
-        typeof<unit option>.GetGenericTypeDefinition().MakeGenericType([| typeParam |])
-    
     static member private MakeOptionValue (typeParam: Type) v =
         match optionCtorCache.TryGetValue typeParam with
         | true, ctor ->
             ctor v
         | _ ->
-            let cases =  Utils.CreateOptionType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
+            let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
             let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
             let noneCtor = snd cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
             let noneValue = noneCtor [| |]
@@ -40,7 +37,7 @@ type Utils private() =
     
     [<Extension>]
     [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType : ResultType, resultSet: ResultSetDefinition, isTypeReuseEnabled) =
+    static member MapRowValues<'TItem>(cursor: DbDataReader, resultType: ResultType, resultSet: ResultSetDefinition, isTypeReuseEnabled) =
         let rowMapping =
             if resultSet.ExpectedColumns.Length = 1 then
                 Array.item 0
@@ -86,9 +83,6 @@ type Utils private() =
         fun values -> 
             nullsToOptions values
             mapper values
-
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
-    static member SetRef<'t>(r : byref<'t>, arr: (string * obj)[], i) = r <- arr.[i] |> snd |> unbox
 
     [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 

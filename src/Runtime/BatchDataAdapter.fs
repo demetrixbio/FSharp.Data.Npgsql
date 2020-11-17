@@ -26,8 +26,6 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
     override __.OnRowUpdating( value) = rowUpdating.Trigger(value)
     override __.OnRowUpdated( value) = rowUpdated.Trigger(value)
 
-    override val UpdateBatchSize = 1 with get, set
-
     override __.InitializeBatching() = ()
 
     override __.AddToBatch( command) = 

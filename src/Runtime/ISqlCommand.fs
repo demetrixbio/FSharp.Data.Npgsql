@@ -38,30 +38,28 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         
     let setupConnection() = 
         match connection with
-        | Choice2Of2(conn, tx) -> 
+        | Choice2Of2 (conn, tx) -> 
             cmd.Connection <- conn
             cmd.Transaction <- tx 
-            { new IDisposable with member __.Dispose() = () }            
         | Choice1Of2 connectionString -> 
             cmd.Connection <- new NpgsqlConnection(connectionString)
             cmd.Connection.Open()
             if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite() |> ignore
-            upcast cmd.Connection
         
     let asyncSetupConnection() = 
         async {
             match connection with
-            | Choice2Of2 _ -> 
-                return setupConnection()
+            | Choice2Of2(conn, tx) -> 
+                cmd.Connection <- conn
+                cmd.Transaction <- tx
             | Choice1Of2 connectionString -> 
                 cmd.Connection <- new NpgsqlConnection(connectionString)
                 do! cmd.Connection.OpenAsync() |> Async.AwaitTask
                 if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite() |> ignore
-                return upcast cmd.Connection
         }
 
     static let listToOption source =  
-        match source |> List.truncate 2 with
+        match source with
         | [] -> None
         | [ x ] -> Some x
         | _ -> invalidOp "The output sequence contains more than one element."
@@ -157,7 +155,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        setupConnection() |> ignore
+        setupConnection()
 
         if prepare then
             cmd.Prepare()
@@ -170,14 +168,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-            let! _ = setupConnection()
+            do! setupConnection()
 
             if prepare then
                 do! cmd.PrepareAsync() |> Async.AwaitTask
 
             let! cursor = cmd.ExecuteReaderAsync( readerBehavior) |> Async.AwaitTask
             // Can't verify output columns of all result sets without calling NextResult
-            ``ISqlCommand Implementation``.VerifyOutputColumns(downcast cursor, resultSetDefinitions.[0].ExpectedColumns)
+            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSetDefinitions.[0].ExpectedColumns)
             return cursor :?> NpgsqlDataReader
         }
     
@@ -189,7 +187,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal AsyncExecuteDataTables(cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        do! setupConnection() |> Async.Ignore
+        do! setupConnection()
 
         if prepare then
             do! cmd.PrepareAsync() |> Async.AwaitTask
@@ -212,7 +210,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     // Reads data tables from multiple result sets
     static member internal ExecuteDataTables(cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        setupConnection() |> ignore
+        setupConnection()
 
         if prepare then
             cmd.Prepare()
@@ -310,7 +308,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal ExecuteMulti (resultType, isTypeReuseEnabled) = fun (cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) ->
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        setupConnection() |> ignore
+        setupConnection()
 
         if prepare then
             cmd.Prepare()
@@ -333,7 +331,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal AsyncExecuteMulti (resultType, isTypeReuseEnabled) = fun (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) -> async {
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
-        do! setupConnection() |> Async.Ignore
+        do! setupConnection()
 
         if prepare then
             do! cmd.PrepareAsync() |> Async.AwaitTask
@@ -357,7 +355,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
 
     static member internal ExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
-        use __ = setupConnection()
+        setupConnection()
 
         if prepare then
             cmd.Prepare()
@@ -374,7 +372,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
     static member internal AsyncExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
         async {         
-            use! __ = setupConnection()
+            do! setupConnection()
 
             if prepare then
                 do! cmd.PrepareAsync() |> Async.AwaitTask
