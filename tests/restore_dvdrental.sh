@@ -1,2 +1,2 @@
 #!/bin/bash 
-pg_restore -U postgres -d dvdrental --clean --create --schema public -F t /var/lib/postgresql/backup/dvdrental.tar
+pg_restore -U postgres -d dvdrental --schema public -F t /var/lib/postgresql/backup/dvdrental.tar
