@@ -8,4 +8,4 @@ services:
       dockerfile: ./Dockerfile
     image: test-db
     ports:
-    - 32768:5432
+    - 5432:5432
