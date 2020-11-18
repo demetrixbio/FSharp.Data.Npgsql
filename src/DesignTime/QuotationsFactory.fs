@@ -492,7 +492,7 @@ type internal QuotationsFactory private() =
                 ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
             } @@>)
 
-    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType customTypes returnTypes (outputColumns: Column list list) typeToAttachTo =
+    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes returnTypes (outputColumns: Column list list) typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
         
         let addRedirectToISqlCommandMethod outputType name = 
@@ -501,10 +501,13 @@ type internal QuotationsFactory private() =
 
         match returnTypes with
         | [ returnType ] ->
-            addRedirectToISqlCommandMethod returnType.Single "Execute" 
-                        
-            let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
-            addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+
+            if methodTypes.HasFlag MethodTypes.Sync then
+                addRedirectToISqlCommandMethod returnType.Single "Execute" 
+
+            if methodTypes.HasFlag MethodTypes.Async then
+                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
+                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
 
             QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns.Head typeToAttachTo
         | _ ->
@@ -526,10 +529,12 @@ type internal QuotationsFactory private() =
             List.zip outputColumns returnTypes
             |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns typeToAttachTo)
 
-            addRedirectToISqlCommandMethod resultSetsType "Execute" 
+            if methodTypes.HasFlag MethodTypes.Sync then
+                addRedirectToISqlCommandMethod resultSetsType "Execute" 
             
-            let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ resultSetsType ])
-            addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+            if methodTypes.HasFlag MethodTypes.Async then
+                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ resultSetsType ])
+                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
 
             cmdProvidedType.AddMember resultSetsType
 

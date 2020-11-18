@@ -16,6 +16,11 @@ type ResultType =
     ///<summary>raw DataReader</summary>
     | DataReader = 3
 
+[<System.Flags>]
+type MethodTypes =
+    | Sync = 1
+    | Async = 2
+
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ResultSetDefinition = {
     SeqItemTypeName: string

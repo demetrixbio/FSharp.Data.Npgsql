@@ -15,7 +15,7 @@ open System.Collections.Concurrent
 let methodsCache = ConcurrentDictionary<string, ProvidedMethod>()
 
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
-                           dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse) = 
+                           dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse, methodTypes) = 
         
     let staticParams = 
         [
@@ -44,7 +44,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 then 
                     invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-                let (parameters, outputColumns, _) = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                let parameters, outputColumns = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
                 
                 let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
@@ -63,9 +63,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
-                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType customTypes returnTypes outputColumns (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
-
-                commands.AddMember cmdProvidedType
+                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes returnTypes outputColumns (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
 
                 let useNetTopologySuite = 
                     (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
@@ -160,7 +158,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 let createRootType
     ( 
         assembly, nameSpace: string, typeName, schemaCache: ConcurrentDictionary<string, DbSchemaLookups>,
-        connectionString, xctor, prepare, reuseProvidedTypes, cache
+        connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, cache
     ) =
 
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
@@ -197,7 +195,7 @@ let createRootType
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
     let providedTypeReuse = if reuseProvidedTypes then WithCache cache else NoReuse
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse)
+    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes)
 
     databaseRootType           
 
@@ -208,26 +206,29 @@ let internal getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<st
     do 
         providerType.DefineStaticParameters(
             parameters = [ 
-                ProvidedStaticParameter("Connection", typeof<string>) 
+                ProvidedStaticParameter("ConnectionString", typeof<string>) 
                 ProvidedStaticParameter("XCtor", typeof<bool>, false) 
                 ProvidedStaticParameter("Prepare", typeof<bool>, false)
                 ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
+                ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
             ],
             instantiationFunction = (fun typeName args ->
                 cache.GetOrAdd(
                     typeName,
                     fun typeName ->
                         createRootType (assembly, nameSpace, typeName, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], cache)
+                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], cache)
                 )   
             ) 
         )
 
         providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
-<param name='Connection'>String used to open a Postgresql database or the name of the connection string in the configuration file in the form of “name=&lt;connection string name&gt;”.</param>
-<param name='Prepare'>If set the command will be executed as prepared. See Npgsql documentation for prepared statements.</param>
+<param name='ConnectionString'>String used to open a PostgreSQL database at design-time to generate types.</param>
+<param name='XCtor'>If set, commands will accept an NpgsqlConnection and an optional NpgsqlTransaction instead of a connection string.</param>
+<param name='Prepare'>If set, commands will be executed as prepared. See Npgsql documentation for prepared statements.</param>
 <param name='ReuseProvidedTypes'>Reuse the return type for commands that select data of identical shape. Please see the readme for details.</param>
+<param name='MethodTypes'>Indicates whether to generate Execute, AsyncExecute or both methods for commands.</param>
 """
     providerType
 

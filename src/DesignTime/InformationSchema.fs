@@ -99,7 +99,7 @@ let getTypeMapping =
     let allMappings = dict (builtins @ spatialTypesMapping)
     fun datatype -> 
         let exists, value = allMappings.TryGetValue(datatype)
-        if exists then value else failwithf "Unsupported datatype %s." datatype 
+        if exists then value else typeof<obj> 
 
 type PostgresType with    
     member this.ToClrType() = 
@@ -148,7 +148,7 @@ type Table =
       Name : string
       Description : string option }
     
-type UDT =
+type Enum =
     { Schema : string
       Name : string
       Values : string [] }
@@ -236,7 +236,7 @@ type Column =
 type DbSchemaLookupItem =
     { Schema : Schema
       Tables : Dictionary<Table, HashSet<Column>>
-      Enums : Map<string, UDT> }
+      Enums : Map<string, Enum> }
     
 type ColumnLookupKey = { TableOID : uint32; ColumnAttributeNumber : int16 }
     
@@ -336,23 +336,8 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
               Scale = p.Scale
               Optional = allParametersOptional 
               DataType = DataType.Create(p.PostgresType) } ]
-    
-    let enums =  
-        outputColumns 
-        |> List.concat
-        |> List.choose (fun c ->
-            if c.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.ContainsKey(c.DataType.UdtTypeShortName) then
-                Some dbSchemaLookups.Schemas.[c.DataType.Schema].Enums.[c.DataType.UdtTypeShortName]
-            else
-                None)
-        |> List.append [ 
-            for p in parameters do
-                if p.DataType.IsUserDefinedType && dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.ContainsKey(p.DataType.UdtTypeShortName) then
-                    yield dbSchemaLookups.Schemas.[p.DataType.Schema].Enums.[p.DataType.UdtTypeShortName]
-        ]
-        |> List.distinct
 
-    parameters, outputColumns, enums
+    parameters, outputColumns
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
@@ -376,11 +361,11 @@ let getDbSchemaLookups(connectionString) =
             while cursor.Read() do
                 let schema = cursor.GetString(0)
                 let name = cursor.GetString(1)
-                let values: string[] = cursor.GetValue(2) :?> _
-                yield schema, name, { Schema = schema; Name = name; Values = values }
+                let values = cursor.GetValue(2) :?> _
+                yield { Schema = schema; Name = name; Values = values }
         ]
-        |> Seq.groupBy (fun (schema, _, _) -> schema)
-        |> Seq.map (fun (schema, types) -> schema, types |> Seq.map (fun (_, name, t) -> name, t) |> Map.ofSeq)
+        |> Seq.groupBy (fun e -> e.Schema)
+        |> Seq.map (fun (schema, types) -> schema, types |> Seq.map (fun e -> e.Name, e) |> Map.ofSeq)
         |> Map.ofSeq
     
     //https://stackoverflow.com/questions/12445608/psql-list-all-tables#12455382
@@ -433,22 +418,19 @@ let getDbSchemaLookups(connectionString) =
 
     use row = cmd.ExecuteReader()
     while row.Read() do
-        let schema : Schema =
-            { OID = row.["schema_oid"] :?> uint32
-              Name = string row.["schema_name"] }
+        let schema =
+            { OID = row.["schema_oid"] :?> _
+              Name = row.["schema_name"] :?> _ }
         
         if not <| schemas.ContainsKey(schema.Name) then
-            
-            schemas.Add(schema.Name, { Schema = schema
-                                       Tables = Dictionary();
-                                       Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+            schemas.Add(schema.Name, { Schema = schema; Tables = Dictionary(); Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
         
         match row.GetOptionalValue("table_oid") with
         | None -> ()
         | Some oid ->
             let table =
-                { OID = oid :?> uint32
-                  Name = string row.["table_name"]
+                { OID = oid :?> _
+                  Name = row.["table_name"] :?> _
                   Description = row.["table_description"] |> Option.ofObj |> Option.map string }
             
             if not <| schemas.[schema.Name].Tables.ContainsKey(table) then
@@ -457,9 +439,9 @@ let getDbSchemaLookups(connectionString) =
             match row.GetValueOrDefault("col_number", -1s) with
             | -1s -> ()
             | attnum ->
-                let udtName = string row.["col_udt_name"]
+                let udtName = row.["col_udt_name"] :?> _
                 // column data type namespace is not the same as table schema.
-                let typeSchema = string row.["col_data_type_ns"]
+                let typeSchema = row.["col_data_type_ns"] :?> _
                 let isUdt = schemas.ContainsKey(typeSchema) && schemas.[typeSchema].Enums.ContainsKey(udtName)
 
                 let clrType =
@@ -479,25 +461,22 @@ let getDbSchemaLookups(connectionString) =
                 
                 let column =
                     { ColumnAttributeNumber = attnum
-                      Name = string row.["col_name"]
-                      DataType = { Name = udtName
-                                   Schema = typeSchema
-                                   ClrType = clrType }
-                      Nullable = row.["col_not_null"] |> unbox |> not
+                      Name = row.["col_name"] :?> _
+                      DataType = { Name = udtName; Schema = typeSchema; ClrType = clrType }
+                      Nullable = row.["col_not_null"] :?> _ |> not
                       MaxLength = row.GetValueOrDefault("col_max_length", -1)
-                      ReadOnly = row.["col_is_readonly"] |> unbox
-                      AutoIncrement = unbox row.["col_is_identity"]
+                      ReadOnly = row.["col_is_readonly"] :?> _
+                      AutoIncrement = row.["col_is_identity"] :?> _
                       DefaultConstraint = row.GetValueOrDefault("col_default", "")
                       Description = row.GetValueOrDefault("col_description", "")
-                      PartOfPrimaryKey = unbox row.["col_part_of_primary_key"]
+                      PartOfPrimaryKey = row.["col_part_of_primary_key"] :?> _
                       BaseSchemaName = schema.Name
-                      BaseTableName = string row.["table_name"] }
+                      BaseTableName = row.GetValueOrDefault("table_name", "") }
                  
                 if not <| schemas.[schema.Name].Tables.[table].Contains(column) then
                     schemas.[schema.Name].Tables.[table].Add(column) |> ignore
                 
-                let lookupKey = { TableOID = table.OID
-                                  ColumnAttributeNumber = column.ColumnAttributeNumber }
+                let lookupKey = { TableOID = table.OID; ColumnAttributeNumber = column.ColumnAttributeNumber }
                 if not <| columns.ContainsKey(lookupKey) then
                     columns.Add(lookupKey, column)
 
