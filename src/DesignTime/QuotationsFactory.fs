@@ -484,39 +484,55 @@ type internal QuotationsFactory private() =
         then
             returnType.Single |> declaringType.AddMember
 
-    static member internal BuildResultSetDefinitions (outputColumns: Column list list) (returnTypes: ReturnType list) =
+    static member internal BuildResultSetDefinitions (outputColumns: (string * Column list) option list) (returnTypes: (string * ReturnType) option list) =
         List.zip outputColumns returnTypes
-        |> List.map (fun (outputColumns, returnType) ->
-            <@@ {
-                SeqItemTypeName = %%returnType.SeqItemTypeName
-                ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
-            } @@>)
+        |> List.map (fun (x, y) -> if x.IsSome then Some (snd x.Value, snd y.Value) else None)
+        |> List.map (fun x ->
+            match x with
+            | Some (outputColumns, returnType) ->
+                <@@ {
+                    SeqItemTypeName = %%returnType.SeqItemTypeName
+                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                } @@>
+            | _ -> <@@ { SeqItemTypeName = %%Expr.Value (null: string); ExpectedColumns = %%Expr.NewArray (typeof<DataColumn>, []) } @@>)
 
-    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes returnTypes (outputColumns: Column list list) typeToAttachTo =
+    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes returnTypes (outputColumns: Column list option list) typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
         
-        let addRedirectToISqlCommandMethod outputType name = 
-            QuotationsFactory.AddGeneratedMethod(parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
-            |> cmdProvidedType.AddMember
+        let addRedirectToISqlCommandMethod outputType name xmlDoc = 
+            let m = QuotationsFactory.AddGeneratedMethod(parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+            Option.iter m.AddXmlDoc xmlDoc
+            cmdProvidedType.AddMember m
 
         match returnTypes with
-        | [ returnType ] ->
+        | [ Some (sql, returnType) ] ->
+            let xmlDoc = if returnType.Single = typeof<int> then sprintf "Returns the number of rows affected by \"%s\"." sql |> Some else None
 
             if methodTypes.HasFlag MethodTypes.Sync then
-                addRedirectToISqlCommandMethod returnType.Single "Execute" 
+                addRedirectToISqlCommandMethod returnType.Single "Execute" xmlDoc
 
             if methodTypes.HasFlag MethodTypes.Async then
                 let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
-                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" xmlDoc
 
-            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns.Head typeToAttachTo
+            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType (Option.defaultValue [] outputColumns.Head) typeToAttachTo
         | _ ->
             let resultSetsType = ProvidedTypeDefinition("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
             let props, ctorParams =
                 returnTypes
-                |> List.mapi (fun i rt ->
-                    let propName = sprintf "ResultSet%d" (i + 1)
+                |> List.mapi (fun i rt -> if rt.IsSome then Some (i, rt.Value) else None)
+                |> List.choose id
+                |> List.map (fun (i, (sql, rt)) ->
+                    let isNonQuery = rt.Single = typeof<int>
+
+                    let propName, xmlDoc =
+                        if isNonQuery then
+                            sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." sql
+                        else
+                            sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." sql
+
                     let prop = ProvidedProperty(propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
+                    prop.AddXmlDoc xmlDoc
                     let ctorParam = ProvidedParameter(propName, rt.Single)
                     prop, ctorParam)
                 |> List.unzip
@@ -527,14 +543,15 @@ type internal QuotationsFactory private() =
             resultSetsType.AddMember ctor
 
             List.zip outputColumns returnTypes
+            |> List.choose (fun (x, y) -> if x.IsSome then Some (x.Value, snd y.Value) else None)
             |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns typeToAttachTo)
 
             if methodTypes.HasFlag MethodTypes.Sync then
-                addRedirectToISqlCommandMethod resultSetsType "Execute" 
+                addRedirectToISqlCommandMethod resultSetsType "Execute" None
             
             if methodTypes.HasFlag MethodTypes.Async then
                 let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ resultSetsType ])
-                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute"
+                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" None
 
             cmdProvidedType.AddMember resultSetsType
 

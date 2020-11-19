@@ -259,6 +259,8 @@ let inline openConnection connectionString =
     conn.Open()
     conn
 
+let controlCommandRegex = System.Text.RegularExpressions.Regex ("^\\s*\\b(begin|end)\\b\\s*$", Text.RegularExpressions.RegexOptions.IgnoreCase)
+
 let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
     use conn = openConnection(connectionString)
     
@@ -270,36 +272,37 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         if resultType = ResultType.DataReader then
             []
         else
-            use cursor = cmd.ExecuteReader(CommandBehavior.SchemaOnly)
+            use cursor = cmd.ExecuteReader CommandBehavior.SchemaOnly
             
             let resultSetSchemasFromNpgsql = [
-                if cursor.FieldCount = 0 then
-                    // Command consists of a single non-query
-                    yield 0, []
-                else
-                    yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
+                if cursor.FieldCount > 0 then
+                    cursor.GetStatementIndex (), Some [ for c in cursor.GetColumnSchema() -> c ]
 
                     while cursor.NextResult () do
-                        yield cursor.GetStatementIndex(), [ for c in cursor.GetColumnSchema() -> c ]
+                        cursor.GetStatementIndex (), Some [ for c in cursor.GetColumnSchema() -> c ]
                 ]
 
             // Account for non-queries, which Npgsql neglects when there are multiple statements 
             [ 0 .. cursor.Statements.Count - 1 ]
             |> List.map (fun i ->
+                let sql = cursor.Statements.[i].SQL
                 match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
-                | Some (_, columns) -> columns
-                | _ -> [])
+                | Some (_, Some columns) -> Some (sql, columns)
+                | _ ->
+                    if controlCommandRegex.IsMatch sql then
+                        None
+                    else
+                        Some (sql, []))
     
     let outputColumns =
         if resultType <> ResultType.DataReader then
-            resultSets |> List.map (List.map (fun column -> 
+            resultSets |> List.map (Option.map (fun (sql, columns) -> sql, columns |> List.map (fun column -> 
                 let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
                 
                 let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
 
                 match dbSchemaLookups.Columns.TryGetValue lookupKey with
-                | (true, col) ->
-                    { col with Name = column.ColumnName }
+                | true, col -> { col with Name = column.ColumnName }
                 | _ ->
                     let dataType = DataType.Create(column.PostgresType)
                     {
@@ -315,9 +318,9 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                         PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
                         BaseSchemaName = column.BaseSchemaName
                         BaseTableName = column.BaseTableName
-                    }))
+                    })))
         else
-            [[]]
+            [ Some ("", []) ]
 
     let parameters = 
         [ for p in cmd.Parameters ->
@@ -418,23 +421,28 @@ let getDbSchemaLookups(connectionString) =
 
     use row = cmd.ExecuteReader()
     while row.Read() do
-        let schema =
-            { OID = row.["schema_oid"] :?> _
-              Name = row.["schema_name"] :?> _ }
+        let schema = { OID = row.["schema_oid"] :?> _; Name = row.["schema_name"] :?> _ }
         
-        if not <| schemas.ContainsKey(schema.Name) then
-            schemas.Add(schema.Name, { Schema = schema; Tables = Dictionary(); Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty })
+        let schemaItem =
+            match schemas.TryGetValue schema.Name with
+            | true, item -> item
+            | _ ->
+                let item = { Schema = schema; Tables = Dictionary(); Enums = enumsLookup.TryFind schema.Name |> Option.defaultValue Map.empty }
+                schemas.[schema.Name] <- item
+                item
         
         match row.GetOptionalValue("table_oid") with
         | None -> ()
         | Some oid ->
-            let table =
-                { OID = oid :?> _
-                  Name = row.["table_name"] :?> _
-                  Description = row.["table_description"] |> Option.ofObj |> Option.map string }
+            let table = { OID = oid :?> _; Name = row.["table_name"] :?> _; Description = row.["table_description"] |> Option.ofObj |> Option.map string }
             
-            if not <| schemas.[schema.Name].Tables.ContainsKey(table) then
-                schemas.[schema.Name].Tables.Add(table, HashSet())
+            let tableColumns =
+                match schemaItem.Tables.TryGetValue table with
+                | true, hashSet -> hashSet
+                | _ ->
+                    let hashSet = HashSet ()
+                    schemaItem.Tables.[table] <- hashSet
+                    hashSet
             
             match row.GetValueOrDefault("col_number", -1s) with
             | -1s -> ()
@@ -473,12 +481,10 @@ let getDbSchemaLookups(connectionString) =
                       BaseSchemaName = schema.Name
                       BaseTableName = row.GetValueOrDefault("table_name", "") }
                  
-                if not <| schemas.[schema.Name].Tables.[table].Contains(column) then
-                    schemas.[schema.Name].Tables.[table].Add(column) |> ignore
+                tableColumns.Add column |> ignore
                 
                 let lookupKey = { TableOID = table.OID; ColumnAttributeNumber = column.ColumnAttributeNumber }
-                if not <| columns.ContainsKey(lookupKey) then
-                    columns.Add(lookupKey, column)
+                if columns.ContainsKey lookupKey |> not then
+                    columns.[lookupKey] <- column
 
-    { Schemas = schemas
-      Columns = columns }
+    { Schemas = schemas; Columns = columns }

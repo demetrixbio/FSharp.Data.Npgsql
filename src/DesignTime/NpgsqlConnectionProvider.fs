@@ -15,7 +15,7 @@ open System.Collections.Concurrent
 let methodsCache = ConcurrentDictionary<string, ProvidedMethod>()
 
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
-                           dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare, providedTypeReuse, methodTypes) = 
+                           dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare: bool, providedTypeReuse, methodTypes) = 
         
     let staticParams = 
         [
@@ -40,52 +40,53 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     else
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, true, args.[5] :?> _
                         
-                if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples)
-                then 
+                if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples) then 
                     invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
                 let parameters, outputColumns = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
-                
+
                 let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
 
                 let returnTypes =
-                    outputColumns |> List.mapi (fun i cs ->
-                        QuotationsFactory.GetOutputTypes(
+                    outputColumns |> List.mapi (fun i cs -> cs |> Option.map (fun (sql, cs) ->
+                        sql, QuotationsFactory.GetOutputTypes(
                             cs,
                             customTypes,
                             resultType, 
                             commandBehaviour,
                             typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
-                            providedTypeReuse = providedTypeReuse))
+                            providedTypeReuse = providedTypeReuse)))
 
                 let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
                 let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
-                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes returnTypes outputColumns (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
+                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes returnTypes
+                    (List.map (Option.map snd) outputColumns) (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
 
                 let useNetTopologySuite = 
                     (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
                     ||
-                    (outputColumns |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
+                    (outputColumns |> List.choose id |> List.map snd |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let isTypeReuseEnabled = providedTypeReuse <> NoReuse
+                let parameters = parameters |> List.map QuotationsFactory.ToSqlParam 
+                let resultSets = QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes
 
                 let designTimeConfig = 
                     <@@ {
                         SqlStatement = sqlStatement
-                        Parameters = %%Expr.NewArray( typeof<NpgsqlParameter>, parameters |> List.map QuotationsFactory.ToSqlParam)
-                        ResultType = %%Expr.Value(resultType)
+                        Parameters = %%Expr.NewArray (typeof<NpgsqlParameter>, parameters)
+                        ResultType = %%Expr.Value resultType
                         SingleRow = singleRow
-                        ResultSets = %%Expr.NewArray(typeof<ResultSetDefinition>, QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes)
+                        ResultSets = %%Expr.NewArray (typeof<ResultSetDefinition>, resultSets)
                         UseNetTopologySuite = useNetTopologySuite
                         Prepare = prepare
                         IsTypeReuseEnabled = isTypeReuseEnabled
                     } @@>
 
                 let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
-
                 rootType.AddMember method
                 method)
     ))
@@ -203,27 +204,18 @@ let internal getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<st
 
     let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
-    do 
-        providerType.DefineStaticParameters(
-            parameters = [ 
-                ProvidedStaticParameter("ConnectionString", typeof<string>) 
-                ProvidedStaticParameter("XCtor", typeof<bool>, false) 
-                ProvidedStaticParameter("Prepare", typeof<bool>, false)
-                ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
-                ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
-            ],
-            instantiationFunction = (fun typeName args ->
-                cache.GetOrAdd(
-                    typeName,
-                    fun typeName ->
-                        createRootType (assembly, nameSpace, typeName, schemaCache,
-                            unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], cache)
-                )   
-            ) 
-        )
+    providerType.DefineStaticParameters (
+        [ 
+            ProvidedStaticParameter("ConnectionString", typeof<string>) 
+            ProvidedStaticParameter("XCtor", typeof<bool>, false) 
+            ProvidedStaticParameter("Prepare", typeof<bool>, false)
+            ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
+            ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
+        ],
+        fun typeName args -> cache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, schemaCache, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], cache)))
 
-        providerType.AddXmlDoc """
-<summary>Typed access to PostgreSQL programmable objects: tables and functions.</summary> 
+    providerType.AddXmlDoc """
+<summary>Typed access to PostgreSQL programmable objects, tables and functions.</summary> 
 <param name='ConnectionString'>String used to open a PostgreSQL database at design-time to generate types.</param>
 <param name='XCtor'>If set, commands will accept an NpgsqlConnection and an optional NpgsqlTransaction instead of a connection string.</param>
 <param name='Prepare'>If set, commands will be executed as prepared. See Npgsql documentation for prepared statements.</param>

@@ -102,8 +102,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 ``ISqlCommand Implementation``.AsyncExecuteMulti (cfg.ResultType, cfg.IsTypeReuseEnabled) >> box
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
-    member __.CommandTimeout = cmd.CommandTimeout
-
     interface ISqlCommand with
         member __.Execute parameters = execute(cmd, setupConnection, readerBehavior, parameters, cfg.ResultSets, cfg.Prepare)
         member __.AsyncExecute parameters = asyncExecute(cmd, asyncSetupConnection, readerBehavior, parameters, cfg.ResultSets, cfg.Prepare)
@@ -204,7 +202,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
                     ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-        ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
+        ``ISqlCommand Implementation``.SetNumberOfAffectedRows results cmd.Statements
         return box results }
 
     // Reads data tables from multiple result sets
@@ -227,7 +225,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                     ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
                     ``ISqlCommand Implementation``.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-        ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
+        ``ISqlCommand Implementation``.SetNumberOfAffectedRows results cmd.Statements
         box results
 
     static member internal ExecuteDataTable(cmd, setupConnection, readerBehavior, parameters, resultSets, prepare) = 
@@ -326,7 +324,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 results.[currentStatement] <- ``ISqlCommand Implementation``.ReadResultSet cursor readerBehavior resultType resultSets.[currentStatement] isTypeReuseEnabled
                 go <- cursor.NextResult()
 
-        ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
+        ``ISqlCommand Implementation``.SetNumberOfAffectedRows results cmd.Statements
         box results
 
     static member internal AsyncExecuteMulti (resultType, isTypeReuseEnabled) = fun (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) -> async {
@@ -350,7 +348,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 let! more = cursor.NextResultAsync() |> Async.AwaitTask
                 go <- more
 
-        ``ISqlCommand Implementation``.SetNumberOfAffectedRecords results cmd.Statements
+        ``ISqlCommand Implementation``.SetNumberOfAffectedRows results cmd.Statements
         return box results }
 
     static member internal ExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
@@ -360,14 +358,14 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
         if prepare then
             cmd.Prepare()
 
-        let recordsAffected = cmd.ExecuteNonQuery() 
+        let rowsAffected = cmd.ExecuteNonQuery() 
         for i = 0 to parameters.Length - 1 do
             let name, _ = parameters.[i]
             let p = cmd.Parameters.[name]
             if p.Direction.HasFlag( ParameterDirection.Output)
             then 
                 parameters.[i] <- name, p.Value
-        recordsAffected
+        rowsAffected
 
     static member internal AsyncExecuteNonQuery (cmd, setupConnection, _, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)  
@@ -380,7 +378,7 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
             return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
         }
 
-    static member internal SetNumberOfAffectedRecords (results: obj[]) (statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
+    static member internal SetNumberOfAffectedRows (results: obj[]) (statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
         for i in 0 .. statements.Count - 1 do
             if isNull results.[i] then
                 results.[i] <- int statements.[i].Rows |> box

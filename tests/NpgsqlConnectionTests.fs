@@ -639,7 +639,7 @@ let ``Two selects and nonquery record``() =
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1 |> List.map (fun x -> x.first_name) |> List.length)
-    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (1, actual.RowsAffected2)
     Assert.Equal (5, actual.ResultSet3 |> List.map (fun x -> x.title) |> List.length)
 
 [<Fact>]
@@ -648,7 +648,7 @@ let ``Two selects and nonquery tuple``() =
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1 |> List.length)
-    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (1, actual.RowsAffected2)
     Assert.Equal (5, actual.ResultSet3 |> List.length)
 
 [<Fact>]
@@ -657,7 +657,7 @@ let ``Two selects and nonquery data table``() =
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.ResultSet1.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
-    Assert.Equal (1, actual.ResultSet2)
+    Assert.Equal (1, actual.RowsAffected2)
     Assert.Equal (5, actual.ResultSet3.Rows |> Seq.map (fun x -> x.title) |> Seq.length)
 
 [<Fact>]
@@ -687,27 +687,27 @@ let ``One select and two updates record async``() =
     use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
-    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (2, actual.RowsAffected1)
     Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.first_name) |> List.length)
-    Assert.Equal (1, actual.ResultSet3)
+    Assert.Equal (1, actual.RowsAffected3)
 
 [<Fact>]
 let ``One select and two updates tuple async``() =
     use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
-    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (2, actual.RowsAffected1)
     Assert.Equal (5, actual.ResultSet2 |> List.length)
-    Assert.Equal (1, actual.ResultSet3)
+    Assert.Equal (1, actual.RowsAffected3)
 
 [<Fact>]
 let ``One select and two updates data table async``() =
     use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataTable>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
 
-    Assert.Equal (2, actual.ResultSet1)
+    Assert.Equal (2, actual.RowsAffected1)
     Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
-    Assert.Equal (1, actual.ResultSet3)
+    Assert.Equal (1, actual.RowsAffected3)
 
 [<Fact>]
 let ``One select and two updates reader async``() =
@@ -720,6 +720,14 @@ let ``One select and two updates reader async``() =
         resultSets <- resultSets + 1
 
     Assert.Equal (1, resultSets)
+
+[<Fact>]
+let ``Begin/end are ignored and don't generate a result set``() =
+    use cmd = DvdRental.CreateCommand<"begin   ; delete from film where film_id = -200;select * from film where film_id = -200;END">(connectionString)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (0, actual.RowsAffected2)
+    Assert.Equal (0, actual.ResultSet3.Length)
 
 [<Fact>]
 let ``Can instantiate provided record``() =

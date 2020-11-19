@@ -30,8 +30,8 @@ type Utils private() =
         | _ ->
             let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
             let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
-            let noneCtor = snd cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
-            let noneValue = noneCtor [| |]
+            let noneInfo = snd cases |> Array.exactlyOne
+            let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
 
             optionCtorCache.GetOrAdd (typeParam, fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]) v
     
