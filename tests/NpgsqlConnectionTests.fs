@@ -41,7 +41,7 @@ let getActorByName = "
     WHERE first_name = @firstName AND last_name = @lastName "
 
 [<Literal>]
-let connectionString = "Host=localhost;Username=postgres;Password=Administrator1;Database=dvdrental;Port=5432"
+let connectionString = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=5432"
 
 let openConnection() = 
     let conn = new Npgsql.NpgsqlConnection(connectionString)

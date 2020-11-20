@@ -1,5 +1,0 @@
-{
-  "ConnectionStrings": {
-    "dvdRental": "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=32768"
-  }
-}

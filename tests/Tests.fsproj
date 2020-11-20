@@ -6,7 +6,7 @@
   <ItemGroup>
     <Compile Include="NpgsqlConnectionTests.fs" />
     <Compile Include="Program.fs" />
-    <Content Include="development.settings.json" />
+    <None Include="docker-compose.yml" />
     <None Include="Dockerfile" />
     <None Include="restore_dvdrental.sh" />
     <Content Include="paket.references" />
