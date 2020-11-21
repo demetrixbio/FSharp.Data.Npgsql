@@ -7,6 +7,7 @@ open System.Runtime.CompilerServices
 open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
+open NpgsqlTypes
 
 [<Extension>]
 [<AbstractClass; Sealed>]
@@ -25,6 +26,38 @@ type Utils private() =
 
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
+
+    static member ToDataColumn (columnName, typeName, isTimestampTz, isTimestamp, isJson, isJsonb, isEnum, autoIncrement, allowDbNull, readonly, maxLength,
+        partOfPk: bool, nullable: bool, pqName: string, baseSchemaName: string, baseTableName: string) =
+        let x = new DataColumn (columnName, Type.GetType (typeName, throwOnError = true))
+
+        x.AutoIncrement <- autoIncrement
+        x.AllowDBNull <- allowDbNull
+        x.ReadOnly <- readonly
+        x.MaxLength <- maxLength
+        
+        if isTimestampTz then
+            //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
+            x.DateTimeMode <- DataSetDateTime.Local
+            //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
+            x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.TimestampTz)
+        elif isTimestamp then
+            //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
+            x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Timestamp)
+        elif isEnum then
+            // value is an enum and should be sent to npgsql as unknown (auto conversion from string to appropriate enum type)
+            x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Unknown)
+        elif isJson then
+            x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Json)
+        elif isJsonb then
+            x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Jsonb)
+        
+        x.ExtendedProperties.Add (SchemaTableColumn.IsKey, partOfPk)
+        x.ExtendedProperties.Add (SchemaTableColumn.AllowDBNull, nullable)
+        x.ExtendedProperties.Add ("ClrType.PartiallyQualifiedName", pqName)
+        x.ExtendedProperties.Add (SchemaTableColumn.BaseSchemaName, baseSchemaName)
+        x.ExtendedProperties.Add (SchemaTableColumn.BaseTableName, baseTableName)
+        x
 
     static member private MakeOptionValue (typeParam: Type) v =
         match optionCtorCache.TryGetValue typeParam with

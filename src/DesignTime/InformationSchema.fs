@@ -15,6 +15,7 @@ open FSharp.Data.Npgsql
 open ProviderImplementation.ProvidedTypes
 open System.Collections
 open System.Net
+open System.Reflection
 
 type internal DbDataReader with
 
@@ -178,7 +179,7 @@ type Column =
     member this.HasDefaultConstraint = string this.DefaultConstraint <> ""
     member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint || this.AutoIncrement
 
-    member this.MakeProvidedType(customTypes : Map<string, ProvidedTypeDefinition>, ?forceNullability: bool) =
+    member this.MakeProvidedType (customTypes : Map<string, ProvidedTypeDefinition>, ?forceNullability: bool) =
         let nullable = defaultArg forceNullability this.Nullable
         if this.DataType.IsUserDefinedType && customTypes.ContainsKey(this.DataType.UdtTypeName) then 
             let providedType = customTypes.[this.DataType.UdtTypeName]
@@ -187,51 +188,30 @@ type Column =
         else
             if nullable then typedefof<_ option>.MakeGenericType this.ClrType else this.ClrType
 
-    member this.ToDataColumnExpr() =
+    member this.ToDataColumnExpr () =
+        let mi = typeof<Utils>.GetMethod ("ToDataColumn", BindingFlags.Static ||| BindingFlags.Public)
         let typeName = 
             let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
             clrType.PartiallyQualifiedName
-        
-        let isTimestampTz = this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>
-        let isTimestamp = this.DataType.Name = "timestamp" && this.ClrType = typeof<DateTime>
-        let isJson = this.DataType.Name = "json"
-        let isJsonb = this.DataType.Name = "jsonb"
-        let isEnum = (not this.ClrType.IsArray) && this.DataType.IsUserDefinedType
-        
-        <@@
-            let x = new DataColumn( %%Expr.Value(this.Name), Type.GetType(typeName, throwOnError = true))
 
-            x.AutoIncrement <- %%Expr.Value(this.AutoIncrement)
-            x.AllowDBNull <- %%Expr.Value(this.Nullable || this.HasDefaultConstraint)
-            x.ReadOnly <- %%Expr.Value(this.ReadOnly)
-            
-            if x.DataType = typeof<string> then x.MaxLength <- %%Expr.Value(this.MaxLength)
-            
-            // control flow must be specified via simple bool switches as we are inside of quotation expression.
-            // Expr.Value can contain only boxed primitive types (not variables)
-            if isTimestampTz then
-                //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
-                x.DateTimeMode <- DataSetDateTime.Local
-                //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
-                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.TimestampTz))
-            elif isTimestamp then
-                //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
-                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Timestamp))
-            elif isEnum then
-                // value is an enum and should be sent to npgsql as unknown (auto conversion from string to appropriate enum type)
-                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Unknown))
-            elif isJson then
-                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Json))
-            elif isJsonb then
-                x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.ProviderType), %%Expr.Value(box NpgsqlDbType.Jsonb))
-            
-            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.IsKey), %%Expr.Value(box this.PartOfPrimaryKey))
-            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.AllowDBNull), %%Expr.Value(box this.Nullable))
-            x.ExtendedProperties.Add(%%Expr.Value(box "ClrType.PartiallyQualifiedName"), %%Expr.Value(box this.ClrType.PartiallyQualifiedName))
-            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseSchemaName), %%Expr.Value(box this.BaseSchemaName))
-            x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
-            x
-        @@>
+        Expr.Call (mi, [
+            Expr.Value this.Name
+            Expr.Value typeName
+            Expr.Value (this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>)
+            Expr.Value (this.DataType.Name = "timestampt" && this.ClrType = typeof<DateTime>)
+            Expr.Value (this.DataType.Name = "json")
+            Expr.Value (this.DataType.Name = "jsonb")
+            Expr.Value (not this.ClrType.IsArray && this.DataType.IsUserDefinedType)
+            Expr.Value this.AutoIncrement
+            Expr.Value (this.Nullable || this.HasDefaultConstraint)
+            Expr.Value this.ReadOnly
+            Expr.Value (if this.ClrType = typeof<string> then this.MaxLength else -1)
+            Expr.Value this.PartOfPrimaryKey
+            Expr.Value this.Nullable
+            Expr.Value this.ClrType.PartiallyQualifiedName
+            Expr.Value this.BaseSchemaName
+            Expr.Value this.BaseTableName
+        ])
 
 type StatementType =
     | Query of Column list
