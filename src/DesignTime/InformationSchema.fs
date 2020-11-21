@@ -193,14 +193,12 @@ type Column =
         let typeName = 
             let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
             clrType.PartiallyQualifiedName
+        
+        // use one composite string to reduce the number of expression nodes
+        let stringValues = sprintf "%s|%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.ClrType.PartiallyQualifiedName this.BaseSchemaName this.BaseTableName
 
         Expr.Call (mi, [
-            Expr.Value this.Name
-            Expr.Value typeName
-            Expr.Value (this.DataType.Name = "timestamptz" && this.ClrType = typeof<DateTime>)
-            Expr.Value (this.DataType.Name = "timestampt" && this.ClrType = typeof<DateTime>)
-            Expr.Value (this.DataType.Name = "json")
-            Expr.Value (this.DataType.Name = "jsonb")
+            Expr.Value stringValues
             Expr.Value (not this.ClrType.IsArray && this.DataType.IsUserDefinedType)
             Expr.Value this.AutoIncrement
             Expr.Value (this.Nullable || this.HasDefaultConstraint)
@@ -208,9 +206,6 @@ type Column =
             Expr.Value (if this.ClrType = typeof<string> then this.MaxLength else -1)
             Expr.Value this.PartOfPrimaryKey
             Expr.Value this.Nullable
-            Expr.Value this.ClrType.PartiallyQualifiedName
-            Expr.Value this.BaseSchemaName
-            Expr.Value this.BaseTableName
         ])
 
 type StatementType =

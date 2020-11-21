@@ -9,6 +9,8 @@ open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
 
+#nowarn "0025"
+
 [<Extension>]
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
@@ -27,8 +29,8 @@ type Utils private() =
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
 
-    static member ToDataColumn (columnName, typeName, isTimestampTz, isTimestamp, isJson, isJsonb, isEnum, autoIncrement, allowDbNull, readonly, maxLength,
-        partOfPk: bool, nullable: bool, pqName: string, baseSchemaName: string, baseTableName: string) =
+    static member ToDataColumn (stringValues: string, isEnum, autoIncrement, allowDbNull, readonly, maxLength, partOfPk: bool, nullable: bool) =
+        let [| columnName; typeName; pgTypeName; pqName; baseSchemaName; baseTableName |] = stringValues.Split '|'
         let x = new DataColumn (columnName, Type.GetType (typeName, throwOnError = true))
 
         x.AutoIncrement <- autoIncrement
@@ -36,20 +38,20 @@ type Utils private() =
         x.ReadOnly <- readonly
         x.MaxLength <- maxLength
         
-        if isTimestampTz then
+        if pgTypeName = "timestamptz" then
             //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
             x.DateTimeMode <- DataSetDateTime.Local
             //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.TimestampTz)
-        elif isTimestamp then
+        elif pgTypeName = "timestamp" then
             //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Timestamp)
         elif isEnum then
             // value is an enum and should be sent to npgsql as unknown (auto conversion from string to appropriate enum type)
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Unknown)
-        elif isJson then
+        elif pgTypeName = "json" then
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Json)
-        elif isJsonb then
+        elif pgTypeName = "jsonb" then
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.Jsonb)
         
         x.ExtendedProperties.Add (SchemaTableColumn.IsKey, partOfPk)
