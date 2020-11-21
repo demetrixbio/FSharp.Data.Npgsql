@@ -151,19 +151,16 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 cursor.Close()
                 invalidOp message
 
-    static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) = 
+    static member internal ExecuteReader(cmd, setupConnection, readerBehavior, parameters, _, prepare) = 
         ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
         setupConnection()
 
         if prepare then
             cmd.Prepare()
 
-        let cursor = cmd.ExecuteReader(readerBehavior)
-        // Can't verify output columns of all result sets without calling NextResult
-        ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSetDefinitions.[0].ExpectedColumns)
-        cursor
+        cmd.ExecuteReader(readerBehavior)
 
-    static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) = 
+    static member internal AsyncExecuteReader(cmd, setupConnection, readerBehavior: CommandBehavior, parameters, _, prepare) = 
         async {
             ``ISqlCommand Implementation``.SetParameters(cmd, parameters)
             do! setupConnection()
@@ -172,8 +169,6 @@ type ``ISqlCommand Implementation``(cfg: DesignTimeConfig, connection, commandTi
                 do! cmd.PrepareAsync() |> Async.AwaitTask
 
             let! cursor = cmd.ExecuteReaderAsync( readerBehavior) |> Async.AwaitTask
-            // Can't verify output columns of all result sets without calling NextResult
-            ``ISqlCommand Implementation``.VerifyOutputColumns(cursor, resultSetDefinitions.[0].ExpectedColumns)
             return cursor :?> NpgsqlDataReader
         }
     

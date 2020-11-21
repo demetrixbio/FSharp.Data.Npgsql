@@ -24,8 +24,14 @@ type internal ReturnType = {
 
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> Expr.Value( x.ErasedTo.PartiallyQualifiedName)
-        | None -> <@@ null: string @@>
+        | Some x -> Expr.Value x.ErasedTo.PartiallyQualifiedName
+        | None -> Expr.Value (null: string)
+
+type internal Statement = {
+    Type: StatementType
+    ReturnType: ReturnType option
+    Sql: string
+}
 
 type internal ProvidedTypeReuse =
     | WithCache of ConcurrentDictionary<string, ProvidedTypeDefinition>
@@ -53,11 +59,13 @@ type internal QuotationsFactory private() =
         assert (List.length xs = 7)
         Arg7(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5], xs.[6])
 
-    static let defaultCommandTimeout = (new NpgsqlCommand()).CommandTimeout
+    static let defaultCommandTimeout =
+        use cmd = new NpgsqlCommand ()
+        cmd.CommandTimeout
 
-    static let getValueAtIndex = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod(typeof<obj>)
-
-    static member internal GetValueAtIndexExpr arrayExpr index = Expr.Call(getValueAtIndex, [ arrayExpr; Expr.Value index ])
+    static member internal GetValueAtIndexExpr: (Expr * int) -> Expr =
+        let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod typeof<obj>
+        fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
     static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
         
@@ -70,22 +78,11 @@ type internal QuotationsFactory private() =
             let parameters = Array.append [| box args |] bodyFactoryArgs
             bodyFactory.Invoke(null, parameters) |> unbox
 
-    static member internal ToSqlParam(p : Parameter) = 
-
-        let name = p.Name
-        let dbType = p.NpgsqlDbType
-        let isFixedLength = p.DataType.IsFixedLength
-
-        <@@ 
-            let x = NpgsqlParameter(name, dbType, Direction = %%Expr.Value p.Direction)
-
-            if not isFixedLength then x.Size <- %%Expr.Value p.MaxLength 
-
-            x.Precision <- %%Expr.Value p.Precision
-            x.Scale <- %%Expr.Value p.Scale
-
-            x
-        @@>
+    static member internal ToSqlParamsExpr =
+        let mi = typeof<Utils>.GetMethod ("ToSqlParam", BindingFlags.Static ||| BindingFlags.Public)
+        fun (ps: Parameter list) -> Expr.NewArray (typeof<NpgsqlParameter>, ps |> List.map (fun p ->
+            Expr.Call (mi,
+                [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
 
     static member internal GetNullableValueFromDataRow<'T>(exprArgs : Expr list, name : string) =
         <@
@@ -162,7 +159,7 @@ type internal QuotationsFactory private() =
                             col.Name
 
                     let propType = col.MakeProvidedType(customTypes)
-                    let property = ProvidedProperty(propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
+                    let property = ProvidedProperty(propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i))
 
                     let ctorParameter = ProvidedParameter(propertyName, propType)  
 
@@ -356,65 +353,58 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(outputColumns, customTypes: Map<string, ProvidedTypeDefinition>, resultType, commandBehaviour: CommandBehavior,
-                                          typeNameSuffix, providedTypeReuse) =    
-         
-        if resultType = ResultType.DataReader
-        then 
-            { Single = typeof<NpgsqlDataReader>; PerRow = None }
-        elif List.isEmpty outputColumns
-        then 
-            { Single = typeof<int>; PerRow = None }
-        elif resultType = ResultType.DataTable
-        then
-            let dataRowType = QuotationsFactory.GetDataRowType(customTypes, outputColumns)
-            let dataTableType = 
-                QuotationsFactory.GetDataTableType(
-                    "Table" + typeNameSuffix, 
-                    dataRowType,
-                    customTypes,
-                    outputColumns)
+    static member internal GetOutputTypes(sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, singleRow, typeNameSuffix, providedTypeReuse) =    
+        let returnType =
+            match resultType, statementType with
+            | ResultType.DataReader, _
+            | _, Control ->
+                None
+            | _, NonQuery ->
+                Some { Single = typeof<int>; PerRow = None }
+            | ResultType.DataTable, Query columns ->
+                let dataRowType = QuotationsFactory.GetDataRowType (customTypes, columns)
+                let dataTableType =
+                    QuotationsFactory.GetDataTableType(
+                        "Table" + typeNameSuffix,
+                        dataRowType,
+                        customTypes,
+                        columns)
 
-            dataTableType.AddMember dataRowType
+                dataTableType.AddMember dataRowType
 
-            { Single = dataTableType; PerRow = None }
-
-        else 
-            let providedRowType, erasedToRowType = 
-                if List.length outputColumns = 1
-                then
-                    let column0 = outputColumns.Head
-                    let erasedTo = column0.ClrTypeConsideringNullability
-                    let provided = column0.MakeProvidedType(customTypes)
-                    provided, erasedTo
-
-                elif resultType = ResultType.Records 
-                then 
-                    let provided = QuotationsFactory.GetRecordType(outputColumns, customTypes, typeNameSuffix, providedTypeReuse)
-                    upcast provided, typeof<obj>
-                else 
-                    let providedType = 
-                        match outputColumns with
-                        | [ x ] -> x.MakeProvidedType(customTypes)
-                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType(customTypes) |]
-
-                    let erasedToTupleType = 
-                        match outputColumns with
-                        | [ x ] -> x.ClrTypeConsideringNullability
-                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
-
-                    providedType, erasedToTupleType
-            
-            { 
-                Single = 
-                    if commandBehaviour.HasFlag(CommandBehavior.SingleRow)  
-                    then
-                        ProvidedTypeBuilder.MakeGenericType(typedefof<_ option>, [ providedRowType ])
+                Some { Single = dataTableType; PerRow = None }
+            | _, Query columns ->
+                let providedRowType, erasedToRowType =
+                    if List.length columns = 1 then
+                        let column0 = columns.Head
+                        let erasedTo = column0.ClrTypeConsideringNullability
+                        let provided = column0.MakeProvidedType customTypes
+                        provided, erasedTo
+                    elif resultType = ResultType.Records then 
+                        let provided = QuotationsFactory.GetRecordType (columns, customTypes, typeNameSuffix, providedTypeReuse)
+                        upcast provided, typeof<obj>
                     else
-                        ProvidedTypeBuilder.MakeGenericType(typedefof<_ list>, [ providedRowType ])
+                        let providedType =
+                            match columns with
+                            | [ x ] -> x.MakeProvidedType customTypes
+                            | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType customTypes |]
 
-                PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType }               
-            }
+                        let erasedToTupleType =
+                            match columns with
+                            | [ x ] -> x.ClrTypeConsideringNullability
+                            | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
+
+                        providedType, erasedToTupleType
+
+                Some {
+                    Single =
+                        if singleRow then
+                            ProvidedTypeBuilder.MakeGenericType (typedefof<_ option>, [ providedRowType ])
+                        else
+                            ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
+                    PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType } }
+
+        { Type = statementType; Sql = sql; ReturnType = returnType }
 
     static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
         [
@@ -473,84 +463,92 @@ type internal QuotationsFactory private() =
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
        
-    static member internal AddProvidedTypeToDeclaring resultType returnType outputColumns (declaringType: ProvidedTypeDefinition) =
-        if resultType = ResultType.Records 
-        then
+    static member internal AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
+        if resultType = ResultType.Records then
             returnType.PerRow 
-            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && List.length outputColumns > 1)
+            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && columnCount > 1)
             |> Option.iter (fun x -> declaringType.AddMember x.Provided)
-
-        elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive
-        then
+        elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
-    static member internal BuildResultSetDefinitions (outputColumns: (string * Column list) option list) (returnTypes: (string * ReturnType) option list) =
-        List.zip outputColumns returnTypes
-        |> List.map (fun (x, y) -> if x.IsSome then Some (snd x.Value, snd y.Value) else None)
+    static member internal BuildResultSetDefinitions statements =
+        statements
         |> List.map (fun x ->
-            match x with
-            | Some (outputColumns, returnType) ->
+            match x.ReturnType, x.Type with
+            | Some returnType, Query columns ->
                 <@@ {
                     SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%Expr.NewArray(typeof<DataColumn>, [ for c in outputColumns -> c.ToDataColumnExpr() ])
+                    ExpectedColumns = %%Expr.NewArray (typeof<DataColumn>, [ for c in columns -> c.ToDataColumnExpr () ])
                 } @@>
-            | _ -> <@@ { SeqItemTypeName = %%Expr.Value (null: string); ExpectedColumns = %%Expr.NewArray (typeof<DataColumn>, []) } @@>)
+            | _ ->
+                <@@ {
+                    SeqItemTypeName = null
+                    ExpectedColumns = [||]
+                } @@>)
 
-    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes returnTypes (outputColumns: Column list option list) typeToAttachTo =
-        let executeArgs = QuotationsFactory.GetExecuteArgs(parameters, customTypes)
+    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
+        let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
         
         let addRedirectToISqlCommandMethod outputType name xmlDoc = 
-            let m = QuotationsFactory.AddGeneratedMethod(parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+            let m = QuotationsFactory.AddGeneratedMethod (parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
             Option.iter m.AddXmlDoc xmlDoc
             cmdProvidedType.AddMember m
 
-        match returnTypes with
-        | [ Some (sql, returnType) ] ->
+        match statements with
+        | _ when resultType = ResultType.DataReader ->
+            if methodTypes.HasFlag MethodTypes.Sync then
+                addRedirectToISqlCommandMethod typeof<NpgsqlDataReader> "Execute" None
+
+            if methodTypes.HasFlag MethodTypes.Async then
+                addRedirectToISqlCommandMethod typeof<Async<NpgsqlDataReader>> "AsyncExecute" None
+        | [ { ReturnType = Some returnType; Sql = sql; Type = typ } ] ->
             let xmlDoc = if returnType.Single = typeof<int> then sprintf "Returns the number of rows affected by \"%s\"." sql |> Some else None
 
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod returnType.Single "Execute" xmlDoc
 
             if methodTypes.HasFlag MethodTypes.Async then
-                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ returnType.Single ])
+                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ returnType.Single ])
                 addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" xmlDoc
 
-            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType (Option.defaultValue [] outputColumns.Head) typeToAttachTo
+            let columnCount =
+                match typ with
+                | Query columns -> columns.Length
+                | _ -> 0
+
+            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType columnCount typeToAttachTo
         | _ ->
-            let resultSetsType = ProvidedTypeDefinition("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
+            let resultSetsType = ProvidedTypeDefinition ("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
+
             let props, ctorParams =
-                returnTypes
-                |> List.mapi (fun i rt -> if rt.IsSome then Some (i, rt.Value) else None)
-                |> List.choose id
-                |> List.map (fun (i, (sql, rt)) ->
-                    let isNonQuery = rt.Single = typeof<int>
-
-                    let propName, xmlDoc =
-                        if isNonQuery then
-                            sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." sql
-                        else
-                            sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." sql
-
-                    let prop = ProvidedProperty(propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>)) i)
+                statements
+                |> List.mapi (fun i statement -> i, statement)
+                |> List.choose (fun (i, statement) ->
+                    match statement.Type, statement.ReturnType with
+                    | NonQuery, Some rt -> Some (i, rt, sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." statement.Sql)
+                    | Query _, Some rt -> Some (i, rt, sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." statement.Sql)
+                    | _ -> None)
+                |> List.map (fun (i, rt, propName, xmlDoc) ->
+                    let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i))
                     prop.AddXmlDoc xmlDoc
-                    let ctorParam = ProvidedParameter(propName, rt.Single)
+                    let ctorParam = ProvidedParameter (propName, rt.Single)
                     prop, ctorParam)
                 |> List.unzip
 
             resultSetsType.AddMembers props
 
-            let ctor = ProvidedConstructor(ctorParams, fun args -> Expr.NewArray(typeof<obj>, args))
+            let ctor = ProvidedConstructor (ctorParams, fun args -> Expr.NewArray(typeof<obj>, args))
             resultSetsType.AddMember ctor
 
-            List.zip outputColumns returnTypes
-            |> List.choose (fun (x, y) -> if x.IsSome then Some (x.Value, snd y.Value) else None)
-            |> List.iter (fun (outputColumns, returnType) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType outputColumns typeToAttachTo)
+            statements
+            |> List.choose (fun statement -> statement.ReturnType |> Option.map (fun rt -> (match statement.Type with Query columns -> columns.Length | _ -> 0), rt))
+            |> List.iter (fun (columnCount, rt) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType rt columnCount typeToAttachTo)
 
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod resultSetsType "Execute" None
             
             if methodTypes.HasFlag MethodTypes.Async then
-                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType(typedefof<_ Async>, [ resultSetsType ])
+                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ resultSetsType ])
                 addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" None
 
             cmdProvidedType.AddMember resultSetsType

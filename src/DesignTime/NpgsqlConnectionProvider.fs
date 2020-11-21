@@ -43,41 +43,39 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples) then 
                     invalidArg "singleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-                let parameters, outputColumns = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                let parameters, statements = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
 
-                let commandBehaviour = if singleRow then CommandBehavior.SingleRow else CommandBehavior.Default
-
-                let returnTypes =
-                    outputColumns |> List.mapi (fun i cs -> cs |> Option.map (fun (sql, cs) ->
-                        sql, QuotationsFactory.GetOutputTypes(
-                            cs,
+                let statements =
+                    statements |> List.mapi (fun i (sql, statementType) ->
+                        QuotationsFactory.GetOutputTypes (
+                            sql,
+                            statementType,
                             customTypes,
                             resultType, 
-                            commandBehaviour,
-                            typeNameSuffix = (if outputColumns.Length > 1 then (i + 1).ToString () else ""),
-                            providedTypeReuse = providedTypeReuse)))
+                            singleRow,
+                            (if statements.Length > 1 then (i + 1).ToString () else ""),
+                            providedTypeReuse))
 
                 let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
-                let cmdProvidedType = ProvidedTypeDefinition(commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
+                let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
-                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes returnTypes
-                    (List.map (Option.map snd) outputColumns) (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
+                QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes statements
+                    (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
 
                 let useNetTopologySuite = 
                     (parameters |> List.exists (fun p -> p.DataType.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
                     ||
-                    (outputColumns |> List.choose id |> List.map snd |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
+                    (statements |> List.choose (fun s -> match s.Type with Query cols -> Some cols | _ -> None) |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let isTypeReuseEnabled = providedTypeReuse <> NoReuse
-                let parameters = parameters |> List.map QuotationsFactory.ToSqlParam 
-                let resultSets = QuotationsFactory.BuildResultSetDefinitions outputColumns returnTypes
+                let resultSets = QuotationsFactory.BuildResultSetDefinitions statements
 
                 let designTimeConfig = 
                     <@@ {
                         SqlStatement = sqlStatement
-                        Parameters = %%Expr.NewArray (typeof<NpgsqlParameter>, parameters)
+                        Parameters = %%QuotationsFactory.ToSqlParamsExpr parameters
                         ResultType = %%Expr.Value resultType
                         SingleRow = singleRow
                         ResultSets = %%Expr.NewArray (typeof<ResultSetDefinition>, resultSets)

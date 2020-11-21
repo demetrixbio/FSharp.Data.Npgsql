@@ -23,6 +23,9 @@ type Utils private() =
     static member GetStatementIndex(cursor: DbDataReader) =
         statementIndexGetter.Invoke(cursor, null) :?> int
 
+    static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
+        NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
+
     static member private MakeOptionValue (typeParam: Type) v =
         match optionCtorCache.TryGetValue typeParam with
         | true, ctor ->

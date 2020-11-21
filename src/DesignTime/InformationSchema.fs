@@ -232,7 +232,12 @@ type Column =
             x.ExtendedProperties.Add(%%Expr.Value(box SchemaTableColumn.BaseTableName), %%Expr.Value(box this.BaseTableName))
             x
         @@>
-    
+
+type StatementType =
+    | Query of Column list
+    | NonQuery
+    | Control
+
 type DbSchemaLookupItem =
     { Schema : Schema
       Tables : Dictionary<Table, HashSet<Column>>
@@ -276,51 +281,44 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
             
             let resultSetSchemasFromNpgsql = [
                 if cursor.FieldCount > 0 then
-                    cursor.GetStatementIndex (), Some [ for c in cursor.GetColumnSchema() -> c ]
+                    cursor.GetStatementIndex (), cursor.GetColumnSchema () |> Seq.toList
 
                     while cursor.NextResult () do
-                        cursor.GetStatementIndex (), Some [ for c in cursor.GetColumnSchema() -> c ]
+                        cursor.GetStatementIndex (), cursor.GetColumnSchema () |> Seq.toList
                 ]
 
-            // Account for non-queries, which Npgsql neglects when there are multiple statements 
             [ 0 .. cursor.Statements.Count - 1 ]
             |> List.map (fun i ->
                 let sql = cursor.Statements.[i].SQL
                 match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
-                | Some (_, Some columns) -> Some (sql, columns)
+                | Some (_, columns) ->
+                    sql, columns |> List.map (fun column -> 
+                        let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
+                        
+                        let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
+
+                        match dbSchemaLookups.Columns.TryGetValue lookupKey with
+                        | true, col -> { col with Name = column.ColumnName }
+                        | _ ->
+                            {
+                                ColumnAttributeNumber = columnAttributeNumber
+                                Name = column.ColumnName
+                                DataType = DataType.Create column.PostgresType
+                                Nullable = column.AllowDBNull.GetValueOrDefault(true)
+                                MaxLength = column.ColumnSize.GetValueOrDefault(-1)
+                                ReadOnly = true
+                                AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
+                                DefaultConstraint = column.DefaultValue
+                                Description = ""
+                                PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
+                                BaseSchemaName = column.BaseSchemaName
+                                BaseTableName = column.BaseTableName
+                            }) |> Query
                 | _ ->
                     if controlCommandRegex.IsMatch sql then
-                        None
+                        sql, Control
                     else
-                        Some (sql, []))
-    
-    let outputColumns =
-        if resultType <> ResultType.DataReader then
-            resultSets |> List.map (Option.map (fun (sql, columns) -> sql, columns |> List.map (fun column -> 
-                let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
-                
-                let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
-
-                match dbSchemaLookups.Columns.TryGetValue lookupKey with
-                | true, col -> { col with Name = column.ColumnName }
-                | _ ->
-                    let dataType = DataType.Create(column.PostgresType)
-                    {
-                        ColumnAttributeNumber = columnAttributeNumber
-                        Name = column.ColumnName
-                        DataType = dataType
-                        Nullable = column.AllowDBNull.GetValueOrDefault(true)
-                        MaxLength = column.ColumnSize.GetValueOrDefault(-1)
-                        ReadOnly = true
-                        AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
-                        DefaultConstraint = column.DefaultValue
-                        Description = ""
-                        PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
-                        BaseSchemaName = column.BaseSchemaName
-                        BaseTableName = column.BaseTableName
-                    })))
-        else
-            [ Some ("", []) ]
+                        sql, NonQuery)
 
     let parameters = 
         [ for p in cmd.Parameters ->
@@ -340,7 +338,7 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
               Optional = allParametersOptional 
               DataType = DataType.Create(p.PostgresType) } ]
 
-    parameters, outputColumns
+    parameters, resultSets
 
 let getDbSchemaLookups(connectionString) =
     use conn = openConnection(connectionString)
