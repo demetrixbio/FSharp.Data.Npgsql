@@ -24,8 +24,8 @@ type internal ReturnType = {
 
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> Expr.Value x.ErasedTo.PartiallyQualifiedName
-        | None -> Expr.Value (null: string)
+        | Some x -> x.ErasedTo.PartiallyQualifiedName
+        | None -> null
 
 type internal Statement = {
     Type: StatementType
@@ -471,20 +471,18 @@ type internal QuotationsFactory private() =
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
+    static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: string); Expr.NewArray (typeof<DataColumn>, []) ])
+
     static member internal BuildResultSetDefinitions statements =
         statements
         |> List.map (fun x ->
             match x.ReturnType, x.Type with
             | Some returnType, Query columns ->
-                <@@ {
-                    SeqItemTypeName = %%returnType.SeqItemTypeName
-                    ExpectedColumns = %%Expr.NewArray (typeof<DataColumn>, [ for c in columns -> c.ToDataColumnExpr () ])
-                } @@>
+                Expr.NewRecord (typeof<ResultSetDefinition>, [
+                    Expr.Value returnType.SeqItemTypeName;
+                    Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr ())) ])
             | _ ->
-                <@@ {
-                    SeqItemTypeName = null
-                    ExpectedColumns = [||]
-                } @@>)
+                QuotationsFactory.EmptyResultSet)
 
     static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
