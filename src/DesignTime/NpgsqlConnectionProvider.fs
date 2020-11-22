@@ -58,7 +58,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
                 let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
 
-                let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<``ISqlCommand Implementation``>, hideObjectMethods = true)
+                let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<ISqlCommandImplementation>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
                 QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes statements

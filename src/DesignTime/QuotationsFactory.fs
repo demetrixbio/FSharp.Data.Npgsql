@@ -67,48 +67,31 @@ type internal QuotationsFactory private() =
         let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
-    static member internal GetBody(methodName, specialization, [<ParamArray>] bodyFactoryArgs : obj[]) =
-        
-        let bodyFactory =   
-            let mi = typeof<QuotationsFactory>.GetMethod(methodName, BindingFlags.NonPublic ||| BindingFlags.Static)
-            assert(mi <> null)
-            mi.MakeGenericMethod([| specialization |])
-
-        fun(args : Expr list) -> 
-            let parameters = Array.append [| box args |] bodyFactoryArgs
-            bodyFactory.Invoke(null, parameters) |> unbox
-
     static member internal ToSqlParamsExpr =
         let mi = typeof<Utils>.GetMethod ("ToSqlParam", BindingFlags.Static ||| BindingFlags.Public)
         fun (ps: Parameter list) -> Expr.NewArray (typeof<NpgsqlParameter>, ps |> List.map (fun p ->
             Expr.Call (mi,
                 [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
 
-    static member internal GetNullableValueFromDataRow<'T>(exprArgs : Expr list, name : string) =
-        <@
-            let row : DataRow = %%exprArgs.[0]
-            if row.IsNull name then None else Some(unbox<'T> row.[name])
-        @> 
+    static member internal GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
+        Expr.Call (typeof<Utils>.GetMethod("GetNullableValueFromDataRow").MakeGenericMethod t,[
+            exprArgs.[0]
+            Expr.Value name ])
 
-    static member internal SetNullableValueInDataRow<'T>(exprArgs : Expr list, name : string) =
-        <@
-            (%%exprArgs.[0] : DataRow).[name] <- match (%%exprArgs.[1] : option<'T>) with None -> Utils.DbNull | Some value -> box value
-        @> 
+    static member internal SetNullableValueInDataRow (t: Type, name: string) (exprArgs: Expr list) =
+        Expr.Call (typeof<Utils>.GetMethod("SetNullableValueInDataRow").MakeGenericMethod t,[
+            exprArgs.[0]
+            Expr.Value name
+            Expr.Coerce (exprArgs.[1], typeof<obj>) ])
 
-    static member internal GetNonNullableValueFromDataRow<'T>(exprArgs : Expr list, name: string) =
-        <@ (%%exprArgs.[0] : DataRow).[name] @>
+    static member internal GetNonNullableValueFromDataRow (name: string) (exprArgs: Expr list) =
+        Expr.Call (exprArgs.Head, typeof<DataRow>.GetMethod ("get_Item", [| typeof<string> |]), [ Expr.Value name ])
 
-    static member internal SetNonNullableValueInDataRow<'T>(exprArgs : Expr list, name : string) =
-        <@ (%%exprArgs.[0] : DataRow).[name] <- %%Expr.Coerce(exprArgs.[1], typeof<obj>) @>
+    static member internal SetNonNullableValueInDataRow (name: string) (exprArgs: Expr list) =
+        Expr.Call (exprArgs.Head, typeof<DataRow>.GetMethod ("set_Item", [| typeof<string>; typeof<obj> |]), [ Expr.Value name; Expr.Coerce (exprArgs.[1], typeof<obj>) ])
     
-    static member internal OptionToObj<'T> value = <@@ match %%value with Some (x : 'T) -> box x | None -> Utils.DbNull @@>    
-    
-    static member internal GetMapperFromOptionToObj(t: Type, value: Expr) =
-        typeof<QuotationsFactory>
-            .GetMethod("OptionToObj", BindingFlags.NonPublic ||| BindingFlags.Static)
-            .MakeGenericMethod(t)
-            .Invoke(null, [| box value|])
-            |> unbox        
+    static member internal GetMapperFromOptionToObj (t: Type, value: Expr) =
+        Expr.Call (typeof<Utils>.GetMethod("OptionToObj").MakeGenericMethod t, [ Expr.Coerce (value, typeof<obj>) ])
 
     static member internal AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
         let mappedInputParamValues (exprArgs: Expr list) = 
@@ -187,13 +170,11 @@ type internal QuotationsFactory private() =
     static member internal GetDataRowPropertyGetterAndSetterCode (column: Column) =
         let name = column.Name
         if column.Nullable then
-            let getter = QuotationsFactory.GetBody("GetNullableValueFromDataRow", column.ClrType, name)
-            let setter = if column.ReadOnly then None else Some( QuotationsFactory.GetBody("SetNullableValueInDataRow", column.ClrType, name))
-            getter, setter
+            let setter = if column.ReadOnly then None else Some (QuotationsFactory.SetNullableValueInDataRow (column.ClrType, name))
+            QuotationsFactory.GetNullableValueFromDataRow (column.ClrType, name), setter
         else
-            let getter = QuotationsFactory.GetBody("GetNonNullableValueFromDataRow", column.ClrType, name)
-            let setter = if column.ReadOnly then None else Some( QuotationsFactory.GetBody("SetNonNullableValueInDataRow", column.ClrType, name))
-            getter, setter
+            let setter = if column.ReadOnly then None else Some (QuotationsFactory.SetNonNullableValueInDataRow name)
+            QuotationsFactory.GetNonNullableValueFromDataRow name, setter
 
     static member internal GetDataRowType (customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
@@ -279,7 +260,7 @@ type internal QuotationsFactory private() =
                     ||> List.map2 (fun valueExpr c ->
                         if c.OptionalForInsert
                         then 
-                            QuotationsFactory.GetMapperFromOptionToObj(c.ClrType, valueExpr) |>unbox
+                            QuotationsFactory.GetMapperFromOptionToObj(c.ClrType, valueExpr)
                         else
                             valueExpr
                     )
@@ -438,7 +419,7 @@ type internal QuotationsFactory private() =
     static member ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
 
     static member internal GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
-        let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
+        let ctorImpl = typeof<ISqlCommandImplementation>.GetConstructors() |> Array.exactlyOne
 
         if isExtended then
             let body (Arg3(connection, transaction, commandTimeout)) = 

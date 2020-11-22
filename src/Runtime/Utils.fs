@@ -22,7 +22,6 @@ type Utils private() =
         typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
     
     [<Extension>]
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member GetStatementIndex(cursor: DbDataReader) =
         statementIndexGetter.Invoke(cursor, null) :?> int
 
@@ -74,7 +73,6 @@ type Utils private() =
             optionCtorCache.GetOrAdd (typeParam, fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]) v
     
     [<Extension>]
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member MapRowValues<'TItem>(cursor: DbDataReader, resultType: ResultType, resultSet: ResultSetDefinition, isTypeReuseEnabled) =
         let rowMapping =
             if resultSet.ExpectedColumns.Length = 1 then
@@ -113,16 +111,24 @@ type Utils private() =
                 |> unbox<'TItem>
         }
     
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member DbNull = box DBNull.Value
 
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
+    static member OptionToObj<'a> (value: obj) =
+        match value :?> 'a option with
+        | Some x -> box x
+        | _ -> box DBNull.Value
+
+    static member GetNullableValueFromDataRow<'a> (row: DataRow, name: string) =
+        if row.IsNull name then None else Some (row.[name] :?> 'a)
+
+    static member SetNullableValueInDataRow<'a> (row: DataRow, name: string, value: obj) =
+        row.[name] <- Utils.OptionToObj<'a> value
+
     static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
         fun values -> 
             nullsToOptions values
             mapper values
 
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 
 
         if batchSize <= 0 then invalidArg "batchSize" "Batch size has to be larger than 0."
@@ -161,7 +167,6 @@ type Utils private() =
 
         dataAdapter.Update(table)   
 
-    [<EditorBrowsable(EditorBrowsableState.Never)>]
     static member BinaryImport(table: DataTable<DataRow>, connection: NpgsqlConnection) = 
         let copyFromCommand = 
             [ for c in table.Columns -> c.ColumnName ]
