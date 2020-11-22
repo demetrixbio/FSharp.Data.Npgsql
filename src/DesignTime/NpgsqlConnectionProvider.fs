@@ -33,7 +33,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         methodsCache.GetOrAdd(
             methodName,
             fun methodName ->
-                let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor, prepare  = 
+                let sqlStatement, resultType, singleRow, allParametersOptional, typename, xctor, (prepare: bool)  = 
                     if not globalXCtor
                     then 
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _
@@ -69,20 +69,17 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     ||
                     (statements |> List.choose (fun s -> match s.Type with Query cols -> Some cols | _ -> None) |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
-                let isTypeReuseEnabled = providedTypeReuse <> NoReuse
-                let resultSets = QuotationsFactory.BuildResultSetDefinitions statements
-
                 let designTimeConfig = 
-                    <@@ {
-                        SqlStatement = sqlStatement
-                        Parameters = %%QuotationsFactory.ToSqlParamsExpr parameters
-                        ResultType = %%Expr.Value resultType
-                        SingleRow = singleRow
-                        ResultSets = %%Expr.NewArray (typeof<ResultSetDefinition>, resultSets)
-                        UseNetTopologySuite = useNetTopologySuite
-                        Prepare = prepare
-                        IsTypeReuseEnabled = isTypeReuseEnabled
-                    } @@>
+                    Expr.NewRecord (typeof<DesignTimeConfig>, [
+                        Expr.Value sqlStatement
+                        QuotationsFactory.ToSqlParamsExpr parameters
+                        Expr.Value resultType
+                        Expr.Value singleRow
+                        QuotationsFactory.BuildResultSetDefinitionsExpr statements
+                        Expr.Value useNetTopologySuite
+                        Expr.Value prepare
+                        Expr.Value (providedTypeReuse <> NoReuse)
+                    ])
 
                 let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
                 rootType.AddMember method

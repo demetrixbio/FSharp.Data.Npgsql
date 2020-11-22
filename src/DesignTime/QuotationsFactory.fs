@@ -435,17 +435,15 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
+    static member ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
+
     static member internal GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
         let ctorImpl = typeof<``ISqlCommand Implementation``>.GetConstructors() |> Array.exactlyOne
 
         if isExtended then
             let body (Arg3(connection, transaction, commandTimeout)) = 
-                let arguments = [  
-                    designTimeConfig
-                    <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice2Of2(%%connection, %%transaction) @@>
-                    commandTimeout
-                ]
-                Expr.NewObject(ctorImpl, arguments)
+                let arguments = [ designTimeConfig; Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[1], [ Expr.NewTuple [ connection; transaction ] ]); commandTimeout ]
+                Expr.NewObject (ctorImpl, arguments)
                     
             let parameters = [ 
                 ProvidedParameter("connection", typeof<NpgsqlConnection>) 
@@ -455,7 +453,7 @@ type internal QuotationsFactory private() =
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
         else
             let body (args: _ list) = 
-                Expr.NewObject(ctorImpl, designTimeConfig :: <@@ Choice<string, NpgsqlConnection * NpgsqlTransaction>.Choice1Of2 %%args.Head @@> :: args.Tail)
+                Expr.NewObject (ctorImpl, designTimeConfig :: Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[0], [ args.Head ]) :: args.Tail)
 
             let parameters = [ 
                 ProvidedParameter("connectionString", typeof<string>) 
@@ -473,16 +471,17 @@ type internal QuotationsFactory private() =
 
     static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: string); Expr.NewArray (typeof<DataColumn>, []) ])
 
-    static member internal BuildResultSetDefinitions statements =
-        statements
-        |> List.map (fun x ->
-            match x.ReturnType, x.Type with
-            | Some returnType, Query columns ->
-                Expr.NewRecord (typeof<ResultSetDefinition>, [
-                    Expr.Value returnType.SeqItemTypeName;
-                    Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr ())) ])
-            | _ ->
-                QuotationsFactory.EmptyResultSet)
+    static member internal BuildResultSetDefinitionsExpr statements =
+        Expr.NewArray (typeof<ResultSetDefinition>,
+            statements
+            |> List.map (fun x ->
+                match x.ReturnType, x.Type with
+                | Some returnType, Query columns ->
+                    Expr.NewRecord (typeof<ResultSetDefinition>, [
+                        Expr.Value returnType.SeqItemTypeName;
+                        Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr ())) ])
+                | _ ->
+                    QuotationsFactory.EmptyResultSet))
 
     static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
