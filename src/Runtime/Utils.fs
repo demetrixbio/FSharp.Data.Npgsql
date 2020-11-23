@@ -60,6 +60,12 @@ type Utils private() =
         x.ExtendedProperties.Add (SchemaTableColumn.BaseTableName, baseTableName)
         x
 
+    static member ToDataColumnSlim (stringValues: string, nullable: bool) =
+        let [| columnName; typeName |] = stringValues.Split '|'
+        let x = new DataColumn (columnName, Type.GetType (typeName, true))
+        x.ExtendedProperties.Add (SchemaTableColumn.AllowDBNull, nullable)
+        x
+
     static member private MakeOptionValue (typeParam: Type) v =
         match optionCtorCache.TryGetValue typeParam with
         | true, ctor ->
@@ -102,9 +108,7 @@ type Utils private() =
                     let obj = values.[i]
 
                     if column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] :?> bool then
-                        let dataTypeName = column.ExtendedProperties.["ClrType.PartiallyQualifiedName"] :?> string
-                        let dataType = Type.GetType(dataTypeName, throwOnError = true)
-                        Utils.MakeOptionValue dataType obj
+                        Utils.MakeOptionValue column.DataType obj
                     else
                         obj)
                 |> rowMapping

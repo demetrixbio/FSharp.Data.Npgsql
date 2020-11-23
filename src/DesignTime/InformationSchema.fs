@@ -188,25 +188,30 @@ type Column =
         else
             if nullable then typedefof<_ option>.MakeGenericType this.ClrType else this.ClrType
 
-    member this.ToDataColumnExpr () =
-        let mi = typeof<Utils>.GetMethod ("ToDataColumn", BindingFlags.Static ||| BindingFlags.Public)
-        let typeName = 
-            let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
-            clrType.PartiallyQualifiedName
-        
-        // use one composite string to reduce the number of expression nodes
-        let stringValues = sprintf "%s|%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.ClrType.PartiallyQualifiedName this.BaseSchemaName this.BaseTableName
+    member this.ToDataColumnExpr slim =
+        if slim then
+            let mi = typeof<Utils>.GetMethod ("ToDataColumnSlim", BindingFlags.Static ||| BindingFlags.Public)
+            // use one composite string to reduce the number of expression nodes
+            let stringValues = sprintf "%s|%s" this.Name this.ClrType.PartiallyQualifiedName
+            Expr.Call (mi, [ Expr.Value stringValues; Expr.Value this.Nullable ])
+        else
+            let typeName = 
+                let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
+                clrType.PartiallyQualifiedName
 
-        Expr.Call (mi, [
-            Expr.Value stringValues
-            Expr.Value (not this.ClrType.IsArray && this.DataType.IsUserDefinedType)
-            Expr.Value this.AutoIncrement
-            Expr.Value (this.Nullable || this.HasDefaultConstraint)
-            Expr.Value this.ReadOnly
-            Expr.Value (if this.ClrType = typeof<string> then this.MaxLength else -1)
-            Expr.Value this.PartOfPrimaryKey
-            Expr.Value this.Nullable
-        ])
+            let mi = typeof<Utils>.GetMethod ("ToDataColumn", BindingFlags.Static ||| BindingFlags.Public)
+            let stringValues = sprintf "%s|%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.ClrType.PartiallyQualifiedName this.BaseSchemaName this.BaseTableName
+
+            Expr.Call (mi, [
+                Expr.Value stringValues
+                Expr.Value (not this.ClrType.IsArray && this.DataType.IsUserDefinedType)
+                Expr.Value this.AutoIncrement
+                Expr.Value (this.Nullable || this.HasDefaultConstraint)
+                Expr.Value this.ReadOnly
+                Expr.Value (if this.ClrType = typeof<string> then this.MaxLength else -1)
+                Expr.Value this.PartOfPrimaryKey
+                Expr.Value this.Nullable
+            ])
 
 type StatementType =
     | Query of Column list

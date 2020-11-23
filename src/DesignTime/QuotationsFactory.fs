@@ -74,12 +74,12 @@ type internal QuotationsFactory private() =
                 [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
 
     static member internal GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
-        Expr.Call (typeof<Utils>.GetMethod("GetNullableValueFromDataRow").MakeGenericMethod t,[
+        Expr.Call (typeof<Utils>.GetMethod("GetNullableValueFromDataRow").MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name ])
 
     static member internal SetNullableValueInDataRow (t: Type, name: string) (exprArgs: Expr list) =
-        Expr.Call (typeof<Utils>.GetMethod("SetNullableValueInDataRow").MakeGenericMethod t,[
+        Expr.Call (typeof<Utils>.GetMethod("SetNullableValueInDataRow").MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name
             Expr.Coerce (exprArgs.[1], typeof<obj>) ])
@@ -396,16 +396,16 @@ type internal QuotationsFactory private() =
                     let customType = customTypes.TryFind p.DataType.UdtTypeName
                     
                     match p.DataType.IsUserDefinedType, customType with
-                    | true, Some t -> 
+                    | true, Some t ->
                         if p.DataType.ClrType.IsArray then t.MakeArrayType() else upcast t
                     | _ -> p.DataType.ClrType
 
-                if p.Optional 
-                then 
+                if p.Optional
+                then
                     assert(p.Direction = ParameterDirection.Input)
                     yield ProvidedParameter(
-                        parameterName, 
-                        parameterType = ProvidedTypeBuilder.MakeGenericType( typedefof<_ option>, [ t ]), 
+                        parameterName,
+                        parameterType = ProvidedTypeBuilder.MakeGenericType( typedefof<_ option>, [ t ]),
                         optionalValue = null
                     )
                 else
@@ -422,29 +422,29 @@ type internal QuotationsFactory private() =
         let ctorImpl = typeof<ISqlCommandImplementation>.GetConstructors() |> Array.exactlyOne
 
         if isExtended then
-            let body (Arg3(connection, transaction, commandTimeout)) = 
+            let body (Arg3(connection, transaction, commandTimeout)) =
                 let arguments = [ designTimeConfig; Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[1], [ Expr.NewTuple [ connection; transaction ] ]); commandTimeout ]
                 Expr.NewObject (ctorImpl, arguments)
-                    
-            let parameters = [ 
+
+            let parameters = [
                 ProvidedParameter("connection", typeof<NpgsqlConnection>) 
                 ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
         else
-            let body (args: _ list) = 
+            let body (args: _ list) =
                 Expr.NewObject (ctorImpl, designTimeConfig :: Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[0], [ args.Head ]) :: args.Tail)
 
-            let parameters = [ 
-                ProvidedParameter("connectionString", typeof<string>) 
+            let parameters = [
+                ProvidedParameter("connectionString", typeof<string>)
                 ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
-       
+
     static member internal AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
         if resultType = ResultType.Records then
-            returnType.PerRow 
+            returnType.PerRow
             |> Option.filter (fun x -> x.Provided <> x.ErasedTo && columnCount > 1)
             |> Option.iter (fun x -> declaringType.AddMember x.Provided)
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
@@ -452,7 +452,7 @@ type internal QuotationsFactory private() =
 
     static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: string); Expr.NewArray (typeof<DataColumn>, []) ])
 
-    static member internal BuildResultSetDefinitionsExpr statements =
+    static member internal BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
         Expr.NewArray (typeof<ResultSetDefinition>,
             statements
             |> List.map (fun x ->
@@ -460,7 +460,7 @@ type internal QuotationsFactory private() =
                 | Some returnType, Query columns ->
                     Expr.NewRecord (typeof<ResultSetDefinition>, [
                         Expr.Value returnType.SeqItemTypeName;
-                        Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr ())) ])
+                        Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
                 | _ ->
                     QuotationsFactory.EmptyResultSet))
 

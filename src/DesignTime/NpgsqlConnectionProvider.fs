@@ -75,7 +75,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                         QuotationsFactory.ToSqlParamsExpr parameters
                         Expr.Value resultType
                         Expr.Value singleRow
-                        QuotationsFactory.BuildResultSetDefinitionsExpr statements
+                        QuotationsFactory.BuildResultSetDefinitionsExpr (statements, resultType <> ResultType.DataTable)
                         Expr.Value useNetTopologySuite
                         Expr.Value prepare
                         Expr.Value (providedTypeReuse <> NoReuse)
@@ -116,7 +116,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
             do //ctor
                 let invokeCode _ = 
 
-                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr() ]
+                    let columnExprs = [ for c in columns -> c.ToDataColumnExpr false ]
 
                     let twoPartTableName = 
                         use x = new NpgsqlCommandBuilder()
