@@ -8,10 +8,16 @@ open System.Reflection
 let isStatementPrepared (connection: Npgsql.NpgsqlConnection) =
     let pool = typeof<Npgsql.NpgsqlConnection>.GetProperty("Pool", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connection)
     let connectors = pool.GetType().GetField("_connectors", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(pool) :?> obj[]
-    let connector = connectors.[0]
-    let psManager = connector.GetType().GetField("PreparedStatementManager", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connector)
-    let preparedStatements = psManager.GetType().GetProperty("BySql", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(psManager)
-    preparedStatements.GetType().GetProperty("Count", BindingFlags.Public ||| BindingFlags.Instance).GetMethod.Invoke(preparedStatements, [||]) :?> int = 1
+
+    let mutable count = 0
+
+    for connector in connectors do
+        if isNull connector |> not then
+            let psManager = connector.GetType().GetField("PreparedStatementManager", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connector)
+            let preparedStatements = psManager.GetType().GetProperty("BySql", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(psManager)
+            count <- preparedStatements.GetType().GetProperty("Count", BindingFlags.Public ||| BindingFlags.Instance).GetMethod.Invoke(preparedStatements, [||]) :?> int + count
+
+    count > 0
 
 [<Literal>]
 let selectFromPartitionedTable = "select * from logs where log_time between '2019-01-01' and '2019-12-31'"
@@ -822,10 +828,37 @@ let ``Interval update works``() =
     use cleanupCommand = DvdRental.CreateCommand<"DELETE FROM public.logs WHERE id = @id">(connectionString)
     cleanupCommand.Execute(entryId) |> ignore
 
-
 [<Fact>]
 let ``Insert does skip computed columns``() =
     use table = new DvdRental.``public``.Tables.table_with_computed_columns()
     let row = table.NewRow(operand_1 = 10, operand_2 = 20)
     table.Rows.Add(row)
     table.Update(connectionString) |> ignore
+
+[<Fact>]
+let ``Array collection type with records works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.Array>(connectionString)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, Array.length actual)
+
+[<Fact>]
+let ``Array collection type with tuples works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.Array, ResultType = ResultType.Tuples>(connectionString)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, Array.length actual)
+
+[<Fact>]
+let ``ResizeArray collection type with records works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.ResizeArray>(connectionString)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.Count)
+
+[<Fact>]
+let ``ResizeArray collection type with tuples works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.ResizeArray, ResultType = ResultType.Tuples>(connectionString)
+    let actual = cmd.Execute()
+
+    Assert.Equal (5, actual.Count)

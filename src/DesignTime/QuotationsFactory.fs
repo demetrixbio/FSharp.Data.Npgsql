@@ -334,7 +334,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, singleRow, typeNameSuffix, providedTypeReuse) =    
+    static member internal GetOutputTypes(sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse) =    
         let returnType =
             match resultType, statementType with
             | ResultType.DataReader, _
@@ -381,6 +381,10 @@ type internal QuotationsFactory private() =
                     Single =
                         if singleRow then
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ option>, [ providedRowType ])
+                        elif collectionType = CollectionType.ResizeArray then
+                            ProvidedTypeBuilder.MakeGenericType (typedefof<ResizeArray<_>>, [ providedRowType ])
+                        elif collectionType = CollectionType.Array then
+                            providedRowType.MakeArrayType ()
                         else
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
                     PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType } }

@@ -21,6 +21,11 @@ type MethodTypes =
     | Sync = 1
     | Async = 2
 
+type CollectionType =
+    | List = 0
+    | Array = 1
+    | ResizeArray = 2
+
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ResultSetDefinition = {
     SeqItemTypeName: string

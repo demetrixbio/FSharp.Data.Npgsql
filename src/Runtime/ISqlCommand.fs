@@ -16,6 +16,7 @@ type DesignTimeConfig = {
     SqlStatement: string
     Parameters: NpgsqlParameter[]
     ResultType: ResultType
+    CollectionType: CollectionType
     SingleRow: bool
     ResultSets: ResultSetDefinition[]
     UseNetTopologySuite: bool
@@ -58,12 +59,6 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
                 if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite() |> ignore
         }
 
-    static let listToOption source =  
-        match source with
-        | [] -> None
-        | [ x ] -> Some x
-        | _ -> invalidOp "The output sequence contains more than one element."
-
     let execute, asyncExecute = 
         match cfg.ResultType with
         | ResultType.DataReader -> 
@@ -95,11 +90,11 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
                             .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
                             .MakeGenericMethod(itemType)
                             
-                    executeHandle.Invoke(null, [| cfg.ResultType; cfg.IsTypeReuseEnabled |]) |> unbox >> box, 
-                    asyncExecuteHandle.Invoke(null, [| cfg.ResultType; cfg.IsTypeReuseEnabled |]) |> unbox >> box
+                    executeHandle.Invoke(null, [| cfg |]) |> unbox >> box, 
+                    asyncExecuteHandle.Invoke(null, [| cfg |]) |> unbox >> box
             | _ ->
-                ISqlCommandImplementation.ExecuteMulti (cfg.ResultType, cfg.IsTypeReuseEnabled) >> box,
-                ISqlCommandImplementation.AsyncExecuteMulti (cfg.ResultType, cfg.IsTypeReuseEnabled) >> box
+                ISqlCommandImplementation.ExecuteMulti cfg >> box,
+                ISqlCommandImplementation.AsyncExecuteMulti cfg >> box
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
     interface ISqlCommand with
@@ -233,22 +228,25 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
             return ISqlCommandImplementation.LoadDataTable reader (cmd.Clone()) resultSets.[0].ExpectedColumns
         }
 
-    static member internal ExecuteList<'TItem> (resultType, isTypeReuseEnabled) = fun(cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) -> 
+    static member internal ExecuteList<'TItem> cfg = fun (cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters, resultSetDefinitions: ResultSetDefinition[], prepare) -> 
         let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag( ParameterDirection.Output))
 
         if not hasOutputParameters
         then
             use reader = ISqlCommandImplementation.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-            let xs = reader.MapRowValues<'TItem>(resultType, resultSetDefinitions.[0], isTypeReuseEnabled) |> Seq.toList
+            let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
 
-            if readerBehavior.HasFlag(CommandBehavior.SingleRow)
-            then 
-                xs |> listToOption |> box
-            else 
+            if readerBehavior.HasFlag(CommandBehavior.SingleRow) then
+                Utils.ResizeArrayToOption xs |> box
+            elif cfg.CollectionType = CollectionType.Array then
+                xs.ToArray () |> box
+            elif cfg.CollectionType = CollectionType.List then
+                Utils.ResizeArrayToList xs |> box
+            else
                 box xs 
         else
             use reader = ISqlCommandImplementation.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-            let resultset = reader.MapRowValues<'TItem>(resultType, resultSetDefinitions.[0], isTypeReuseEnabled) |> Seq.toList
+            let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
 
             if hasOutputParameters
             then
@@ -259,36 +257,55 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
                     then 
                         parameters.[i] <- name, p.Value
 
-            box resultset
+            if cfg.CollectionType = CollectionType.Array then
+                xs.ToArray () |> box
+            elif cfg.CollectionType = CollectionType.List then
+                Utils.ResizeArrayToList xs |> box
+            else
+                box xs
 
     // TODO output params
-    static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultType, resultSetDefinition, isTypeReuseEnabled) = 
-        let xs = reader.MapRowValues<'TItem>(resultType, resultSetDefinition, isTypeReuseEnabled) |> Seq.toList
+    static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = 
+        let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition, cfg.IsTypeReuseEnabled)
 
-        if readerBehavior.HasFlag(CommandBehavior.SingleRow)
-        then 
-            xs |> listToOption |> box
-        else 
+        if readerBehavior.HasFlag CommandBehavior.SingleRow then
+            Utils.ResizeArrayToOption xs |> box
+        elif cfg.CollectionType = CollectionType.Array then
+            xs.ToArray () |> box
+        elif cfg.CollectionType = CollectionType.List then
+            Utils.ResizeArrayToList xs |> box
+        else
             box xs 
             
-    static member internal AsyncExecuteList<'TItem> (resultType, isTypeReuseEnabled) = fun(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare) ->
+    static member internal AsyncExecuteList<'TItem> cfg = fun(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare) ->
         let xs = 
             async {
                 use! reader = ISqlCommandImplementation.AsyncExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-                return reader.MapRowValues<'TItem>(resultType, resultSetDefinitions.[0], isTypeReuseEnabled) |> Seq.toList
+                return reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
             }
 
-        if readerBehavior.HasFlag(CommandBehavior.SingleRow)
-        then
+        if readerBehavior.HasFlag CommandBehavior.SingleRow then
             async {
                 let! xs = xs 
-                return xs |> listToOption
+                return Utils.ResizeArrayToOption xs
             }
             |> box
-        else 
+        elif cfg.CollectionType = CollectionType.Array then
+            async {
+                let! xs = xs 
+                return xs.ToArray ()
+            }
+            |> box
+        elif cfg.CollectionType = CollectionType.List then
+            async {
+                let! xs = xs 
+                return Utils.ResizeArrayToList xs
+            }
+            |> box
+        else
             box xs 
 
-    static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultType resultSetDefinition isTypeReuseEnabled =
+    static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultSetDefinition cfg =
         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
         let itemType = Type.GetType(resultSetDefinition.SeqItemTypeName, throwOnError = true)
         
@@ -297,9 +314,9 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
                 .GetMethod("ExecuteSingle", BindingFlags.NonPublic ||| BindingFlags.Static)
                 .MakeGenericMethod(itemType)
                 
-        executeHandle.Invoke(null, [| cursor; readerBehavior; resultType; resultSetDefinition; isTypeReuseEnabled |])
+        executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition; cfg |])
 
-    static member internal ExecuteMulti (resultType, isTypeReuseEnabled) = fun (cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) ->
+    static member internal ExecuteMulti cfg = fun (cmd, setupConnection, readerBehavior, parameters, resultSets: ResultSetDefinition[], prepare) ->
         ISqlCommandImplementation.SetParameters(cmd, parameters)
         setupConnection()
 
@@ -316,13 +333,13 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
 
             while go do
                 let currentStatement = cursor.GetStatementIndex()
-                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior resultType resultSets.[currentStatement] isTypeReuseEnabled
+                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior resultSets.[currentStatement] cfg
                 go <- cursor.NextResult()
 
         ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
         box results
 
-    static member internal AsyncExecuteMulti (resultType, isTypeReuseEnabled) = fun (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) -> async {
+    static member internal AsyncExecuteMulti cfg = fun (cmd, setupConnection, readerBehavior: CommandBehavior, parameters, resultSets: ResultSetDefinition[], prepare) -> async {
         ISqlCommandImplementation.SetParameters(cmd, parameters)
         do! setupConnection()
 
@@ -339,7 +356,7 @@ type ISqlCommandImplementation(cfg: DesignTimeConfig, connection, commandTimeout
 
             while go do
                 let currentStatement = cursor.GetStatementIndex()
-                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior resultType resultSets.[currentStatement] isTypeReuseEnabled
+                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior resultSets.[currentStatement] cfg
                 let! more = cursor.NextResultAsync() |> Async.AwaitTask
                 go <- more
 

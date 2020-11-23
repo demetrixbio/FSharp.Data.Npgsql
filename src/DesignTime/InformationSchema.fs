@@ -200,7 +200,7 @@ type Column =
                 clrType.PartiallyQualifiedName
 
             let mi = typeof<Utils>.GetMethod ("ToDataColumn", BindingFlags.Static ||| BindingFlags.Public)
-            let stringValues = sprintf "%s|%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.ClrType.PartiallyQualifiedName this.BaseSchemaName this.BaseTableName
+            let stringValues = sprintf "%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.BaseSchemaName this.BaseTableName
 
             Expr.Call (mi, [
                 Expr.Value stringValues
@@ -269,7 +269,7 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
 
             [ 0 .. cursor.Statements.Count - 1 ]
             |> List.map (fun i ->
-                let sql = cursor.Statements.[i].SQL
+                let sql = cursor.Statements.[i].SQL.Trim ()
                 match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
                 | Some (_, columns) ->
                     sql, columns |> List.map (fun column -> 
