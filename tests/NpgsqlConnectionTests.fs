@@ -843,6 +843,14 @@ let ``Array collection type with records works`` () =
     Assert.Equal (5, Array.length actual)
 
 [<Fact>]
+let ``Async array collection type with records and multiple result sets works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5; select * from actor limit 6", CollectionType = CollectionType.Array>(connectionString)
+    let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (5, Array.length actual.ResultSet1)
+    Assert.Equal (6, Array.length actual.ResultSet2)
+
+[<Fact>]
 let ``Array collection type with tuples works`` () =
     use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.Array, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.Execute()
@@ -862,3 +870,43 @@ let ``ResizeArray collection type with tuples works`` () =
     let actual = cmd.Execute()
 
     Assert.Equal (5, actual.Count)
+
+[<Fact>]
+let ``LazySeq works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.Execute()
+
+    Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
+
+[<Fact>]
+let ``Async LazySeq works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
+
+[<Fact>]
+let ``Disposing of the command does not dispose of the underlying Npgsql objects and LazySeq still works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.Execute()
+    (cmd :> IDisposable).Dispose ()
+
+    Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
+
+[<Fact>]
+let ``Disposing of the LazySeq causes further enumerations to fail`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.Execute()
+    (actual :> IDisposable).Dispose ()
+
+    Assert.Throws<ObjectDisposedException> (fun () -> actual.Seq |> Seq.take 5 |> Seq.length |> ignore) |> ignore
+
+[<Fact>]
+let ``Disposing of the LazySeq disposes of the reader, but the provided connection stays open`` () =
+    use conn = openConnection()
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq, XCtor = true>(conn)
+    use actual = cmd.Execute()
+    (actual :> IDisposable).Dispose ()
+
+    Assert.Throws<ObjectDisposedException> (fun () -> actual.Seq |> Seq.take 5 |> Seq.length |> ignore) |> ignore
+    Assert.Equal (System.Data.ConnectionState.Open, conn.State)

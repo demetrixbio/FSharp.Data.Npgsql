@@ -25,12 +25,21 @@ type CollectionType =
     | List = 0
     | Array = 1
     | ResizeArray = 2
+    | LazySeq = 3
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ResultSetDefinition = {
     SeqItemTypeName: string
     ExpectedColumns: DataColumn[]
 }
+
+type LazySeq<'a> (s: 'a seq, reader: Common.DbDataReader, cmd: NpgsqlCommand) =
+    member val Seq = s
+
+    interface System.IDisposable with
+        member _.Dispose () =
+            reader.Dispose ()
+            cmd.Dispose ()
 
 [<Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]

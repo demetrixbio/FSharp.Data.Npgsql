@@ -92,8 +92,8 @@ type Utils private() =
 
             optionCtorCache.GetOrAdd (typeParam, fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]) v
     
-    [<Extension>]
-    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet, isTypeReuseEnabled) =
+    //todo cachable
+    static member private GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled) =
         let rowMapping =
             if resultSet.ExpectedColumns.Length = 1 then
                 Array.item 0
@@ -102,37 +102,53 @@ type Utils private() =
             else
                 box
         
-        let results = ResizeArray<'TItem> ()
-
-        let values = Array.zeroCreate cursor.FieldCount
-
         // If type type reuse of records is enabled, columns need to be sorted alphabetically, because records are erased to arrays and thus the insert order
         // of elements matters
-        let columns =
+        let columnMappings =
             if isTypeReuseEnabled && resultType = ResultType.Records then
                 resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
             else
                 resultSet.ExpectedColumns |> Array.indexed
+            |> Array.map (fun (i, column) ->
+                if column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] :?> bool then
+                    Array.item i >> Utils.MakeOptionValue column.DataType
+                else
+                    Array.item i)
+
+        rowMapping, columnMappings
+
+    [<Extension>]
+    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet, isTypeReuseEnabled) =
+        let rowMapping, columnMappings = Utils.GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled)
+        let results = ResizeArray<'TItem> ()
+        let values = Array.zeroCreate cursor.FieldCount
 
         while cursor.Read () do
             cursor.GetValues values |> ignore
 
-            columns
-            |> Array.map (fun (i, column) ->
-                let obj = values.[i]
-
-                if column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] :?> bool then
-                    Utils.MakeOptionValue column.DataType obj
-                else
-                    obj)
+            columnMappings
+            |> Array.map (fun f -> f values)
             |> rowMapping
             |> unbox<'TItem>
             |> results.Add
 
         results
-    
-    static member DbNull = box DBNull.Value
 
+    [<Extension>]
+    static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet, isTypeReuseEnabled) =
+        seq {
+            let rowMapping, columnMappings = Utils.GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled)
+            let values = Array.zeroCreate cursor.FieldCount
+
+            while cursor.Read () do
+                cursor.GetValues values |> ignore
+
+                columnMappings
+                |> Array.map (fun f -> f values)
+                |> rowMapping
+                |> unbox<'TItem>
+        }
+    
     static member OptionToObj<'a> (value: obj) =
         match value :?> 'a option with
         | Some x -> box x

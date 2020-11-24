@@ -385,6 +385,8 @@ type internal QuotationsFactory private() =
                             ProvidedTypeBuilder.MakeGenericType (typedefof<ResizeArray<_>>, [ providedRowType ])
                         elif collectionType = CollectionType.Array then
                             providedRowType.MakeArrayType ()
+                        elif collectionType = CollectionType.LazySeq then
+                            ProvidedTypeBuilder.MakeGenericType (typedefof<LazySeq<_>>, [ providedRowType ])
                         else
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
                     PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType } }
