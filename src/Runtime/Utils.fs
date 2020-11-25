@@ -199,17 +199,27 @@ type Utils private() =
                     cmd.UpdatedRowSource <- UpdateRowSource.FirstReturnedRecord
         )
 
-        dataAdapter.Update(table)   
+        dataAdapter.Update(table)
 
-    static member BinaryImport(table: DataTable<DataRow>, connection: NpgsqlConnection) = 
+    static member BinaryImport(table: DataTable<DataRow>, connection: NpgsqlConnection) =
         let copyFromCommand = 
             [ for c in table.Columns -> c.ColumnName ]
             |> String.concat ", "
             |> sprintf "COPY %s (%s) FROM STDIN (FORMAT BINARY)" table.TableName
 
-        use writer = connection.BeginBinaryImport(copyFromCommand)
+        use writer = connection.BeginBinaryImport copyFromCommand
 
         for row in table.Rows do
-            writer.WriteRow(row.ItemArray)
+            writer.WriteRow row.ItemArray
 
-        writer.Complete()
+        writer.Complete ()
+
+    #if DEBUG
+    static member private Udp =
+        let c = new System.Net.Sockets.UdpClient ()
+        c.Connect ("localhost", 2180)
+        c
+    static member Log what =
+        let b = System.Text.Encoding.UTF8.GetBytes (sprintf "%s - %s" (DateTime.Now.TimeOfDay.ToString "hh':'mm':'ss'.'ff") what)
+        Utils.Udp.Send (b, b.Length) |> ignore
+    #endif

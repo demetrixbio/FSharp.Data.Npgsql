@@ -34,9 +34,10 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         methodsCache.GetOrAdd(
             methodName,
             fun methodName ->
-                let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool)  = 
-                    if not globalXCtor
-                    then 
+                Utils.Log (sprintf "Creating command %s" methodName)
+
+                let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool) = 
+                    if not globalXCtor then
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
                     else
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _
@@ -61,7 +62,10 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             (if statements.Length > 1 then (i + 1).ToString () else ""),
                             providedTypeReuse))
 
-                let commandTypeName = if typename <> "" then typename else methodName.Replace("=", "").Replace("@", "")
+                let commandTypeName =
+                    if typename <> "" then
+                        typename
+                    else methodName.Replace("=", "").Replace("@", "").Replace("CreateCommand,CommandText", "")
 
                 let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<ISqlCommandImplementation>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
@@ -147,7 +151,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
                         "BinaryImport", 
                         [ ProvidedParameter("connection", typeof<NpgsqlConnection>) ],
                         typeof<uint64>,
-                        invokeCode = fun args -> <@@ Utils.BinaryImport(%%args.[0], %%args.[1]) @@>
+                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod "BinaryImport", [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1] ])
                     )
                 dataTableType.AddMember binaryImport
 

@@ -741,7 +741,7 @@ let ``Can instantiate provided record``() =
     let lname = "b"
     let id = 1
     let time = DateTime (2020, 1, 1)
-    let actual = DvdRental.Commands.``CreateCommand,CommandText"select * from actor limit 5; select * from film limit 5"``.Record1 (id, fname, lname, time)
+    let actual = DvdRental.Commands.``"select * from actor limit 5; select * from film limit 5"``.Record1 (id, fname, lname, time)
 
     Assert.Equal (actual.actor_id, id)
     Assert.Equal (actual.first_name, fname)
