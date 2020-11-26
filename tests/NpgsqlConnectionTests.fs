@@ -460,7 +460,7 @@ let binaryImport() =
             cmd.Execute() |> Option.flatten 
         
         actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
-        let importedCount = actors.BinaryImport(conn)
+        let importedCount = actors.BinaryImport(conn, false)
         Assert.Equal(1UL, importedCount)
 
         use cmd = DvdRental.CreateCommand<getActorByName, XCtor = true>(conn, tx)
@@ -468,6 +468,44 @@ let binaryImport() =
     do 
         use cmd = DvdRental.CreateCommand<getActorByName>(connectionString)
         Assert.Equal(0, cmd.Execute(firstName, lastName) |> Seq.length)
+
+[<Fact>]
+let ``binaryImport ignores identity columns when set`` () =
+    use conn = openConnection ()
+    use tran = conn.BeginTransaction ()
+
+    let table = new DvdRental.``public``.Tables.table_with_identity ()
+    table.AddRow (stuff = "one")
+    table.AddRow (stuff = "two")
+
+    Assert.Equal (2UL, table.BinaryImport (conn, true))
+    tran.Rollback ()
+
+[<Fact>]
+let ``binaryImport does not ignore identity columns when not set`` () =
+    use conn = openConnection ()
+    use tran = conn.BeginTransaction ()
+
+    let table = new DvdRental.``public``.Tables.table_with_identity ()
+    table.AddRow (stuff = "one")
+    table.AddRow (stuff = "two")
+
+    let e = Assert.Throws<Npgsql.PostgresException> (fun () -> table.BinaryImport (conn, false) |> ignore)
+    Assert.Equal ("23505", e.SqlState) // primary key violation
+    tran.Rollback ()
+    use tran = conn.BeginTransaction ()
+
+    table.Rows.Clear ()
+    table.AddRow (Some 1000, stuff = "one")
+    table.AddRow (Some 1001, stuff = "two")
+    Assert.Equal (2UL, table.BinaryImport (conn, false))
+
+    use cmd = DvdRental.CreateCommand<"select * from table_with_identity", XCtor = true>(conn)
+    let data = cmd.Execute ()
+    Assert.Equal ("one", data |> List.pick (fun x -> if x.id = 1000 then Some x.stuff else None))
+    Assert.Equal ("two", data |> List.pick (fun x -> if x.id = 1001 then Some x.stuff else None))
+
+    tran.Rollback ()
 
 [<Fact>]
 let batchSize() =

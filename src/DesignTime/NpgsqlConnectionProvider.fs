@@ -149,9 +149,12 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
                 let binaryImport = 
                     ProvidedMethod(
                         "BinaryImport", 
-                        [ ProvidedParameter("connection", typeof<NpgsqlConnection>) ],
+                        [
+                            ProvidedParameter ("connection", typeof<NpgsqlConnection>)
+                            ProvidedParameter ("ignoreIdentityColumns", typeof<bool>)
+                        ],
                         typeof<uint64>,
-                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod "BinaryImport", [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1] ])
+                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod "BinaryImport", [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1]; args.[2] ])
                     )
                 dataTableType.AddMember binaryImport
 

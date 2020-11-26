@@ -201,16 +201,25 @@ type Utils private() =
 
         dataAdapter.Update(table)
 
-    static member BinaryImport(table: DataTable<DataRow>, connection: NpgsqlConnection) =
+    static member BinaryImport (table: DataTable<DataRow>, connection: NpgsqlConnection, ignoreIdentityColumns) =
+        let columnsToInsert =
+            Seq.cast<DataColumn> table.Columns
+            |> Seq.indexed
+            |> Seq.filter (fun (_, x) -> not ignoreIdentityColumns || not x.AutoIncrement)
+            |> Seq.toArray
+
         let copyFromCommand = 
-            [ for c in table.Columns -> c.ColumnName ]
+            columnsToInsert
+            |> Array.map (fun (_, x) -> x.ColumnName)
             |> String.concat ", "
             |> sprintf "COPY %s (%s) FROM STDIN (FORMAT BINARY)" table.TableName
 
         use writer = connection.BeginBinaryImport copyFromCommand
 
         for row in table.Rows do
-            writer.WriteRow row.ItemArray
+            writer.StartRow ()
+            for i, _ in columnsToInsert do
+                writer.Write row.[i]
 
         writer.Complete ()
 
