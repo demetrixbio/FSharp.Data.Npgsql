@@ -429,7 +429,7 @@ type internal QuotationsFactory private() =
 
         if isExtended then
             let body (Arg3(connection, transaction, commandTimeout)) =
-                let arguments = [ designTimeConfig; Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[1], [ Expr.NewTuple [ connection; transaction ] ]); commandTimeout ]
+                let arguments = [ Expr.Value cmdProvidedType.Name; designTimeConfig; Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[1], [ Expr.NewTuple [ connection; transaction ] ]); commandTimeout ]
                 Expr.NewObject (ctorImpl, arguments)
 
             let parameters = [
@@ -440,7 +440,7 @@ type internal QuotationsFactory private() =
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
         else
             let body (args: _ list) =
-                Expr.NewObject (ctorImpl, designTimeConfig :: Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[0], [ args.Head ]) :: args.Tail)
+                Expr.NewObject (ctorImpl, [ Expr.Value cmdProvidedType.Name; designTimeConfig; Expr.NewUnionCase (QuotationsFactory.ConnectionUcis.[0], [ args.Head ]) ] @ args.Tail)
 
             let parameters = [
                 ProvidedParameter("connectionString", typeof<string>)

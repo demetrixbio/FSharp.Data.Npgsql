@@ -5,6 +5,7 @@ open System.Data
 open Npgsql
 open System.ComponentModel
 open System.Reflection
+open System.Collections.Concurrent
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommand = 
@@ -14,7 +15,7 @@ type ISqlCommand =
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type DesignTimeConfig = {
     SqlStatement: string
-    Parameters: NpgsqlParameter[]
+    Parameters: unit -> NpgsqlParameter[]
     ResultType: ResultType
     CollectionType: CollectionType
     SingleRow: bool
@@ -26,10 +27,14 @@ type DesignTimeConfig = {
 
 [<Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
-type ISqlCommandImplementation (cfg: DesignTimeConfig, connection, commandTimeout) =
+type ISqlCommandImplementation (name: string, cfgBuilder: Func<string, DesignTimeConfig>, connection, commandTimeout) =
+    static let cfgCache = ConcurrentDictionary<string, DesignTimeConfig> ()
+
+    let cfg = cfgCache.GetOrAdd (name, cfgBuilder)
+
     let cmd =
         let cmd = new NpgsqlCommand (cfg.SqlStatement, CommandTimeout = commandTimeout)
-        cmd.Parameters.AddRange cfg.Parameters
+        cmd.Parameters.AddRange (cfg.Parameters ())
         cmd
     
     let readerBehavior = 

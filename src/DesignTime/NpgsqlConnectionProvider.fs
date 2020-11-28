@@ -79,17 +79,18 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     (statements |> List.choose (fun s -> match s.Type with Query cols -> Some cols | _ -> None) |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let designTimeConfig = 
-                    Expr.NewRecord (typeof<DesignTimeConfig>, [
-                        Expr.Value sqlStatement
-                        QuotationsFactory.ToSqlParamsExpr parameters
-                        Expr.Value resultType
-                        Expr.Value collectionType
-                        Expr.Value singleRow
-                        QuotationsFactory.BuildResultSetDefinitionsExpr (statements, resultType <> ResultType.DataTable)
-                        Expr.Value useNetTopologySuite
-                        Expr.Value prepare
-                        Expr.Value (providedTypeReuse <> NoReuse)
-                    ])
+                    Expr.NewDelegate (typeof<Func<string, DesignTimeConfig>>, [ Var ("x", typeof<string>) ],
+                        Expr.NewRecord (typeof<DesignTimeConfig>, [
+                            Expr.Value sqlStatement
+                            Expr.Lambda (Var ("y", typeof<unit>), QuotationsFactory.ToSqlParamsExpr parameters)
+                            Expr.Value resultType
+                            Expr.Value collectionType
+                            Expr.Value singleRow
+                            QuotationsFactory.BuildResultSetDefinitionsExpr (statements, resultType <> ResultType.DataTable)
+                            Expr.Value useNetTopologySuite
+                            Expr.Value prepare
+                            Expr.Value (providedTypeReuse <> NoReuse)
+                        ]))
 
                 let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
                 rootType.AddMember method
