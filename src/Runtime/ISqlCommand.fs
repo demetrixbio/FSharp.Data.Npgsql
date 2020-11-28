@@ -27,10 +27,10 @@ type DesignTimeConfig = {
 
 [<Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
-type ISqlCommandImplementation (name: string, cfgBuilder: Func<string, DesignTimeConfig>, connection, commandTimeout) =
-    static let cfgCache = ConcurrentDictionary<string, DesignTimeConfig> ()
+type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, DesignTimeConfig>, connection, commandTimeout) =
+    static let cfgCache = ConcurrentDictionary<int, DesignTimeConfig> ()
 
-    let cfg = cfgCache.GetOrAdd (name, cfgBuilder)
+    let cfg = cfgCache.GetOrAdd (commandNameHash, cfgBuilder)
 
     let cmd =
         let cmd = new NpgsqlCommand (cfg.SqlStatement, CommandTimeout = commandTimeout)

@@ -34,8 +34,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
         methodsCache.GetOrAdd(
             methodName,
             fun methodName ->
-                Utils.Log (sprintf "Creating command %s" methodName)
-
                 let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool) = 
                     if not globalXCtor then
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
@@ -79,7 +77,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     (statements |> List.choose (fun s -> match s.Type with Query cols -> Some cols | _ -> None) |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let designTimeConfig = 
-                    Expr.NewDelegate (typeof<Func<string, DesignTimeConfig>>, [ Var ("x", typeof<string>) ],
+                    Expr.NewDelegate (typeof<Func<int, DesignTimeConfig>>, [ Var ("x", typeof<int>) ],
                         Expr.NewRecord (typeof<DesignTimeConfig>, [
                             Expr.Value sqlStatement
                             Expr.Lambda (Var ("y", typeof<unit>), QuotationsFactory.ToSqlParamsExpr parameters)
