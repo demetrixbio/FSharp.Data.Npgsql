@@ -128,11 +128,12 @@ type internal QuotationsFactory private() =
             |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
-        let createType typeName sortColumns =
+        let createType typeName =
             let recordType = ProvidedTypeDefinition(typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
             
             let properties, ctorParameters = 
-                if sortColumns then columns |> List.sortBy (fun x -> x.Name) else columns
+                columns
+                |> List.sortBy (fun x -> x.Name)
                 |> List.mapi (fun i col ->
                     let propertyName =
                         if String.IsNullOrEmpty col.Name then
@@ -154,7 +155,6 @@ type internal QuotationsFactory private() =
 
             let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, List.map (fun arg -> Expr.Coerce(arg, typeof<obj>)) args))
             recordType.AddMember ctor
-            
             recordType
 
         match providedTypeReuse with
@@ -163,9 +163,9 @@ type internal QuotationsFactory private() =
                 let t = if Map.containsKey x.DataType.FullName customTypes then x.DataType.FullName else x.ClrType.Name
                 if x.Nullable then sprintf "%s:Option<%s>" x.Name t else sprintf "%s:%s" x.Name t) |> List.sort |> String.concat ", "
 
-            cache.GetOrAdd (typeName, fun typeName -> createType typeName true)
+            cache.GetOrAdd (typeName, fun typeName -> createType typeName)
         | NoReuse ->
-            createType ("Record" + typeNameSuffix) false
+            createType ("Record" + typeNameSuffix)
 
     static member internal GetDataRowPropertyGetterAndSetterCode (column: Column) =
         let name = column.Name

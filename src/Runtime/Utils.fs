@@ -15,11 +15,42 @@ open NpgsqlTypes
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
-    static let optionCtorCache =
-        ConcurrentDictionary<Type, obj -> obj> ()
-
     static let statementIndexGetter =
         typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
+
+    static let makeOptionValue (typeParam: Type) v =
+        let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
+        let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
+        let noneInfo = snd cases |> Array.exactlyOne
+        let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
+
+        if Convert.IsDBNull v then noneValue else someCtor [| v |]
+
+    static let getRowAndColumnMappings =
+        let cache = ConcurrentDictionary<_, (obj[] -> obj) * (obj[] -> obj)[]> ()
+        fun x ->
+            cache.GetOrAdd (x, fun (resultType, resultSet) ->
+                let rowMapping =
+                    if resultSet.ExpectedColumns.Length = 1 then
+                        Array.item 0
+                    elif resultType = ResultType.Tuples then
+                        Reflection.FSharpValue.PreComputeTupleConstructor (Type.GetType (resultSet.SeqItemTypeName, true))
+                    else
+                        box
+                
+                let columnMappings =
+                    if resultType = ResultType.Records then
+                        resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
+                    else
+                        resultSet.ExpectedColumns |> Array.indexed
+                    |> Array.map (fun (i, column) ->
+                        if column.AllowDBNull then
+                            let makeOptionValue = makeOptionValue column.DataType
+                            fun (values: obj[]) -> makeOptionValue values.[i]
+                        else
+                            Array.item i)
+
+                rowMapping, columnMappings)
 
     static member ResizeArrayToList ra =
         let rec inner (ra: ResizeArray<'a>, index, acc) = 
@@ -76,50 +107,11 @@ type Utils private() =
 
     static member ToDataColumnSlim (stringValues: string, nullable: bool) =
         let [| columnName; typeName |] = stringValues.Split '|'
-        let x = new DataColumn (columnName, Type.GetType (typeName, true))
-        x.ExtendedProperties.Add (SchemaTableColumn.AllowDBNull, nullable)
-        x
-
-    static member private MakeOptionValue (typeParam: Type) v =
-        match optionCtorCache.TryGetValue typeParam with
-        | true, ctor ->
-            ctor v
-        | _ ->
-            let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
-            let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
-            let noneInfo = snd cases |> Array.exactlyOne
-            let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
-
-            optionCtorCache.GetOrAdd (typeParam, fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]) v
+        new DataColumn (columnName, Type.GetType (typeName, true), AllowDBNull = nullable)
     
-    //todo cachable
-    static member private GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled) =
-        let rowMapping =
-            if resultSet.ExpectedColumns.Length = 1 then
-                Array.item 0
-            elif resultType = ResultType.Tuples then
-                Reflection.FSharpValue.PreComputeTupleConstructor (Type.GetType (resultSet.SeqItemTypeName, true))
-            else
-                box
-        
-        // If type type reuse of records is enabled, columns need to be sorted alphabetically, because records are erased to arrays and thus the insert order
-        // of elements matters
-        let columnMappings =
-            if isTypeReuseEnabled && resultType = ResultType.Records then
-                resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
-            else
-                resultSet.ExpectedColumns |> Array.indexed
-            |> Array.map (fun (i, column) ->
-                if column.ExtendedProperties.[SchemaTableColumn.AllowDBNull] :?> bool then
-                    Array.item i >> Utils.MakeOptionValue column.DataType
-                else
-                    Array.item i)
-
-        rowMapping, columnMappings
-
     [<Extension>]
-    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet, isTypeReuseEnabled) =
-        let rowMapping, columnMappings = Utils.GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled)
+    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) =
+        let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
         let results = ResizeArray<'TItem> ()
         let values = Array.zeroCreate cursor.FieldCount
 
@@ -135,9 +127,9 @@ type Utils private() =
         results
 
     [<Extension>]
-    static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet, isTypeReuseEnabled) =
+    static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
         seq {
-            let rowMapping, columnMappings = Utils.GetRowAndColumnMappings (resultType, resultSet, isTypeReuseEnabled)
+            let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
             let values = Array.zeroCreate cursor.FieldCount
 
             while cursor.Read () do

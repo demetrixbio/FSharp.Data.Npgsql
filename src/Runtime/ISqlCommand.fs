@@ -22,7 +22,6 @@ type DesignTimeConfig = {
     ResultSets: ResultSetDefinition[]
     UseNetTopologySuite: bool
     Prepare: bool
-    IsTypeReuseEnabled: bool
 }
 
 [<Sealed>]
@@ -234,11 +233,11 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         let reader = ISqlCommandImplementation.ExecuteReader(cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
 
         if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
-            let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
+            let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, resultSetDefinitions.[0])
             new LazySeq<'TItem> (xs, reader, cmd) |> box
         else
             use reader = reader
-            let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
+            let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0])
 
             let out =
                 if readerBehavior.HasFlag CommandBehavior.SingleRow then
@@ -261,7 +260,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
 
     // TODO output params
     static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = 
-        let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition, cfg.IsTypeReuseEnabled)
+        let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition)
 
         if readerBehavior.HasFlag CommandBehavior.SingleRow then
             Utils.ResizeArrayToOption xs |> box
@@ -276,7 +275,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
             async {
                 let! reader = ISqlCommandImplementation.AsyncExecuteReader (cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-                let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
+                let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, resultSetDefinitions.[0])
                 return new LazySeq<'TItem> (xs, reader, cmd)
             }
             |> box
@@ -284,7 +283,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
             let xs = 
                 async {
                     use! reader = ISqlCommandImplementation.AsyncExecuteReader (cmd, setupConnection, readerBehavior, parameters, resultSetDefinitions, prepare)
-                    return reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0], cfg.IsTypeReuseEnabled)
+                    return reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinitions.[0])
                 }
 
             if readerBehavior.HasFlag CommandBehavior.SingleRow then

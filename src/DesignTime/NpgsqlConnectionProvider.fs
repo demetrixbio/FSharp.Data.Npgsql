@@ -87,7 +87,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             QuotationsFactory.BuildResultSetDefinitionsExpr (statements, resultType <> ResultType.DataTable)
                             Expr.Value useNetTopologySuite
                             Expr.Value prepare
-                            Expr.Value (providedTypeReuse <> NoReuse)
                         ]))
 
                 let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
