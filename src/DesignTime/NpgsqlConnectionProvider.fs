@@ -80,7 +80,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     Expr.NewDelegate (typeof<Func<int, DesignTimeConfig>>, [ Var ("x", typeof<int>) ],
                         Expr.NewRecord (typeof<DesignTimeConfig>, [
                             Expr.Value sqlStatement
-                            Expr.Lambda (Var ("y", typeof<unit>), QuotationsFactory.ToSqlParamsExpr parameters)
+                            QuotationsFactory.ToSqlParamsExpr parameters
                             Expr.Value resultType
                             Expr.Value collectionType
                             Expr.Value singleRow
