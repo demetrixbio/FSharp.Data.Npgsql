@@ -77,21 +77,19 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         | ResultType.Records | ResultType.Tuples ->
             match cfg.ResultSets with
             | [| resultSet |] ->
-                if isNull resultSet.SeqItemTypeName then
+                if isNull resultSet.SeqItemType then
                     ISqlCommandImplementation.ExecuteNonQuery >> box,
                     ISqlCommandImplementation.AsyncExecuteNonQuery >> box
                 else
-                    let itemType = Type.GetType( resultSet.SeqItemTypeName, throwOnError = true)
-                    
                     let executeHandle = 
                         typeof<ISqlCommandImplementation>
                             .GetMethod("ExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
-                            .MakeGenericMethod(itemType)
+                            .MakeGenericMethod resultSet.SeqItemType
                     
                     let asyncExecuteHandle = 
                         typeof<ISqlCommandImplementation>
                             .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
-                            .MakeGenericMethod(itemType)
+                            .MakeGenericMethod resultSet.SeqItemType
 
                     executeHandle.Invoke (null, [||]) |> unbox >> box,
                     asyncExecuteHandle.Invoke (null, [||]) |> unbox >> box
@@ -308,12 +306,11 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
 
     static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultSetDefinition cfg =
         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
-        let itemType = Type.GetType(resultSetDefinition.SeqItemTypeName, throwOnError = true)
         
         let executeHandle = 
             typeof<ISqlCommandImplementation>
                 .GetMethod("ExecuteSingle", BindingFlags.NonPublic ||| BindingFlags.Static)
-                .MakeGenericMethod(itemType)
+                .MakeGenericMethod resultSetDefinition.SeqItemType
                 
         executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition; cfg |])
 
@@ -333,7 +330,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
             let mutable go = true
 
             while go do
-                let currentStatement = cursor.GetStatementIndex()
+                let currentStatement = Utils.GetStatementIndex cursor
                 results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
                 go <- cursor.NextResult()
 
@@ -356,7 +353,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
             let mutable go = true
 
             while go do
-                let currentStatement = cursor.GetStatementIndex()
+                let currentStatement = Utils.GetStatementIndex (cursor :?> _)
                 results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
                 let! more = cursor.NextResultAsync() |> Async.AwaitTask
                 go <- more

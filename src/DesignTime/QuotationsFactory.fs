@@ -456,7 +456,7 @@ type internal QuotationsFactory private() =
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
-    static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: string); Expr.NewArray (typeof<DataColumn>, []) ])
+    static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: Type); Expr.NewArray (typeof<DataColumn>, []) ])
 
     static member internal BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
         Expr.NewArray (typeof<ResultSetDefinition>,
@@ -464,8 +464,10 @@ type internal QuotationsFactory private() =
             |> List.map (fun x ->
                 match x.ReturnType, x.Type with
                 | Some returnType, Query columns ->
+                    let seqItemTypeName = returnType.SeqItemTypeName
+
                     Expr.NewRecord (typeof<ResultSetDefinition>, [
-                        Expr.Value returnType.SeqItemTypeName;
+                        if isNull seqItemTypeName then Expr.Value (null: Type) else Expr.Call (typeof<Type>.GetMethod ("GetType", [| typeof<string>; typeof<bool> |]), [ Expr.Value seqItemTypeName; Expr.Value true ])
                         Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
                 | _ ->
                     QuotationsFactory.EmptyResultSet))

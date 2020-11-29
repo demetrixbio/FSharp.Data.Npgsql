@@ -189,6 +189,7 @@ type Column =
             if nullable then typedefof<_ option>.MakeGenericType this.ClrType else this.ClrType
 
     member this.ToDataColumnExpr slim =
+        // DataTable support requires several parameters that are otherwise unused and in these cases the expression can be greatly simplified
         if slim then
             let mi = typeof<Utils>.GetMethod ("ToDataColumnSlim", BindingFlags.Static ||| BindingFlags.Public)
             // use one composite string to reduce the number of expression nodes
@@ -261,10 +262,10 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
             
             let resultSetSchemasFromNpgsql = [
                 if cursor.FieldCount > 0 then
-                    cursor.GetStatementIndex (), cursor.GetColumnSchema () |> Seq.toList
+                    Utils.GetStatementIndex cursor, cursor.GetColumnSchema () |> Seq.toList
 
                     while cursor.NextResult () do
-                        cursor.GetStatementIndex (), cursor.GetColumnSchema () |> Seq.toList
+                        Utils.GetStatementIndex cursor, cursor.GetColumnSchema () |> Seq.toList
                 ]
 
             [ 0 .. cursor.Statements.Count - 1 ]

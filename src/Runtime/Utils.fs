@@ -15,9 +15,6 @@ open NpgsqlTypes
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
-    static let statementIndexGetter =
-        typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
-
     static let makeOptionValue (typeParam: Type) v =
         let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
         let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
@@ -34,7 +31,7 @@ type Utils private() =
                     if resultSet.ExpectedColumns.Length = 1 then
                         Array.item 0
                     elif resultType = ResultType.Tuples then
-                        Reflection.FSharpValue.PreComputeTupleConstructor (Type.GetType (resultSet.SeqItemTypeName, true))
+                        Reflection.FSharpValue.PreComputeTupleConstructor resultSet.SeqItemType
                     else
                         box
                 
@@ -67,9 +64,10 @@ type Utils private() =
         | 1 -> Some source.[0]
         | _ -> invalidOp "The output sequence contains more than one element."
 
-    [<Extension>]
-    static member GetStatementIndex(cursor: DbDataReader) =
-        statementIndexGetter.Invoke(cursor, null) :?> int
+    static member GetStatementIndex =
+        let mi = typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
+        let d = Delegate.CreateDelegate (typeof<Func<NpgsqlDataReader, int>>, mi) :?> Func<NpgsqlDataReader, int>
+        d.Invoke
 
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
@@ -151,11 +149,6 @@ type Utils private() =
 
     static member SetNullableValueInDataRow<'a> (row: DataRow, name: string, value: obj) =
         row.[name] <- Utils.OptionToObj<'a> value
-
-    static member GetMapperWithNullsToOptions(nullsToOptions, mapper: obj[] -> obj) = 
-        fun values -> 
-            nullsToOptions values
-            mapper values
 
     static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 
 

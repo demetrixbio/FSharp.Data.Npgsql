@@ -29,7 +29,7 @@ type CollectionType =
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ResultSetDefinition = {
-    SeqItemTypeName: string
+    SeqItemType: System.Type
     ExpectedColumns: DataColumn[]
 }
 
