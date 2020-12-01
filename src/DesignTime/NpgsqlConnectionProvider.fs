@@ -152,7 +152,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
                             ProvidedParameter ("ignoreIdentityColumns", typeof<bool>)
                         ],
                         typeof<uint64>,
-                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod "BinaryImport", [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1]; args.[2] ])
+                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod (nameof Utils.BinaryImport), [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1]; args.[2] ])
                     )
                 dataTableType.AddMember binaryImport
 

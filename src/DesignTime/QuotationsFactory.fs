@@ -68,18 +68,18 @@ type internal QuotationsFactory private() =
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
     static member internal ToSqlParamsExpr =
-        let mi = typeof<Utils>.GetMethod ("ToSqlParam", BindingFlags.Static ||| BindingFlags.Public)
+        let mi = typeof<Utils>.GetMethod (nameof Utils.ToSqlParam, BindingFlags.Static ||| BindingFlags.Public)
         fun (ps: Parameter list) -> Expr.NewArray (typeof<NpgsqlParameter>, ps |> List.map (fun p ->
             Expr.Call (mi,
                 [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
 
     static member internal GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
-        Expr.Call (typeof<Utils>.GetMethod("GetNullableValueFromDataRow").MakeGenericMethod t, [
+        Expr.Call (typeof<Utils>.GetMethod(nameof Utils.GetNullableValueFromDataRow).MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name ])
 
     static member internal SetNullableValueInDataRow (t: Type, name: string) (exprArgs: Expr list) =
-        Expr.Call (typeof<Utils>.GetMethod("SetNullableValueInDataRow").MakeGenericMethod t, [
+        Expr.Call (typeof<Utils>.GetMethod(nameof Utils.SetNullableValueInDataRow).MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name
             Expr.Coerce (exprArgs.[1], typeof<obj>) ])
@@ -91,7 +91,7 @@ type internal QuotationsFactory private() =
         Expr.Call (exprArgs.Head, typeof<DataRow>.GetMethod ("set_Item", [| typeof<string>; typeof<obj> |]), [ Expr.Value name; Expr.Coerce (exprArgs.[1], typeof<obj>) ])
     
     static member internal GetMapperFromOptionToObj (t: Type, value: Expr) =
-        Expr.Call (typeof<Utils>.GetMethod("OptionToObj").MakeGenericMethod t, [ Expr.Coerce (value, typeof<obj>) ])
+        Expr.Call (typeof<Utils>.GetMethod(nameof Utils.OptionToObj).MakeGenericMethod t, [ Expr.Coerce (value, typeof<obj>) ])
 
     static member internal AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
         let mappedInputParamValues (exprArgs: Expr list) = 
@@ -467,7 +467,7 @@ type internal QuotationsFactory private() =
                     let seqItemTypeName = returnType.SeqItemTypeName
 
                     Expr.NewRecord (typeof<ResultSetDefinition>, [
-                        if isNull seqItemTypeName then Expr.Value (null: Type) else Expr.Call (typeof<Type>.GetMethod ("GetType", [| typeof<string>; typeof<bool> |]), [ Expr.Value seqItemTypeName; Expr.Value true ])
+                        if isNull seqItemTypeName then Expr.Value (null: Type) else Expr.Call (typeof<Type>.GetMethod (nameof Type.GetType, [| typeof<string>; typeof<bool> |]), [ Expr.Value seqItemTypeName; Expr.Value true ])
                         Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
                 | _ ->
                     QuotationsFactory.EmptyResultSet))

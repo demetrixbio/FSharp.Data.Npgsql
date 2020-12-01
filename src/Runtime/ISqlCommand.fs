@@ -83,12 +83,12 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
                 else
                     let executeHandle = 
                         typeof<ISqlCommandImplementation>
-                            .GetMethod("ExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
+                            .GetMethod(nameof ISqlCommandImplementation.ExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
                             .MakeGenericMethod resultSet.SeqItemType
                     
                     let asyncExecuteHandle = 
                         typeof<ISqlCommandImplementation>
-                            .GetMethod("AsyncExecuteList", BindingFlags.NonPublic ||| BindingFlags.Static)
+                            .GetMethod(nameof ISqlCommandImplementation.AsyncExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
                             .MakeGenericMethod resultSet.SeqItemType
 
                     executeHandle.Invoke (null, [||]) |> unbox >> box,
@@ -309,7 +309,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         
         let executeHandle = 
             typeof<ISqlCommandImplementation>
-                .GetMethod("ExecuteSingle", BindingFlags.NonPublic ||| BindingFlags.Static)
+                .GetMethod(nameof ISqlCommandImplementation.ExecuteSingle, BindingFlags.NonPublic ||| BindingFlags.Static)
                 .MakeGenericMethod resultSetDefinition.SeqItemType
                 
         executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition; cfg |])
