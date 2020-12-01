@@ -122,7 +122,7 @@ type internal QuotationsFactory private() =
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
-    static member internal GetRecordType(columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
+    static member internal GetRecordType (rootTypeName, columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
         columns 
             |> Seq.groupBy (fun x -> x.Name) 
             |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
@@ -163,7 +163,7 @@ type internal QuotationsFactory private() =
                 let t = if Map.containsKey x.DataType.FullName customTypes then x.DataType.FullName else x.ClrType.Name
                 if x.Nullable then sprintf "%s:Option<%s>" x.Name t else sprintf "%s:%s" x.Name t) |> List.sort |> String.concat ", "
 
-            cache.GetOrAdd (typeName, fun typeName -> createType typeName)
+            cache.GetOrAdd (rootTypeName + typeName, fun _ -> createType typeName)
         | NoReuse ->
             createType ("Record" + typeNameSuffix)
 
@@ -334,7 +334,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes(sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse) =    
+    static member internal GetOutputTypes (rootTypeName, sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse) =    
         let returnType =
             match resultType, statementType with
             | ResultType.DataReader, _
@@ -362,7 +362,7 @@ type internal QuotationsFactory private() =
                         let provided = column0.MakeProvidedType customTypes
                         provided, erasedTo
                     elif resultType = ResultType.Records then 
-                        let provided = QuotationsFactory.GetRecordType (columns, customTypes, typeNameSuffix, providedTypeReuse)
+                        let provided = QuotationsFactory.GetRecordType (rootTypeName, columns, customTypes, typeNameSuffix, providedTypeReuse)
                         upcast provided, typeof<obj>
                     else
                         let providedType =

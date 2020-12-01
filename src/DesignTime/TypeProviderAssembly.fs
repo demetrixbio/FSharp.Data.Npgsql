@@ -17,16 +17,14 @@ type NpgsqlProviders(config) as this =
         addDefaultProbingLocation = true
     )
     
-    let cache = ConcurrentDictionary<string, ProvidedTypeDefinition>()
-    let schemaCache = ConcurrentDictionary<string, DbSchemaLookups>()
-
     do 
         // register extension mappings
         Npgsql.NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
     
         this.Disposing.Add <| fun _ ->
             try 
-                NpgsqlConnectionProvider.methodsCache.Clear()
+                NpgsqlConnectionProvider.methodsCache.Clear ()
+                NpgsqlConnectionProvider.typeCache.Clear ()
             with _ -> ()
 
         let assembly = Assembly.GetExecutingAssembly()
@@ -35,8 +33,5 @@ type NpgsqlProviders(config) as this =
         
         assert (typeof<ISqlCommandImplementation>.Assembly.GetName().Name = assemblyName) 
 
-        this.AddNamespace(
-            nameSpace, [ 
-                NpgsqlConnectionProvider.getProviderType(assembly, nameSpace, cache, schemaCache)
-            ]
+        this.AddNamespace (nameSpace, [ NpgsqlConnectionProvider.getProviderType (assembly, nameSpace) ]
         )

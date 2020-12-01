@@ -12,7 +12,9 @@ open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Concurrent
 
-let methodsCache = ConcurrentDictionary<string, ProvidedMethod>()
+let methodsCache = ConcurrentDictionary<string, ProvidedMethod> ()
+let typeCache = ConcurrentDictionary<string, ProvidedTypeDefinition> ()
+let schemaCache = ConcurrentDictionary<string, DbSchemaLookups> ()
 
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
                            dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare: bool, providedTypeReuse, methodTypes, globalCollectionType: CollectionType) = 
@@ -32,8 +34,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
         methodsCache.GetOrAdd(
-            methodName,
-            fun methodName ->
+            rootType.Name + methodName,
+            fun _ ->
                 let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool) = 
                     if not globalXCtor then
                         args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
@@ -51,6 +53,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 let statements =
                     statements |> List.mapi (fun i (sql, statementType) ->
                         QuotationsFactory.GetOutputTypes (
+                            rootType.Name,
                             sql,
                             statementType,
                             customTypes,
@@ -152,7 +155,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
                             ProvidedParameter ("ignoreIdentityColumns", typeof<bool>)
                         ],
                         typeof<uint64>,
-                        invokeCode = fun args -> Expr.Call (typeof<Utils>.GetMethod (nameof Utils.BinaryImport), [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1]; args.[2] ])
+                        fun args -> Expr.Call (typeof<Utils>.GetMethod (nameof Utils.BinaryImport), [ Expr.Coerce (args.[0], typeof<DataTable<DataRow>>); args.[1]; args.[2] ])
                     )
                 dataTableType.AddMember binaryImport
 
@@ -162,20 +165,11 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 
     tables
 
-let createRootType
-    ( 
-        assembly, nameSpace: string, typeName, schemaCache: ConcurrentDictionary<string, DbSchemaLookups>,
-        connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, cache
-    ) =
-
+let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
-    let databaseRootType = ProvidedTypeDefinition(assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
-
-    let schemaLookups =
-        schemaCache.GetOrAdd(
-            connectionString,
-            fun connectionString -> InformationSchema.getDbSchemaLookups(connectionString))
+    let databaseRootType = ProvidedTypeDefinition (assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
+    let schemaLookups = schemaCache.GetOrAdd (connectionString, InformationSchema.getDbSchemaLookups)
     
     let dbSchemas = schemaLookups.Schemas
                     |> Seq.map (fun s -> ProvidedTypeDefinition(s.Key, baseType = Some typeof<obj>, hideObjectMethods = true))
@@ -201,14 +195,14 @@ let createRootType
 
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
-    let providedTypeReuse = if reuseProvidedTypes then WithCache cache else NoReuse
-    addCreateCommandMethod(connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType)
+    let providedTypeReuse = if reuseProvidedTypes then WithCache typeCache else NoReuse
+    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType)
 
     databaseRootType           
 
-let internal getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<string, ProvidedTypeDefinition>, schemaCache: ConcurrentDictionary<string, DbSchemaLookups>) = 
+let internal getProviderType (assembly, nameSpace) = 
 
-    let providerType = ProvidedTypeDefinition(assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
+    let providerType = ProvidedTypeDefinition (assembly, nameSpace, "NpgsqlConnection", Some typeof<obj>, hideObjectMethods = true)
 
     providerType.DefineStaticParameters (
         [ 
@@ -219,7 +213,7 @@ let internal getProviderType(assembly, nameSpace, cache: ConcurrentDictionary<st
             ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
             ProvidedStaticParameter("CollectionType", typeof<CollectionType>, CollectionType.List)
         ],
-        fun typeName args -> cache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, schemaCache, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], cache)))
+        fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5])))
 
     providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects, tables and functions.</summary> 
