@@ -1,9 +1,11 @@
 ## Description
+Forked from https://github.com/demetrixbio/FSharp.Data.Npgsql
+TODO describe changes
+
 FSharp.Data.Npgsql is F# type providers library on a top of well-known [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html). 
 
 ## Nuget package
-
-https://www.nuget.org/packages/FSharp.Data.Npgsql/
+FSharp.Data.Npgsql5 [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql5.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql5)
 
 ## Target platforms: 
   - netstandard2.0
