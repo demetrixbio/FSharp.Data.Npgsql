@@ -6,11 +6,19 @@ open Npgsql
 open System.ComponentModel
 open System.Reflection
 open System.Collections.Concurrent
+open FSharp.Control.Tasks.V2.ContextInsensitive
+open System.Threading.Tasks
+
+type internal ExecutionType =
+    | Sync
+    | Async
+    | TaskAsync
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommand = 
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
+    abstract TaskAsyncExecute: parameters: (string * obj)[] -> obj
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type DesignTimeConfig = {
@@ -40,67 +48,53 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
     let readerBehavior = 
         if cfg.SingleRow then CommandBehavior.SingleRow else CommandBehavior.Default
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
-        ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ ->  CommandBehavior.Default
+        ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ -> CommandBehavior.Default
         
     let setupConnection () =
         match connection with
         | Choice2Of2 (conn, tx) ->
             cmd.Connection <- conn
             cmd.Transaction <- tx
-        | Choice1Of2 connectionString ->
+            Task.CompletedTask
+        | Choice1Of2 connectionString -> task {
             cmd.Connection <- new NpgsqlConnection (connectionString)
-            cmd.Connection.Open ()
-            if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite () |> ignore
-        
-    let asyncSetupConnection () = async {
-        match connection with
-        | Choice2Of2 (conn, tx) ->
-            cmd.Connection <- conn
-            cmd.Transaction <- tx
-        | Choice1Of2 connectionString ->
-            cmd.Connection <- new NpgsqlConnection (connectionString)
-            do! cmd.Connection.OpenAsync () |> Async.AwaitTask
-            if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite () |> ignore }
+            do! cmd.Connection.OpenAsync ()
+            if cfg.UseNetTopologySuite then cmd.Connection.TypeMapper.UseNetTopologySuite () |> ignore } :> Task
 
-    let execute, asyncExecute = 
+    // tasks are hot, therefore unit -> Task is required when executionType is Async (otherwise they would run before the wrapping Async, which is cold)
+    static let mapTask (t: unit -> Task<_>, executionType) =
+        match executionType with
+        | Sync -> t().Result |> box
+        | Async -> async { return! t () |> Async.AwaitTask } |> box
+        | TaskAsync -> t () |> box
+
+    let execute = 
         match cfg.ResultType with
         | ResultType.DataReader ->
-            ISqlCommandImplementation.ExecuteReader >> box,
-            ISqlCommandImplementation.AsyncExecuteReader >> box
+            ISqlCommandImplementation.AsyncExecuteReader
         | ResultType.DataTable ->
             if cfg.ResultSets.Length = 1 then
-                ISqlCommandImplementation.ExecuteDataTable >> box,
-                ISqlCommandImplementation.AsyncExecuteDataTable >> box
+                ISqlCommandImplementation.AsyncExecuteDataTable
             else
-                ISqlCommandImplementation.ExecuteDataTables >> box,
-                ISqlCommandImplementation.AsyncExecuteDataTables >> box
+                ISqlCommandImplementation.AsyncExecuteDataTables
         | ResultType.Records | ResultType.Tuples ->
             match cfg.ResultSets with
             | [| resultSet |] ->
                 if isNull resultSet.SeqItemType then
-                    ISqlCommandImplementation.ExecuteNonQuery >> box,
-                    ISqlCommandImplementation.AsyncExecuteNonQuery >> box
+                    ISqlCommandImplementation.AsyncExecuteNonQuery
                 else
-                    let executeHandle = 
-                        typeof<ISqlCommandImplementation>
-                            .GetMethod(nameof ISqlCommandImplementation.ExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
-                            .MakeGenericMethod resultSet.SeqItemType
-                    
-                    let asyncExecuteHandle = 
-                        typeof<ISqlCommandImplementation>
-                            .GetMethod(nameof ISqlCommandImplementation.AsyncExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
-                            .MakeGenericMethod resultSet.SeqItemType
-
-                    executeHandle.Invoke (null, [||]) |> unbox >> box,
-                    asyncExecuteHandle.Invoke (null, [||]) |> unbox >> box
+                    typeof<ISqlCommandImplementation>
+                        .GetMethod(nameof ISqlCommandImplementation.AsyncExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
+                        .MakeGenericMethod(resultSet.SeqItemType)
+                        .Invoke(null, [||]) |> unbox
             | _ ->
-                ISqlCommandImplementation.ExecuteMulti >> box,
-                ISqlCommandImplementation.AsyncExecuteMulti >> box
+                ISqlCommandImplementation.AsyncExecuteMulti
         | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
     interface ISqlCommand with
-        member __.Execute parameters = execute(cfg, cmd, setupConnection, readerBehavior, parameters)
-        member __.AsyncExecute parameters = asyncExecute(cfg, cmd, asyncSetupConnection, readerBehavior, parameters)
+        member __.Execute parameters = execute (cfg, cmd, setupConnection, readerBehavior, parameters, Sync)
+        member __.AsyncExecute parameters = execute (cfg, cmd, setupConnection, readerBehavior, parameters, Async)
+        member __.TaskAsyncExecute parameters = execute (cfg, cmd, setupConnection, readerBehavior, parameters, TaskAsync)
 
     interface IDisposable with
         member __.Dispose () =
@@ -121,7 +115,6 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
             then
                 p.Size <- (value :?> Array).Length
 
-    //Execute/AsyncExecute versions
     static member internal VerifyOutputColumns(cursor: Common.DbDataReader, expectedColumns: DataColumn[]) =
         if cursor.FieldCount < expectedColumns.Length then
             let message = sprintf "Expected at least %i columns in result set but received only %i." expectedColumns.Length cursor.FieldCount
@@ -144,165 +137,102 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
                 cursor.Close()
                 invalidOp message
 
-    static member internal ExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters) =
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        setupConnection()
+    static member internal AsyncExecuteDataReaderTask (cfg, cmd, setupConnection: unit -> Task, readerBehavior: CommandBehavior, parameters) = task {
+        ISqlCommandImplementation.SetParameters (cmd, parameters)
+        do! setupConnection ()
 
         if cfg.Prepare then
-            cmd.Prepare()
+            do! cmd.PrepareAsync ()
 
-        cmd.ExecuteReader(readerBehavior)
-
-    static member internal AsyncExecuteReader (cfg, cmd, setupConnection, readerBehavior: CommandBehavior, parameters) = async {
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        do! setupConnection()
-
-        if cfg.Prepare then
-            do! cmd.PrepareAsync() |> Async.AwaitTask
-
-        let! cursor = cmd.ExecuteReaderAsync( readerBehavior) |> Async.AwaitTask
+        let! cursor = cmd.ExecuteReaderAsync readerBehavior
         return cursor :?> NpgsqlDataReader }
-    
-    static member internal LoadDataTable (cursor: Common.DbDataReader) cmd columns =
+
+    static member internal AsyncExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters, executionType) =
+        let t () = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
+        mapTask (t, executionType)
+
+    static member internal LoadDataTable (cursor: Common.DbDataReader) cmd (columns: DataColumn[]) =
         let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd)
-        result.Columns.AddRange(columns)
-        result.Load(cursor)
+
+        for c in columns do
+            Utils.CloneDataColumn c |> result.Columns.Add
+
+        result.Load cursor
         result
 
-    static member internal AsyncExecuteDataTables (cfg, cmd, setupConnection, readerBehavior, parameters) = async {
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        do! setupConnection()
+    static member internal AsyncExecuteDataTables (cfg, cmd, setupConnection: unit -> Task, readerBehavior, parameters, executionType) =
+        let t () = task {
+            use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
 
-        if cfg.Prepare then
-            do! cmd.PrepareAsync() |> Async.AwaitTask
+            // No explicit NextResult calls, Load takes care of it
+            let results =
+                cfg.ResultSets
+                |> Array.map (fun resultSet ->
+                    if Array.isEmpty resultSet.ExpectedColumns then
+                        null
+                    else
+                        ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
+                        ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-        use! cursor = cmd.ExecuteReaderAsync(readerBehavior) |> Async.AwaitTask
+            ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
+            return results }
 
-        // No explicit NextResult calls, Load takes care of it
-        let results =
-            cfg.ResultSets
-            |> Array.map (fun resultSet ->
-                if Array.isEmpty resultSet.ExpectedColumns then
-                    null
-                else
-                    ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
-                    ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
+        mapTask (t, executionType)
 
-        ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
-        return box results }
+    static member internal AsyncExecuteDataTable (cfg, cmd, setupConnection: unit -> Task, readerBehavior, parameters, executionType) =
+        let t () = task {
+            use! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters) 
+            return ISqlCommandImplementation.LoadDataTable reader (cmd.Clone()) cfg.ResultSets.[0].ExpectedColumns }
 
-    // Reads data tables from multiple result sets
-    static member internal ExecuteDataTables (cfg, cmd, setupConnection, readerBehavior, parameters) =
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        setupConnection()
-
-        if cfg.Prepare then
-            cmd.Prepare()
-
-        use cursor = cmd.ExecuteReader(readerBehavior)        
-
-        // No explicit NextResult calls, Load takes care of it
-        let results =
-            cfg.ResultSets
-            |> Array.map (fun resultSet ->
-                if Array.isEmpty resultSet.ExpectedColumns then
-                    null
-                else
-                    ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
-                    ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
-
-        ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
-        box results
-
-    static member internal ExecuteDataTable (cfg, cmd, setupConnection, readerBehavior, parameters) = 
-        use cursor = ISqlCommandImplementation.ExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters) 
-        ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) cfg.ResultSets.[0].ExpectedColumns
-
-    static member internal AsyncExecuteDataTable (cfg, cmd, setupConnection, readerBehavior, parameters) = 
-        async {
-            use! reader = ISqlCommandImplementation.AsyncExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters) 
-            return ISqlCommandImplementation.LoadDataTable reader (cmd.Clone()) cfg.ResultSets.[0].ExpectedColumns
-        }
-
-    static member internal ExecuteList<'TItem> () = fun (cfg, cmd: NpgsqlCommand, setupConnection, readerBehavior, parameters) ->
-        let hasOutputParameters = cmd.Parameters |> Seq.cast<NpgsqlParameter> |> Seq.exists (fun x -> x.Direction.HasFlag ParameterDirection.Output)
-
-        let reader = ISqlCommandImplementation.ExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters)
-
-        if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
-            let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, cfg.ResultSets.[0])
-            new LazySeq<'TItem> (xs, reader, cmd) |> box
-        else
-            use reader = reader
-            let xs = reader.MapRowValues<'TItem> (cfg.ResultType, cfg.ResultSets.[0])
-
-            let out =
-                if readerBehavior.HasFlag CommandBehavior.SingleRow then
-                    Utils.ResizeArrayToOption xs |> box
-                elif cfg.CollectionType = CollectionType.Array then
-                    xs.ToArray () |> box
-                elif cfg.CollectionType = CollectionType.List then
-                    Utils.ResizeArrayToList xs |> box
-                else
-                    box xs 
-
-            if hasOutputParameters then
-                for i = 0 to parameters.Length - 1 do
-                    let name, _ = parameters.[i]
-                    let p = cmd.Parameters.[name]
-                    if p.Direction.HasFlag ParameterDirection.Output then
-                        parameters.[i] <- name, p.Value
-
-            out
+        mapTask (t, executionType)
 
     // TODO output params
-    static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = 
-        let xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition)
+    static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = task {
+        let! xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition)
 
-        if readerBehavior.HasFlag CommandBehavior.SingleRow then
-            Utils.ResizeArrayToOption xs |> box
-        elif cfg.CollectionType = CollectionType.Array then
-            xs.ToArray () |> box
-        elif cfg.CollectionType = CollectionType.List then
-            Utils.ResizeArrayToList xs |> box
-        else
-            box xs 
+        return
+            if readerBehavior.HasFlag CommandBehavior.SingleRow then
+                Utils.ResizeArrayToOption xs |> box
+            elif cfg.CollectionType = CollectionType.Array then
+                xs.ToArray () |> box
+            elif cfg.CollectionType = CollectionType.List then
+                Utils.ResizeArrayToList xs |> box
+            else
+                box xs }
             
-    static member internal AsyncExecuteList<'TItem> () = fun (cfg, cmd, setupConnection, readerBehavior: CommandBehavior, parameters) ->
+    static member internal AsyncExecuteList<'TItem> () = fun (cfg, cmd, setupConnection: unit -> Task, readerBehavior: CommandBehavior, parameters, executionType) ->
         if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
-            async {
-                let! reader = ISqlCommandImplementation.AsyncExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters)
+            let t () = task {
+                let! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
                 let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, cfg.ResultSets.[0])
-                return new LazySeq<'TItem> (xs, reader, cmd)
-            }
-            |> box
+                return new LazySeq<'TItem> (xs, reader, cmd) }
+
+            mapTask (t, executionType)
         else
-            let xs = 
-                async {
-                    use! reader = ISqlCommandImplementation.AsyncExecuteReader (cfg, cmd, setupConnection, readerBehavior, parameters)
-                    return reader.MapRowValues<'TItem> (cfg.ResultType, cfg.ResultSets.[0])
-                }
+            let xs () = task {
+                use! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
+                return! reader.MapRowValues<'TItem> (cfg.ResultType, cfg.ResultSets.[0]) }
 
             if readerBehavior.HasFlag CommandBehavior.SingleRow then
-                async {
-                    let! xs = xs 
+                let t () = task {
+                    let! xs = xs ()
                     return Utils.ResizeArrayToOption xs
                 }
-                |> box
+                mapTask (t, executionType)
             elif cfg.CollectionType = CollectionType.Array then
-                async {
-                    let! xs = xs 
+                let t () = task {
+                    let! xs = xs ()
                     return xs.ToArray ()
                 }
-                |> box
+                mapTask (t, executionType)
             elif cfg.CollectionType = CollectionType.List then
-                async {
-                    let! xs = xs 
+                let t () = task {
+                    let! xs = xs ()
                     return Utils.ResizeArrayToList xs
                 }
-                |> box
+                mapTask (t, executionType)
             else
-                box xs 
+                mapTask (xs, executionType)
 
     static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultSetDefinition cfg =
         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
@@ -312,81 +242,40 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
                 .GetMethod(nameof ISqlCommandImplementation.ExecuteSingle, BindingFlags.NonPublic ||| BindingFlags.Static)
                 .MakeGenericMethod resultSetDefinition.SeqItemType
                 
-        executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition; cfg |])
+        executeHandle.Invoke(null, [| cursor; readerBehavior; resultSetDefinition; cfg |]) :?> Task<obj>
 
-    static member internal ExecuteMulti (cfg, cmd, setupConnection, readerBehavior, parameters) =
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        setupConnection()
+    static member internal AsyncExecuteMulti (cfg, cmd, setupConnection, readerBehavior, parameters, executionType) =
+        let t () = task {
+            use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
+            let results = Array.zeroCreate cmd.Statements.Count
 
-        if cfg.Prepare then
-            cmd.Prepare()
+            // Command contains at least one query
+            if cfg.ResultSets |> Array.exists (fun x -> Array.isEmpty x.ExpectedColumns |> not) then
+                let mutable go = true
 
-        use cursor = cmd.ExecuteReader(readerBehavior)
+                while go do
+                    let currentStatement = Utils.GetStatementIndex cursor
+                    let! res = ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
+                    results.[currentStatement] <- res
+                    let! more = cursor.NextResultAsync ()
+                    go <- more
 
-        let results = Array.zeroCreate cursor.Statements.Count
+            ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
+            return results }
 
-        // Command contains at least one query
-        if cfg.ResultSets |> Array.exists (fun x -> Array.isEmpty x.ExpectedColumns |> not) then
-            let mutable go = true
+        mapTask (t, executionType)
 
-            while go do
-                let currentStatement = Utils.GetStatementIndex cursor
-                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
-                go <- cursor.NextResult()
-
-        ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
-        box results
-
-    static member internal AsyncExecuteMulti (cfg, cmd, setupConnection, readerBehavior: CommandBehavior, parameters) = async {
-        ISqlCommandImplementation.SetParameters(cmd, parameters)
-        do! setupConnection()
-
-        if cfg.Prepare then
-            do! cmd.PrepareAsync() |> Async.AwaitTask
-
-        use! cursor = cmd.ExecuteReaderAsync(readerBehavior) |> Async.AwaitTask
-
-        let results = Array.zeroCreate cmd.Statements.Count
-
-        // Command contains at least one query
-        if cfg.ResultSets |> Array.exists (fun x -> Array.isEmpty x.ExpectedColumns |> not) then
-            let mutable go = true
-
-            while go do
-                let currentStatement = Utils.GetStatementIndex (cursor :?> _)
-                results.[currentStatement] <- ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
-                let! more = cursor.NextResultAsync() |> Async.AwaitTask
-                go <- more
-
-        ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
-        return box results }
-
-    static member internal ExecuteNonQuery (cfg, cmd, setupConnection, _, parameters) = 
-        ISqlCommandImplementation.SetParameters(cmd, parameters)  
-        setupConnection()
-
-        if cfg.Prepare then
-            cmd.Prepare()
-
-        let rowsAffected = cmd.ExecuteNonQuery() 
-        for i = 0 to parameters.Length - 1 do
-            let name, _ = parameters.[i]
-            let p = cmd.Parameters.[name]
-            if p.Direction.HasFlag ParameterDirection.Output then
-                parameters.[i] <- name, p.Value
-
-        rowsAffected
-
-    static member internal AsyncExecuteNonQuery (cfg, cmd, setupConnection, _, parameters) = 
-        ISqlCommandImplementation.SetParameters(cmd, parameters)  
-        async {         
-            do! setupConnection()
+    static member internal AsyncExecuteNonQuery (cfg, cmd, setupConnection, _, parameters, executionType) = 
+        let t () = task {
+            ISqlCommandImplementation.SetParameters (cmd, parameters)
+            do! setupConnection ()
 
             if cfg.Prepare then
-                do! cmd.PrepareAsync() |> Async.AwaitTask
+                do! cmd.PrepareAsync ()
 
-            return! cmd.ExecuteNonQueryAsync() |> Async.AwaitTask
-        }
+            return! cmd.ExecuteNonQueryAsync () }
+
+        mapTask (t, executionType)
 
     static member internal SetNumberOfAffectedRows (results: obj[]) (statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
         for i in 0 .. statements.Count - 1 do

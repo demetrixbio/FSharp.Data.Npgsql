@@ -54,9 +54,12 @@ let openConnection() =
     conn.Open()
     conn
 
-type DvdRental = NpgsqlConnection<connectionString>
+[<Literal>]
+let methodTypes = MethodTypes.Async ||| MethodTypes.Sync ||| MethodTypes.Task
 
-type DvdRentalWithTypeReuse = NpgsqlConnection<connectionString, ReuseProvidedTypes = true>
+type DvdRental = NpgsqlConnection<connectionString, MethodTypes = methodTypes>
+
+type DvdRentalWithTypeReuse = NpgsqlConnection<connectionString, ReuseProvidedTypes = true, MethodTypes = methodTypes>
 
 [<Fact>]
 let selectLiterals() =
@@ -587,6 +590,36 @@ let ``Select from materialized view``() =
     Assert.True(String.IsNullOrWhiteSpace actual.title.Value |> not)
 
 [<Fact>]
+let ``Simple nonquery works`` () =
+    use conn = openConnection ()
+    use tran = conn.BeginTransaction ()
+    use cmd = DvdRental.CreateCommand<"delete from logs", XCtor = true>(conn, tran)
+    let actual = cmd.AsyncExecute () |> Async.RunSynchronously
+
+    Assert.True (actual > 0)
+    tran.Rollback ()
+
+[<Fact>]
+let ``Simple nonquery works async`` () =
+    use conn = openConnection ()
+    use tran = conn.BeginTransaction ()
+    use cmd = DvdRental.CreateCommand<"delete from logs", XCtor = true>(conn, tran)
+    let actual = cmd.Execute ()
+
+    Assert.True (actual > 0)
+    tran.Rollback ()
+
+[<Fact>]
+let ``Simple nonquery works task`` () =
+    use conn = openConnection ()
+    use tran = conn.BeginTransaction ()
+    use cmd = DvdRental.CreateCommand<"delete from logs", XCtor = true>(conn, tran)
+    let actual = cmd.TaskAsyncExecute().Result
+
+    Assert.True (actual > 0)
+    tran.Rollback ()
+
+[<Fact>]
 let ``Command not prepared by default``() =
     use conn = openConnection()
     conn.UnprepareAll()
@@ -736,9 +769,27 @@ let ``One select and two updates record async``() =
     Assert.Equal (1, actual.RowsAffected3)
 
 [<Fact>]
+let ``One select and two updates record task``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms>(connectionString)
+    let actual = cmd.TaskAsyncExecute().Result
+
+    Assert.Equal (2, actual.RowsAffected1)
+    Assert.Equal (5, actual.ResultSet2 |> List.map (fun x -> x.first_name) |> List.length)
+    Assert.Equal (1, actual.RowsAffected3)
+
+[<Fact>]
 let ``One select and two updates tuple async``() =
     use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    Assert.Equal (2, actual.RowsAffected1)
+    Assert.Equal (5, actual.ResultSet2 |> List.length)
+    Assert.Equal (1, actual.RowsAffected3)
+
+[<Fact>]
+let ``One select and two updates tuple task``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.Tuples>(connectionString)
+    let actual = cmd.TaskAsyncExecute().Result
 
     Assert.Equal (2, actual.RowsAffected1)
     Assert.Equal (5, actual.ResultSet2 |> List.length)
@@ -754,9 +805,30 @@ let ``One select and two updates data table async``() =
     Assert.Equal (1, actual.RowsAffected3)
 
 [<Fact>]
+let ``One select and two updates data table task``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataTable>(connectionString)
+    let actual = cmd.TaskAsyncExecute().Result
+
+    Assert.Equal (2, actual.RowsAffected1)
+    Assert.Equal (5, actual.ResultSet2.Rows |> Seq.map (fun x -> x.first_name) |> Seq.length)
+    Assert.Equal (1, actual.RowsAffected3)
+
+[<Fact>]
 let ``One select and two updates reader async``() =
     use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataReader>(connectionString)
     let actual = cmd.AsyncExecute() |> Async.RunSynchronously
+
+    let mutable resultSets = 1
+
+    while actual.NextResult () do
+        resultSets <- resultSets + 1
+
+    Assert.Equal (1, resultSets)
+
+[<Fact>]
+let ``One select and two updates reader task``() =
+    use cmd = DvdRental.CreateCommand<updateActorsUpdateSelectActorsUpdateFilms, ResultType = ResultType.DataReader>(connectionString)
+    let actual = cmd.TaskAsyncExecute().Result
 
     let mutable resultSets = 1
 

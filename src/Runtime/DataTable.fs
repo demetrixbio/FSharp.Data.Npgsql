@@ -20,6 +20,7 @@ type ResultType =
 type MethodTypes =
     | Sync = 1
     | Async = 2
+    | Task = 4
 
 type CollectionType =
     | List = 0

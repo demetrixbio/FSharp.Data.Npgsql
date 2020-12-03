@@ -8,6 +8,7 @@ open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
+open FSharp.Control.Tasks.V2.ContextInsensitive
 
 #nowarn "0025"
 
@@ -72,6 +73,20 @@ type Utils private() =
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
 
+    static member CloneDataColumn (column: DataColumn) =
+        let c = new DataColumn (column.ColumnName, column.DataType)
+        c.AutoIncrement <- column.AutoIncrement
+        c.AllowDBNull <- column.AllowDBNull
+        c.ReadOnly <- column.ReadOnly
+        c.MaxLength <- column.MaxLength
+        c.DateTimeMode <- column.DateTimeMode
+
+        for p in column.ExtendedProperties do
+            let p = p :?> System.Collections.DictionaryEntry
+            c.ExtendedProperties.Add (p.Key, p.Value)
+
+        c
+
     static member ToDataColumn (stringValues: string, isEnum, autoIncrement, allowDbNull, readonly, maxLength, partOfPk: bool, nullable: bool) =
         let [| columnName; typeName; pgTypeName; baseSchemaName; baseTableName |] = stringValues.Split '|'
         let x = new DataColumn (columnName, Type.GetType (typeName, throwOnError = true))
@@ -106,14 +121,17 @@ type Utils private() =
     static member ToDataColumnSlim (stringValues: string, nullable: bool) =
         let [| columnName; typeName |] = stringValues.Split '|'
         new DataColumn (columnName, Type.GetType (typeName, true), AllowDBNull = nullable)
-    
+
     [<Extension>]
-    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) =
+    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = task {
         let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
         let results = ResizeArray<'TItem> ()
         let values = Array.zeroCreate cursor.FieldCount
 
-        while cursor.Read () do
+        let! go = cursor.ReadAsync ()
+        let mutable go = go
+
+        while go do
             cursor.GetValues values |> ignore
 
             columnMappings
@@ -122,7 +140,10 @@ type Utils private() =
             |> unbox<'TItem>
             |> results.Add
 
-        results
+            let! cont = cursor.ReadAsync ()
+            go <- cont
+
+        return results }
 
     [<Extension>]
     static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
@@ -130,6 +151,7 @@ type Utils private() =
             let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
             let values = Array.zeroCreate cursor.FieldCount
 
+            // todo use AsyncSeq
             while cursor.Read () do
                 cursor.GetValues values |> ignore
 

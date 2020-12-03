@@ -11,6 +11,7 @@ open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Concurrent
+open System.Threading.Tasks
 
 type internal RowType = {
     Provided: Type
@@ -484,18 +485,21 @@ type internal QuotationsFactory private() =
         | _ when resultType = ResultType.DataReader ->
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod typeof<NpgsqlDataReader> "Execute" None
-
             if methodTypes.HasFlag MethodTypes.Async then
                 addRedirectToISqlCommandMethod typeof<Async<NpgsqlDataReader>> "AsyncExecute" None
+            if methodTypes.HasFlag MethodTypes.Task then
+                addRedirectToISqlCommandMethod typeof<Task<NpgsqlDataReader>> "TaskAsyncExecute" None
         | [ { ReturnType = Some returnType; Sql = sql; Type = typ } ] ->
             let xmlDoc = if returnType.Single = typeof<int> then sprintf "Returns the number of rows affected by \"%s\"." sql |> Some else None
 
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod returnType.Single "Execute" xmlDoc
-
             if methodTypes.HasFlag MethodTypes.Async then
                 let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ returnType.Single ])
                 addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" xmlDoc
+            if methodTypes.HasFlag MethodTypes.Task then
+                let taskReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<Task<_>>, [ returnType.Single ])
+                addRedirectToISqlCommandMethod taskReturnType "TaskAsyncExecute" xmlDoc
 
             let columnCount =
                 match typ with
@@ -504,7 +508,7 @@ type internal QuotationsFactory private() =
 
             QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType columnCount typeToAttachTo
         | _ ->
-            let resultSetsType = ProvidedTypeDefinition ("ResultSets", baseType = Some typeof<obj>, hideObjectMethods = true)
+            let resultSetsType = ProvidedTypeDefinition ("ResultSets", baseType = Some typeof<obj[]>, hideObjectMethods = true)
 
             let props, ctorParams =
                 statements
@@ -515,7 +519,7 @@ type internal QuotationsFactory private() =
                     | Query _, Some rt -> Some (i, rt, sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." statement.Sql)
                     | _ -> None)
                 |> List.map (fun (i, rt, propName, xmlDoc) ->
-                    let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i))
+                    let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
                     prop.AddXmlDoc xmlDoc
                     let ctorParam = ProvidedParameter (propName, rt.Single)
                     prop, ctorParam)
@@ -523,7 +527,7 @@ type internal QuotationsFactory private() =
 
             resultSetsType.AddMembers props
 
-            let ctor = ProvidedConstructor (ctorParams, fun args -> Expr.NewArray(typeof<obj>, args))
+            let ctor = ProvidedConstructor (ctorParams, fun args -> Expr.NewArray (typeof<obj>, args))
             resultSetsType.AddMember ctor
 
             statements
@@ -532,10 +536,12 @@ type internal QuotationsFactory private() =
 
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod resultSetsType "Execute" None
-            
             if methodTypes.HasFlag MethodTypes.Async then
                 let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ resultSetsType ])
                 addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" None
+            if methodTypes.HasFlag MethodTypes.Task then
+                let taskReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<Task<_>>, [ resultSetsType ])
+                addRedirectToISqlCommandMethod taskReturnType "TaskAsyncExecute" None
 
             cmdProvidedType.AddMember resultSetsType
 

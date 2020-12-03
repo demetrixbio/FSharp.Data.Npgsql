@@ -5,12 +5,14 @@ storage: none
 nuget FSharp.Core
 nuget Npgsql ~> 5
 nuget Npgsql.NetTopologySuite ~> 5
+nuget TaskBuilder.fs 2.2.0-alpha alpha
 
 group tests
   frameworks net5.0
   storage: none
   source https://api.nuget.org/v3/index.json
   nuget Microsoft.NET.Test.Sdk
+  nuget TaskBuilder.fs 2.2.0-alpha alpha
   nuget xunit
   nuget xunit.runner.visualstudio
   nuget FSharp.Core ~> 4
