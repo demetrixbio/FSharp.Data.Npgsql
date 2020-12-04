@@ -490,7 +490,7 @@ type internal QuotationsFactory private() =
             if methodTypes.HasFlag MethodTypes.Task then
                 addRedirectToISqlCommandMethod typeof<Task<NpgsqlDataReader>> "TaskAsyncExecute" None
         | [ { ReturnType = Some returnType; Sql = sql; Type = typ } ] ->
-            let xmlDoc = if returnType.Single = typeof<int> then sprintf "Returns the number of rows affected by \"%s\"." sql |> Some else None
+            let xmlDoc = if returnType.Single = typeof<int> then sprintf "Number of rows affected by \"%s\"." sql |> Some else None
 
             if methodTypes.HasFlag MethodTypes.Sync then
                 addRedirectToISqlCommandMethod returnType.Single "Execute" xmlDoc
@@ -510,25 +510,17 @@ type internal QuotationsFactory private() =
         | _ ->
             let resultSetsType = ProvidedTypeDefinition ("ResultSets", baseType = Some typeof<obj[]>, hideObjectMethods = true)
 
-            let props, ctorParams =
-                statements
-                |> List.mapi (fun i statement -> i, statement)
-                |> List.choose (fun (i, statement) ->
-                    match statement.Type, statement.ReturnType with
-                    | NonQuery, Some rt -> Some (i, rt, sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." statement.Sql)
-                    | Query _, Some rt -> Some (i, rt, sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." statement.Sql)
-                    | _ -> None)
-                |> List.map (fun (i, rt, propName, xmlDoc) ->
-                    let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
-                    prop.AddXmlDoc xmlDoc
-                    let ctorParam = ProvidedParameter (propName, rt.Single)
-                    prop, ctorParam)
-                |> List.unzip
-
-            resultSetsType.AddMembers props
-
-            let ctor = ProvidedConstructor (ctorParams, fun args -> Expr.NewArray (typeof<obj>, args))
-            resultSetsType.AddMember ctor
+            statements
+            |> List.mapi (fun i statement -> i, statement)
+            |> List.choose (fun (i, statement) ->
+                match statement.Type, statement.ReturnType with
+                | NonQuery, Some rt -> Some (i, rt, sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." statement.Sql)
+                | Query _, Some rt -> Some (i, rt, sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." statement.Sql)
+                | _ -> None)
+            |> List.iter (fun (i, rt, propName, xmlDoc) ->
+                let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
+                prop.AddXmlDoc xmlDoc
+                resultSetsType.AddMember prop)
 
             statements
             |> List.choose (fun statement -> statement.ReturnType |> Option.map (fun rt -> (match statement.Type with Query columns -> columns.Length | _ -> 0), rt))
