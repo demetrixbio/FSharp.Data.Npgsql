@@ -245,7 +245,7 @@ let inline openConnection connectionString =
     conn.Open()
     conn
 
-let controlCommandRegex = System.Text.RegularExpressions.Regex ("^\\s*\\b(begin|end)\\b\\s*$", Text.RegularExpressions.RegexOptions.IgnoreCase)
+let controlCommandRegex = System.Text.RegularExpressions.Regex ("^\\s*\\b(begin|end|commit|rollback)\\b\\s*$", Text.RegularExpressions.RegexOptions.IgnoreCase)
 
 let extractParametersAndOutputColumns(connectionString, commandText, resultType, allParametersOptional, dbSchemaLookups : DbSchemaLookups) =
     use conn = openConnection(connectionString)
