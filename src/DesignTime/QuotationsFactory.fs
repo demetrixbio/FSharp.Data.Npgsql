@@ -130,32 +130,21 @@ type internal QuotationsFactory private() =
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
         let createType typeName =
-            let recordType = ProvidedTypeDefinition(typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
+            let recordType = ProvidedTypeDefinition (typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
             
-            let properties, ctorParameters = 
-                columns
-                |> List.sortBy (fun x -> x.Name)
-                |> List.mapi (fun i col ->
-                    let propertyName =
-                        if String.IsNullOrEmpty col.Name then
-                            let originalIndex = List.findIndex (fun x -> x = col) columns
-                            failwithf "Column #%i doesn't have a name. Only named columns are supported. Use an explicit alias." (originalIndex + 1)
-                        else
-                            col.Name
+            columns
+            |> List.sortBy (fun x -> x.Name)
+            |> List.iteri (fun i col ->
+                let propertyName =
+                    if String.IsNullOrEmpty col.Name then
+                        let originalIndex = List.findIndex (fun x -> x = col) columns
+                        failwithf "Column #%i doesn't have a name. Only named columns are supported. Use an explicit alias." (originalIndex + 1)
+                    else
+                        col.Name
 
-                    let propType = col.MakeProvidedType(customTypes)
-                    let property = ProvidedProperty(propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i))
+                let propType = col.MakeProvidedType customTypes
+                ProvidedProperty (propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
 
-                    let ctorParameter = ProvidedParameter(propertyName, propType)  
-
-                    property, ctorParameter
-                )
-                |> List.unzip
-
-            recordType.AddMembers properties
-
-            let ctor = ProvidedConstructor(ctorParameters, fun args -> Expr.NewArray(typeof<obj>, List.map (fun arg -> Expr.Coerce(arg, typeof<obj>)) args))
-            recordType.AddMember ctor
             recordType
 
         match providedTypeReuse with

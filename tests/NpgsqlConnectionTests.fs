@@ -845,19 +845,6 @@ let ``Begin/end are ignored and don't generate a result set``() =
     Assert.Equal (0, actual.RowsAffected2)
     Assert.Equal (0, actual.ResultSet3.Length)
 
-[<Fact>]
-let ``Can instantiate provided record``() =
-    let fname = "a"
-    let lname = "b"
-    let id = 1
-    let time = DateTime (2020, 1, 1)
-    let actual = DvdRental.Commands.``"select * from actor limit 5; select * from film limit 5"``.Record1 (id, fname, lname, time)
-
-    Assert.Equal (actual.actor_id, id)
-    Assert.Equal (actual.first_name, fname)
-    Assert.Equal (actual.last_name, lname)
-    Assert.Equal (actual.last_update, time)
-
 // Necessary to be able to refer to the reused type in the function below
 let _ = DvdRentalWithTypeReuse.CreateCommand<"select film_id, rating from film", SingleRow = true>
 
@@ -866,12 +853,6 @@ type FilmIdRating = DvdRentalWithTypeReuse.``film_id:Int32, rating:Option<public
 let assertEqualFilmIdRating (x: FilmIdRating) (y: FilmIdRating) =
     Assert.Equal (x.film_id, y.film_id)
     Assert.Equal (x.rating, y.rating)
-
-[<Fact>]
-let ``Can instantiated reused type``() =
-    let actual = FilmIdRating(1, Some DvdRentalWithTypeReuse.``public``.Types.mpaa_rating.``PG-13``)
-    Assert.Equal (1, actual.film_id)
-    Assert.True (Option.isSome actual.rating)
 
 [<Fact>]
 let ``Record type reused regardless of column order``() =
