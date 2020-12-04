@@ -996,6 +996,13 @@ let ``Async LazySeq works`` () =
     Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
 
 [<Fact>]
+let ``Task LazySeq works`` () =
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.TaskAsyncExecute().Result
+
+    Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
+
+[<Fact>]
 let ``Disposing of the command does not dispose of the underlying Npgsql objects and LazySeq still works`` () =
     use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
     use actual = cmd.Execute()
