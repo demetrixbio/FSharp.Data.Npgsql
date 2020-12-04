@@ -16,13 +16,16 @@ open FSharp.Control.Tasks.V2.ContextInsensitive
 [<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils private() =
-    static let makeOptionValue (typeParam: Type) v =
-        let cases =  typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
-        let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
-        let noneInfo = snd cases |> Array.exactlyOne
-        let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
+    static let makeOptionValue =
+        let cache = ConcurrentDictionary<Type, obj -> obj> ()
 
-        if Convert.IsDBNull v then noneValue else someCtor [| v |]
+        fun typeParam ->
+            cache.GetOrAdd (typeParam, Func<_, _>(fun (typeParam: Type) ->
+                let cases = typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
+                let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
+                let noneInfo = snd cases |> Array.exactlyOne
+                let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
+                fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]))
 
     static let getRowAndColumnMappings =
         let cache = ConcurrentDictionary<_, (obj[] -> obj) * (obj[] -> obj)[]> ()
