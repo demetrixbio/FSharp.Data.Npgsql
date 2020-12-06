@@ -1009,6 +1009,15 @@ let ``Disposing of the LazySeq disposes of the reader, but the provided connecti
     Assert.Throws<ObjectDisposedException> (fun () -> actual.Seq |> Seq.take 5 |> Seq.length |> ignore) |> ignore
     Assert.Equal (System.Data.ConnectionState.Open, conn.State)
 
+[<Fact>]
+let ``Disposing of the command does not close the connection in case of xctor`` () =
+    use conn = openConnection()
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", XCtor = true>(conn)
+    let _ = cmd.Execute()
+    (cmd :> IDisposable).Dispose ()
+
+    Assert.Equal (System.Data.ConnectionState.Open, conn.State)
+
 type SimpleComposite () =
     member val SomeArray: int[] = null with get, set
     member val SomeText: string = null with get, set
