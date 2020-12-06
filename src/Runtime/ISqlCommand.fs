@@ -8,6 +8,7 @@ open System.Reflection
 open System.Collections.Concurrent
 open FSharp.Control.Tasks.V2.ContextInsensitive
 open System.Threading.Tasks
+open type Utils
 
 type internal ExecutionType =
     | Sync
@@ -32,7 +33,6 @@ type DesignTimeConfig = {
     Prepare: bool
 }
 
-[<Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, DesignTimeConfig>, connection, commandTimeout) =
     static let cfgCache = ConcurrentDictionary<int, DesignTimeConfig> ()
@@ -44,12 +44,12 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         for p in cfg.Parameters do
             p.Clone () |> cmd.Parameters.Add |> ignore
         cmd
-    
+
     let readerBehavior = 
         if cfg.SingleRow then CommandBehavior.SingleRow else CommandBehavior.Default
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
         ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ -> CommandBehavior.Default
-        
+
     let setupConnection () =
         match connection with
         | Choice2Of2 (conn, tx) ->
@@ -67,7 +67,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         | Async -> Async.AwaitTask t |> box
         | TaskAsync -> box t
 
-    let execute = 
+    let execute =
         match cfg.ResultType with
         | ResultType.DataReader ->
             ISqlCommandImplementation.AsyncExecuteReader
@@ -153,7 +153,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd)
 
         for c in columns do
-            Utils.CloneDataColumn c |> result.Columns.Add
+            CloneDataColumn c |> result.Columns.Add
 
         result.Load cursor
         result
@@ -186,15 +186,15 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
 
     // TODO output params
     static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = task {
-        let! xs = reader.MapRowValues<'TItem> (cfg.ResultType, resultSetDefinition)
+        let! xs = MapRowValues<'TItem> (reader, cfg.ResultType, resultSetDefinition)
 
         return
             if readerBehavior.HasFlag CommandBehavior.SingleRow then
-                Utils.ResizeArrayToOption xs |> box
+                ResizeArrayToOption xs |> box
             elif cfg.CollectionType = CollectionType.Array then
                 xs.ToArray () |> box
             elif cfg.CollectionType = CollectionType.List then
-                Utils.ResizeArrayToList xs |> box
+                ResizeArrayToList xs |> box
             else
                 box xs }
             
@@ -202,19 +202,19 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
         if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
             let t = task {
                 let! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
-                let xs = reader.MapRowValuesLazy<'TItem> (cfg.ResultType, cfg.ResultSets.[0])
+                let xs = MapRowValuesLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
                 return new LazySeq<'TItem> (xs, reader, cmd) }
 
             mapTask (t, executionType)
         else
             let xs = task {
                 use! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
-                return! reader.MapRowValues<'TItem> (cfg.ResultType, cfg.ResultSets.[0]) }
+                return! MapRowValues<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0]) }
 
             if readerBehavior.HasFlag CommandBehavior.SingleRow then
                 let t = task {
                     let! xs = xs
-                    return Utils.ResizeArrayToOption xs
+                    return ResizeArrayToOption xs
                 }
                 mapTask (t, executionType)
             elif cfg.CollectionType = CollectionType.Array then
@@ -226,7 +226,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
             elif cfg.CollectionType = CollectionType.List then
                 let t = task {
                     let! xs = xs
-                    return Utils.ResizeArrayToList xs
+                    return ResizeArrayToList xs
                 }
                 mapTask (t, executionType)
             else
@@ -252,7 +252,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
                 let mutable go = true
 
                 while go do
-                    let currentStatement = Utils.GetStatementIndex cursor
+                    let currentStatement = GetStatementIndex cursor
                     let! res = ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
                     results.[currentStatement] <- res
                     let! more = cursor.NextResultAsync ()

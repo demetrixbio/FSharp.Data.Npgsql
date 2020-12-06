@@ -3,7 +3,6 @@ namespace FSharp.Data.Npgsql
 open System
 open System.Data
 open System.Data.Common
-open System.Runtime.CompilerServices
 open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
@@ -12,20 +11,19 @@ open FSharp.Control.Tasks.V2.ContextInsensitive
 
 #nowarn "0025"
 
-[<Extension>]
-[<AbstractClass; Sealed>]
 [<EditorBrowsable(EditorBrowsableState.Never)>]
-type Utils private() =
+type Utils () =
     static let makeOptionValue =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
 
         fun typeParam ->
             cache.GetOrAdd (typeParam, Func<_, _>(fun (typeParam: Type) ->
-                let cases = typedefof<_ option>.MakeGenericType typeParam |> Reflection.FSharpType.GetUnionCases |> Array.partition (fun x -> x.Name = "Some")
-                let someCtor = fst cases |> Array.exactlyOne |> Reflection.FSharpValue.PreComputeUnionConstructor
-                let noneInfo = snd cases |> Array.exactlyOne
-                let noneValue = Reflection.FSharpValue.MakeUnion (noneInfo, [||])
-                fun v -> if Convert.IsDBNull v then noneValue else someCtor [| v |]))
+                let someCtor =
+                    typedefof<_ option>.MakeGenericType typeParam
+                    |> Reflection.FSharpType.GetUnionCases
+                    |> Array.find (fun x -> x.Name = "Some")
+                    |> Reflection.FSharpValue.PreComputeUnionConstructor
+                fun v -> if Convert.IsDBNull v then null else someCtor [| v |]))
 
     static let getRowAndColumnMappings =
         let cache = ConcurrentDictionary<_, (obj[] -> obj) * (obj[] -> obj)[]> ()
@@ -125,7 +123,6 @@ type Utils private() =
         let [| columnName; typeName |] = stringValues.Split '|'
         new DataColumn (columnName, Type.GetType (typeName, true), AllowDBNull = nullable)
 
-    [<Extension>]
     static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = task {
         let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
         let results = ResizeArray<'TItem> ()
@@ -148,7 +145,6 @@ type Utils private() =
 
         return results }
 
-    [<Extension>]
     static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
         seq {
             let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)

@@ -1008,3 +1008,19 @@ let ``Disposing of the LazySeq disposes of the reader, but the provided connecti
 
     Assert.Throws<ObjectDisposedException> (fun () -> actual.Seq |> Seq.take 5 |> Seq.length |> ignore) |> ignore
     Assert.Equal (System.Data.ConnectionState.Open, conn.State)
+
+type SimpleComposite () =
+    member val SomeArray: int[] = null with get, set
+    member val SomeText: string = null with get, set
+    member val SomeNumber = 0L with get, set
+
+[<Fact>]
+let ``Manually mapped and cast composite type works`` () =
+    use conn = openConnection()
+    conn.TypeMapper.MapComposite<SimpleComposite> "simple_type" |> ignore
+    use cmd = DvdRental.CreateCommand<"select simple from table_with_composites where id = 1", SingleRow = true, XCtor = true>(conn)
+    let res = cmd.Execute().Value :?> SimpleComposite
+
+    Assert.Equal (42L, res.SomeNumber)
+    Assert.Equal ("blah", res.SomeText)
+    Assert.Equal<int> ([| 1; 2 |], res.SomeArray)
