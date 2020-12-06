@@ -65,7 +65,7 @@ type internal QuotationsFactory private() =
         cmd.CommandTimeout
 
     static member internal GetValueAtIndexExpr: (Expr * int) -> Expr =
-        let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Collections.ArrayModule").GetMethod("Get").MakeGenericMethod typeof<obj>
+        let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions").GetMethod("GetArray").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
     static member internal ToSqlParamsExpr =
@@ -130,7 +130,7 @@ type internal QuotationsFactory private() =
             |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
         let createType typeName =
-            let recordType = ProvidedTypeDefinition (typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
+            let recordType = ProvidedTypeDefinition (typeName, baseType = Some typeof<obj[]>, hideObjectMethods = true)
             
             columns
             |> List.sortBy (fun x -> x.Name)
@@ -143,7 +143,7 @@ type internal QuotationsFactory private() =
                         col.Name
 
                 let propType = col.MakeProvidedType customTypes
-                ProvidedProperty (propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce(args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
+                ProvidedProperty (propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
 
             recordType
 
@@ -353,7 +353,7 @@ type internal QuotationsFactory private() =
                         provided, erasedTo
                     elif resultType = ResultType.Records then 
                         let provided = QuotationsFactory.GetRecordType (rootTypeName, columns, customTypes, typeNameSuffix, providedTypeReuse)
-                        upcast provided, typeof<obj>
+                        upcast provided, typeof<obj[]>
                     else
                         let providedType =
                             match columns with
