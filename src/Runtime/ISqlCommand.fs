@@ -263,10 +263,11 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
 
         mapTask (t, executionType)
 
-    static member internal AsyncExecuteNonQuery (cfg, cmd, setupConnection, _, parameters, executionType) = 
+    static member internal AsyncExecuteNonQuery (cfg, cmd, setupConnection, readerBehavior, parameters, executionType) = 
         let t = task {
             ISqlCommandImplementation.SetParameters (cmd, parameters)
             do! setupConnection ()
+            use _ = if readerBehavior.HasFlag CommandBehavior.CloseConnection then cmd.Connection else null
 
             if cfg.Prepare then
                 do! cmd.PrepareAsync ()
