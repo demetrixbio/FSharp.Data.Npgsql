@@ -7,7 +7,7 @@ open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
-open FSharp.Control.Tasks.V2.ContextInsensitive
+open FSharp.Control.Tasks.NonAffine
 
 #nowarn "0025"
 
@@ -123,11 +123,11 @@ type Utils () =
         let [| columnName; typeName |] = stringValues.Split '|'
         new DataColumn (columnName, Type.GetType (typeName, true), AllowDBNull = nullable)
 
-    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = task {
+    static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
         let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
         let results = ResizeArray<'TItem> ()
         let values = Array.zeroCreate cursor.FieldCount
-
+        
         let! go = cursor.ReadAsync ()
         let mutable go = go
 
