@@ -96,19 +96,19 @@ You can customize the type of collections commands return globally on `NpgsqlCon
 
 ```fsharp
 let doStuff = async {
-	use cmd = DvdRental.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.Array>(dvdRental)
-	let! actual = cmd.AsyncExecute() // this is an array instead of list now
-	actual |> Array.iter (printfn "%A") }
+    use cmd = DvdRental.CreateCommand<"SELECT * from film limit 5", CollectionType = CollectionType.Array>(dvdRental)
+    let! actual = cmd.AsyncExecute() // this is an array instead of list now
+    actual |> Array.iter (printfn "%A") }
 ```
 
 ```fsharp
 let lazyFilms () =
-	use cmd = DvdRental.CreateCommand<"SELECT * from film order by film_id", CollectionType = CollectionType.LazySeq>(dvdRental)
-	cmd.Execute()
+    use cmd = DvdRental.CreateCommand<"SELECT * from film order by film_id", CollectionType = CollectionType.LazySeq>(dvdRental)
+    cmd.Execute()
 
 let doStuff () =
-	use films = lazyFilms ()
-	films.Seq |> Seq.take 5 |> Seq.iter (printfn "%A") // Only 5 (possibly a little bit more when Npgsql does prefetch) rows are transfered from Postgres
+    use films = lazyFilms ()
+    films.Seq |> Seq.take 5 |> Seq.iter (printfn "%A") // Only 5 (possibly a little bit more when Npgsql does prefetch) rows are transfered from Postgres
 ```
 
 ## Method types
@@ -124,9 +124,9 @@ The default is `MethodTypes.Sync ||| Method.Types.Async`.
 type DvdRental = NpgsqlConnection<dvdRental, MethodTypes = MethodTypes.Task>
 
 let doStuff = task {
-	use cmd = DvdRental.CreateCommand<"SELECT * from film">(dvdRental)
-	let! results = cmd.TaskAsyncExecute() // Execute and AsyncExecute are both unavailable
-	()
+    use cmd = DvdRental.CreateCommand<"SELECT * from film">(dvdRental)
+    let! results = cmd.TaskAsyncExecute() // Execute and AsyncExecute are both unavailable
+    ()
 }
 ```
 
