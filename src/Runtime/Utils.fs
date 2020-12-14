@@ -150,7 +150,6 @@ type Utils () =
             let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)
             let values = Array.zeroCreate cursor.FieldCount
 
-            // todo use AsyncSeq
             while cursor.Read () do
                 cursor.GetValues values |> ignore
 
