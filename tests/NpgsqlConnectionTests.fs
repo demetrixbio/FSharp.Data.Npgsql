@@ -86,6 +86,17 @@ let selectSingleRow() =
     )
 
 [<Fact>]
+let selectSingleRow2ResultSets () =
+    use cmd = DvdRental.CreateCommand<"
+        select 42;
+        select 'nope'", SingleRow = true>(connectionString)
+
+    let res = cmd.Execute()
+
+    Assert.Equal (Some 42, res.ResultSet1.Value)
+    Assert.Equal (Some "nope", res.ResultSet2.Value)
+
+[<Fact>]
 let selectSingleNull() =
     use cmd = DvdRental.CreateCommand<"SELECT NULL", SingleRow = true>(connectionString)
     Assert.Equal(Some None, cmd.Execute())

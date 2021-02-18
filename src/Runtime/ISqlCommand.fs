@@ -245,7 +245,8 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: Func<int, Desi
 
     static member internal AsyncExecuteMulti (cfg, cmd, setupConnection, readerBehavior, parameters, executionType) =
         let t = Unsafe.uply {
-            use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior, parameters)
+            // Don't pass CommandBehavior.SingleRow to Npgsql, because it only applies to the first row of the first result set and all other result sets are completely ignored
+            use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, setupConnection, readerBehavior &&& ~~~CommandBehavior.SingleRow, parameters)
             let results = Array.zeroCreate cmd.Statements.Count
 
             // Command contains at least one query
