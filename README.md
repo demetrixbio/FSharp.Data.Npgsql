@@ -12,7 +12,7 @@ Forked from https://github.com/demetrixbio/FSharp.Data.Npgsql, ported to Npgsql 
 - BREAKING - Removed the `Fsx` static parameter
   - Always pass a connection string to `CreateCommand` in F# Interactive.
 - BREAKING - Renamed `ResultSetX` to `RowsAffectedX` for statements that are non-queries and return the number of affected rows
-  - For a command like `DvdRental.CreateCommand<select * from film; delete from actor>(cs)` use `RowsAffected2` instead of `ResultSet2` to get the number of deleted rows.
+  - For a command like `DvdRental.CreateCommand<"select * from film; delete from actor">(cs)` use `RowsAffected2` instead of `ResultSet2` to get the number of deleted rows.
 - BREAKING - Removed provided constructors for result set types
 - BREAKING - Made [`BinaryImport`](#Bulk-Copy) aware of identity columns
 - `BinaryImport` returns the number of imported rows as `uint64`
@@ -24,9 +24,6 @@ Forked from https://github.com/demetrixbio/FSharp.Data.Npgsql, ported to Npgsql 
 
 ## Nuget package
 FSharp.Data.Npgsql5 [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql5.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql5)
-
-## Target platforms:
-- netstandard2.0
  
 ## Setup
 
@@ -93,6 +90,7 @@ You can customize the type of collections commands return globally on `NpgsqlCon
 - `CollectionType.ResizeArray`
 - `CollectionType.LazySeq` - A special type whose `Seq` property allows you to lazily iterate over the query results. In other words, results are not materialized on the server (useful when you want to process a lot of data without loading it all into memory at once), but are only retrieved from Postgres on demand. You need to **make sure to dispose of the `LazySeq` instance** (instead of the command) to avoid dangling Npgsql connections.
   - May only be used when the command returns one result set.
+  - May only be enumerated once. If this is a problem, you should consider using a different collection type, because being able to enumerate the sequence repeatedly implies having the results materialized, which defeats the primary purpose of `LazySeq`.
 
 ```fsharp
 let doStuff = async {
@@ -102,13 +100,15 @@ let doStuff = async {
 ```
 
 ```fsharp
-let lazyFilms () =
-    use cmd = DvdRental.CreateCommand<"SELECT * from film order by film_id", CollectionType = CollectionType.LazySeq>(dvdRental)
+let lazyData () =
+    use cmd = DvdRental.CreateCommand<"SELECT * from generate_series(1, 1000000000)", CollectionType = CollectionType.LazySeq>(dvdRental)
     cmd.Execute()
 
 let doStuff () =
-    use films = lazyFilms ()
-    films.Seq |> Seq.take 5 |> Seq.iter (printfn "%A") // Only 5 (possibly a little bit more when Npgsql does prefetch) rows are transfered from Postgres
+    use data = lazyData ()
+    // Only one million instead of the billion generated rows is transferred from Postgres
+    // These rows are not materialized at once either but loaded into memory and then released one by one (or a bit more depending on prefetch in Npgsql) as they are processed
+    data.Seq |> Seq.take 1_000_000 |> Seq.iter (printfn "%A")
 ```
 
 ## Method types

@@ -1,12 +1,12 @@
 type project
 id FSharp.Data.Npgsql5
-version 0.8.0
+version 1.0.0
 authors Demetrix; Dmitry Morozov; kerams
 owners Demetrix; Dmitry Morozov; kerams
 projectUrl https://github.com/kerams/FSharp.Data.Npgsql5
 requireLicenseAcceptance false
 description F# type provider to support statically typed access to input parameters and result sets of sql statements in an idiomatic F# way. Data modifications via statically typed tables.
-copyright Copyright 2017-2020 Demetrix, 2020 kerams
+copyright Copyright 2017-2020 Demetrix, 2021 kerams
 tags F# fsharp typeprovider npgsql postgresql postgres ado ado.net database sql
 files
   bin/Release/netstandard2.0/*.dll ==> lib/netstandard2.0 
