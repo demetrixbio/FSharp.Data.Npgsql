@@ -26,9 +26,7 @@ Forked from https://github.com/demetrixbio/FSharp.Data.Npgsql, ported to Npgsql 
 FSharp.Data.Npgsql5 [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql5.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql5)
  
 ## Setup
-
-_Design-time configuration is never passed to runtime._ Every `CreateCommand` expects a runtime connection parameter.
-All examples based on [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume following definitions exist:
+All examples are based on the [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume the following definitions exist:
 ```fsharp
 [<Literal>]
 let dvdRental = "Host=localhost;Username=postgres;Database=dvdrental"
@@ -41,50 +39,46 @@ type DvdRental = NpgsqlConnection<dvdRental>
 ## Basic query
 
 ```fsharp
-do
-    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
 
-    for x in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+for x in cmd.Execute() do   
+    printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 
 ## Parameterized query
 
 ```fsharp
-do
-    use cmd = DvdRental.CreateCommand<"SELECT title FROM public.film WHERE length > @longer_than">(dvdRental)
-    let longerThan = TimeSpan.FromHours(3.)
-    let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
-    printfn "Movies longer than %A:\n%A" longerThan xs
+use cmd = DvdRental.CreateCommand<"SELECT title FROM public.film WHERE length > @longer_than">(dvdRental)
+let longerThan = TimeSpan.FromHours(3.)
+let xs: string list = cmd.Execute(longer_than = int16 longerThan.TotalMinutes) |> Seq.toList 
+printfn "Movies longer than %A:\n%A" longerThan xs
 ```
 
 ## Retrieve singleton record
-Specify "SingleRow = true" to retrieve single row result. Command execution throws an exception if result set contains more than one row.
+Set `SingleRow = true` to retrieve a single row as an option instead of a collection of rows. `Execute` will throw if the result set contains more than one row.
 
 ```fsharp
-do
-    use cmd = DvdRental.CreateCommand<"SELECT current_date as today", SingleRow = true>(dvdRental)
-    cmd.Execute() |> printfn "Today is: %A"
+use cmd = DvdRental.CreateCommand<"SELECT current_date as today", SingleRow = true>(dvdRental)
+cmd.Execute() |> printfn "Today is: %A"
 ```
 
 ## Result types
 
 There are 4 result types:
- - `ResultType.Record` (default) - returns F# record like class with read-only properties.  See examples above. 
- - `ResultType.Tuples` - In practice it's rarely useful but why not? 
+ - `ResultType.Record` (default) - returns a record-like class with read-only properties.  See examples above. 
+ - `ResultType.Tuples` - returns a tuple whose elements represent row's columns.
+ 
  ```fsharp
- do
-    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
-    for title, releaseYear in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." title releaseYear.Value
+ use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", ResultType.Tuples>(dvdRental)
+ for title, releaseYear in cmd.Execute() do   
+     printfn "Movie '%s' released in %i." title releaseYear.Value
  ```
- - `ResultType.DataTable` comes handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details. 
- - `ResultType.DataReader` returns plain NpgsqlDataReader. I think passing it as a parameter to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert 
-is the only useful scenario.
+ - `ResultType.DataTable` - comes in handy when you need to do updates, deletes or upserts. For insert only ETL-like workloads use statically typed data tables. See [Data modifications](#data-modifications) section for details. 
+ - `ResultType.DataReader` - returns a plain `NpgsqlDataReader`. You can pass it to [DataTable.Load](https://docs.microsoft.com/en-us/dotnet/api/system.data.datatable.load?view=netstandard-2.0) for merge/upsert scenarios.
 
 ## Collection types
 
-You can customize the type of collections commands return globally on `NpgsqlConnection` and override it on each `CreateCommand`. This has no effect when `SingleRow = true` at the same time. There are 4 types:
+You can customize the type of collection commands return globally on `NpgsqlConnection` and override it on each `CreateCommand`. This setting is ignored when combined with `SingleRow = true` (`option` is used instead of a collection). You can choose between 4 collections:
 - `CollectionType.List` (default)
 - `CollectionType.Array`
 - `CollectionType.ResizeArray`
@@ -107,7 +101,8 @@ let lazyData () =
 let doStuff () =
     use data = lazyData ()
     // Only one million instead of the billion generated rows is transferred from Postgres
-    // These rows are not materialized at once either but loaded into memory and then released one by one (or a bit more depending on prefetch in Npgsql) as they are processed
+    // These rows are not materialized at once either but loaded into memory
+    // and then released one by one (or a bit more depending on prefetch in Npgsql) as they are processed
     data.Seq |> Seq.take 1_000_000 |> Seq.iter (printfn "%A")
 ```
 
@@ -173,16 +168,13 @@ let getFilmWithRatingById id =
 
 ## Naming 
 
-The type provider's local type names collide with types from Npgsql library. I admit it's a slightly controversial decision but naming is too important to be compromised on. 
-If you end up having following error message:
+The type provider's `NpgsqlConnection` may clash with `NpgsqlConnection` defined in Npgsql. If you end up having the following error message:
 
 ```
-...
 FS0033	The non-generic type 'Npgsql.NpgsqlConnection' does not expect any type arguments, but here is given 2 type argument(s)	
-...
 ```
 
-It means that types from Npgsql shadowed the type providers because ```open FSharp.Data.Npgsql``` statement was followed by ```open Npgsql```
+It means that `Npgsql.NpgsqlConnection` shadowed `FSharp.Data.Npgsql.NpgsqlConnection` because ```open FSharp.Data.Npgsql``` statement was followed by ```open Npgsql```.
 
 There are several ways to work around the issue:
 
@@ -196,7 +188,7 @@ type DvdRental = FSharp.Data.Npgsql.NpgsqlConnection<connectionString>
 
  - Use a type alias for `Npgsql.NpgsqlConnection`
 ```fsharp
-type PgConnectoin = Npgsql.NpgsqlConnection
+type PgConnection = Npgsql.NpgsqlConnection
 ```
 
 - Isolate usage by module or file  
@@ -216,163 +208,158 @@ let openConnection(connectionString) =
 // All commands created from this type will be prepared
 type DvdRental = NpgsqlConnection<dvdRental, Prepare = true>
 
-do
-    // Will be prepared
-    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
-    for x in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
+// Will be prepared
+use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3">(dvdRental)
+for x in cmd.Execute() do   
+printfn "Movie '%s' released in %i." x.title x.release_year.Value
 
-do
-    // Overrides the DvdRental setting and thus won't be prepared
-    use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = false>(dvdRental)
-    for x in cmd.Execute() do   
-        printfn "Movie '%s' released in %i." x.title x.release_year.Value
-
+// Overrides the DvdRental setting and thus won't be prepared
+use cmd = DvdRental.CreateCommand<"SELECT title, release_year FROM public.film LIMIT 3", Prepare = false>(dvdRental)
+for x in cmd.Execute() do   
+printfn "Movie '%s' released in %i." x.title x.release_year.Value
 ```
 
 ## Data modifications
 - Hand-written statements
 ```fsharp
-    //deactivate customer if exists and active
-    let email = "mary.smith@sakilacustomer.org"
+//deactivate customer if exists and active
+let email = "mary.smith@sakilacustomer.org"
 
-    use cmd = DvdRental.CreateCommand<" 
-            UPDATE public.customer 
-            SET activebool = false 
-            WHERE email = @email 
-                AND activebool
-    ", SingleRow = true>(dvdRental)
+use cmd = DvdRental.CreateCommand<"
+    UPDATE public.customer
+    SET activebool = false
+    WHERE email = @email
+	AND activebool
+", SingleRow = true>(dvdRental)
 
-    let recordsAffected = cmd.Execute(email)
-    if recordsAffected = 0 
-    then
-        printfn "Could not deactivate customer %s" email
-    elif recordsAffected = 1
-    then 
-        use restore = 
-            DvdRental.CreateCommand<" 
-                UPDATE public.customer 
-                SET activebool = true
-                WHERE email = @email 
-            ">(dvdRental)
-        assert( restore.Execute(email) = 1)    
+let recordsAffected = cmd.Execute(email)
+if recordsAffected = 0
+then
+printfn "Could not deactivate customer %s" email
+elif recordsAffected = 1
+then
+use restore =
+    DvdRental.CreateCommand<"
+	UPDATE public.customer
+	SET activebool = true
+	WHERE email = @email
+    ">(dvdRental)
+assert( restore.Execute(email) = 1)
 ```
 - `ResultType.DataTable` - good to handle updates, deletes, upserts or inserts mixed with any above. 
 
 ```fsharp
-    //Deactivate customer if found and active 
-    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tx = conn.BeginTransaction()    
-    use cmd = 
-        DvdRental.CreateCommand<"
-            SELECT customer_id, activebool
-            FROM public.customer 
-            WHERE email = @email  
-        ", ResultType.DataTable>(conn, tx)
-    let t = cmd.Execute(email = "mary.smith@sakilacustomer.org")
-    if t.Rows.Count > 0 && t.Rows.[0].activebool
-    then 
-        t.Rows.[0].activebool <- true
-        assert( t.Update(conn, tx) = 1)
+//Deactivate customer if found and active
+use conn = new Npgsql.NpgsqlConnection(dvdRental)
+conn.Open()
+use tx = conn.BeginTransaction()
+use cmd =
+DvdRental.CreateCommand<"
+    SELECT customer_id, activebool
+    FROM public.customer
+    WHERE email = @email
+", ResultType.DataTable>(conn, tx)
+let t = cmd.Execute(email = "mary.smith@sakilacustomer.org")
+if t.Rows.Count > 0 && t.Rows.[0].activebool
+then
+t.Rows.[0].activebool <- true
+assert( t.Update(conn, tx) = 1)
 
-    //Commit to persist changes
-    //tx.Commit() 
+//Commit to persist changes
+//tx.Commit()
 ```
 
 - Statically-typed data tables for inserts-only scenarios (for example ETL). Avalable only on ```NpgsqlConnection``` type provider.
 ```fsharp
-    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tx = conn.BeginTransaction()
-    let t = new DvdRental.``public``.Tables.actor()
+use conn = new Npgsql.NpgsqlConnection(dvdRental)
+conn.Open()
+use tx = conn.BeginTransaction()
+let t = new DvdRental.``public``.Tables.actor()
 
-    let r = t.NewRow(first_name = "Tom", last_name = "Hanks")
-    t.Rows.Add(r)
+let r = t.NewRow(first_name = "Tom", last_name = "Hanks")
+t.Rows.Add(r)
 
-    //or
-    //t.AddRow(first_name = "Tom", last_name = "Hanks")
-    //let r = t.Rows.[0] 
+//or
+//t.AddRow(first_name = "Tom", last_name = "Hanks")
+//let r = t.Rows.[0]
 
-    assert( t.Update(conn, tx) = 1)
-    printfn "Identity 'actor_id' %i and column with default 'last update': %A auto-fetched." r.actor_id r.last_update
+assert( t.Update(conn, tx) = 1)
+printfn "Identity 'actor_id' %i and column with default 'last update': %A auto-fetched." r.actor_id r.last_update
 ```
-Worth noting that statically typed tables know to auto-fetch generated ids and default values after insert but only if updateBatchSize parameter set 1 (which is default). 
+Worth noting that statically typed tables know to auto-fetch generated ids and default values after insert but only if updateBatchSize parameter is set to 1 (default). 
 
 ## Transactions
   
 In order to use transactions across commands, pass the `XCtor = true` static parameter to `CreateCommand` so that the method signature accepts a connection + optional transaction. `XCtor` stands for extended constructor.
 
 ```fsharp
-do
-    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tx = conn.BeginTransaction()
-    use cmd = 
-        DvdRental.CreateCommand<"        
-            INSERT INTO public.actor (first_name, last_name)
-            VALUES(@firstName, @lastName)`
-        ", XCtor = true>(conn, tx)
-    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
-    //Commit to persist changes
-    //tx.Commit()
+use conn = new Npgsql.NpgsqlConnection(dvdRental)
+conn.Open()
+use tx = conn.BeginTransaction()
+use cmd = 
+DvdRental.CreateCommand<"        
+    INSERT INTO public.actor (first_name, last_name)
+    VALUES(@firstName, @lastName)`
+", XCtor = true>(conn, tx)
+assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+//Commit to persist changes
+//tx.Commit()
 ```
 `XCtor` also can be set on top level effectively making all `CreateCommand` methods to accept connection + transaction combination. 
 ```fsharp
 type DvdRentalXCtor = NpgsqlConnection<dvdRental, XCtor = true>
-do
-    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tx = conn.BeginTransaction()
-    use cmd = 
-        DvdRentalXCtor.CreateCommand<"        
-            INSERT INTO public.actor (first_name, last_name)
-            VALUES(@firstName, @lastName)
-        ">(conn, tx)
-    assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
-    //Commit to persist changes
-    //tx.Commit()
-  ```
+
+use conn = new Npgsql.NpgsqlConnection(dvdRental)
+conn.Open()
+use tx = conn.BeginTransaction()
+use cmd =
+DvdRentalXCtor.CreateCommand<"
+    INSERT INTO public.actor (first_name, last_name)
+    VALUES(@firstName, @lastName)
+">(conn, tx)
+assert(cmd.Execute(firstName = "Tom", lastName = "Hanks") = 1)
+//Commit to persist changes
+//tx.Commit()
+```
 
 ## Optional input parameters
 By default all input parameters of `Execute` methods generated by the type provider are mandatory. There are rare cases when you prefer to handle NULL input values inside SQL script. `AllParametersOptional` set to true makes all parameters optional.
 ```fsharp
-do
-    use cmd = new NpgsqlCommand<"
-        SELECT coalesce(@x, 'Empty') AS x
-    ", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
-    
-    assert( cmd.Execute(Some "test") = Some( Some "test")) 
-    assert( cmd.Execute() = Some( Some "Empty")) 
+use cmd = new NpgsqlCommand<"
+SELECT coalesce(@x, 'Empty') AS x
+", dvdRental, AllParametersOptional = true, SingleRow = true>(dvdRental)
+
+assert( cmd.Execute(Some "test") = Some( Some "test"))
+assert( cmd.Execute() = Some( Some "Empty")) 
 ```
 
 ## Bulk Copy
 To upload a large amount of data fast, use the `BinaryImport` method on statically typed data tables:
 ```fsharp
-    let firstName, lastName = "Tom", "Hanks"
-    use conn = new Npgsql.NpgsqlConnection(dvdRental)
-    conn.Open()
-    use tx = conn.BeginTransaction()
+let firstName, lastName = "Tom", "Hanks"
+use conn = new Npgsql.NpgsqlConnection(dvdRental)
+conn.Open()
+use tx = conn.BeginTransaction()
 
-    let actors = new DvdRental.``public``.Tables.actor()
-        
-    let actor_id = 
-        use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
-        cmd.Execute() |> Option.flatten 
-    
-    //Binary copy operation expects all columns including auto-generated and having defaults to be populated. 
-    //Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method. 
-    actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
-    
-    let rowsImported = actors.BinaryImport(conn, false)
+let actors = new DvdRental.``public``.Tables.actor()
 
-    use cmd = 
-        DvdRental.CreateCommand<
-            "SELECT COUNT(*) FROM public.actor WHERE first_name = @firstName AND last_name = @lastName", 
-            SingleRow = true, 
-            XCtor = true>(conn, tx)
+let actor_id =
+use cmd = DvdRental.CreateCommand<"select nextval('actor_actor_id_seq' :: regclass)::int", SingleRow = true, XCtor = true>(conn, tx)
+cmd.Execute() |> Option.flatten
 
-    assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
+//Binary copy operation expects all columns including auto-generated and having defaults to be populated.
+//Therefore we must provide values for actor_id and last_update columns which are optional for plain Update method.
+actors.AddRow(actor_id, first_name = "Tom", last_name = "Hanks", last_update = Some DateTime.Now)
+
+let rowsImported = actors.BinaryImport(conn, false)
+
+use cmd =
+DvdRental.CreateCommand<
+    "SELECT COUNT(*) FROM public.actor WHERE first_name = @firstName AND last_name = @lastName",
+    SingleRow = true,
+    XCtor = true>(conn, tx)
+
+assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
 ```
 
 If you're importing data to a table with an identity column and want the database to generate those values for you, you can instruct `BinaryImport` not to fill in identity columns with `actors.BinaryImport(conn, true)`.
@@ -408,4 +395,3 @@ bump version number
 paket pack
 paket push FSharp.Data.Npgsql.<versionNumber>.nupkg --api-key <insert api key>
 ```
-
