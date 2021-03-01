@@ -8,6 +8,7 @@ open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
 open FSharp.Control.Tasks.NonAffine
+open System.Linq.Expressions
 
 #nowarn "0025"
 
@@ -15,41 +16,50 @@ open FSharp.Control.Tasks.NonAffine
 type Utils () =
     static let makeOptionValue =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
+        let factory = Func<_, _>(fun (typeParam: Type) ->
+            // PreComputeUnionConstructor returns obj[] -> obj, which would require an extra array allocation when creating option values
+            // Since we're only interested in Some (one argument) here, the array can be left out
+            let param = Expression.Parameter typeof<obj>
+            let expr =
+                Expression.Lambda<Func<obj, obj>> (
+                    Expression.New (
+                        typedefof<_ option>.MakeGenericType(typeParam).GetConstructor [| typeParam |],
+                        Expression.Convert (param, typeParam)
+                    ),
+                    param)
 
-        fun typeParam ->
-            cache.GetOrAdd (typeParam, Func<_, _>(fun (typeParam: Type) ->
-                let someCtor =
-                    typedefof<_ option>.MakeGenericType typeParam
-                    |> Reflection.FSharpType.GetUnionCases
-                    |> Array.find (fun x -> x.Name = "Some")
-                    |> Reflection.FSharpValue.PreComputeUnionConstructor
-                fun v -> if Convert.IsDBNull v then null else someCtor [| v |]))
+            let someCtor = expr.Compile ()
+
+            fun (v: obj) -> if Convert.IsDBNull v then null else someCtor.Invoke v)
+
+        fun typeParam -> cache.GetOrAdd (typeParam, factory)
 
     static let getRowAndColumnMappings =
         let cache = ConcurrentDictionary<_, (obj[] -> obj) * (obj[] -> obj)[]> ()
-        fun x ->
-            cache.GetOrAdd (x, fun (resultType, resultSet) ->
-                let rowMapping =
-                    if resultSet.ExpectedColumns.Length = 1 then
-                        Array.item 0
-                    elif resultType = ResultType.Tuples then
-                        Reflection.FSharpValue.PreComputeTupleConstructor resultSet.SeqItemType
+        let factory = Func<_, _>(fun (resultType, resultSet) ->
+            let rowMapping =
+                if resultSet.ExpectedColumns.Length = 1 then
+                    Array.item 0
+                elif resultType = ResultType.Tuples then
+                    Reflection.FSharpValue.PreComputeTupleConstructor resultSet.SeqItemType
+                else
+                    box
+            
+            let columnMappings =
+                if resultType = ResultType.Records then
+                    resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
+                else
+                    resultSet.ExpectedColumns |> Array.indexed
+                |> Array.map (fun (i, column) ->
+                    if column.AllowDBNull then
+                        let makeOptionValue = makeOptionValue column.DataType
+                        fun (values: obj[]) -> makeOptionValue values.[i]
                     else
-                        box
-                
-                let columnMappings =
-                    if resultType = ResultType.Records then
-                        resultSet.ExpectedColumns |> Array.indexed |> Array.sortBy (fun (_, col) -> col.ColumnName)
-                    else
-                        resultSet.ExpectedColumns |> Array.indexed
-                    |> Array.map (fun (i, column) ->
-                        if column.AllowDBNull then
-                            let makeOptionValue = makeOptionValue column.DataType
-                            fun (values: obj[]) -> makeOptionValue values.[i]
-                        else
-                            Array.item i)
+                        Array.item i)
 
-                rowMapping, columnMappings)
+            rowMapping, columnMappings)
+
+        fun x -> cache.GetOrAdd (x, factory)
 
     static member ResizeArrayToList ra =
         let rec inner (ra: ResizeArray<'a>, index, acc) = 
