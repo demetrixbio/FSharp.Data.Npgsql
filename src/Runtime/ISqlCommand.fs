@@ -34,16 +34,41 @@ type DesignTimeConfig = {
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> DesignTimeConfig, connection, commandTimeout) =
-    static let cfgCache = ConcurrentDictionary<int, DesignTimeConfig> ()
+    static let cfgExecuteCache = ConcurrentDictionary ()
+    static let executeSingleCache = ConcurrentDictionary ()
 
-    let cfg =
-        let mutable cfg = Unchecked.defaultof<_>
-        if cfgCache.TryGetValue (commandNameHash, &cfg) then
-            cfg
+    let cfg, execute =
+        let mutable x = Unchecked.defaultof<_>
+        if cfgExecuteCache.TryGetValue (commandNameHash, &x) then
+            x
         else
             let cfg = cfgBuilder ()
-            cfgCache.[commandNameHash] <- cfg
-            cfg
+
+            let execute =
+                match cfg.ResultType with
+                | ResultType.DataReader ->
+                    ISqlCommandImplementation.AsyncExecuteReader
+                | ResultType.DataTable ->
+                    if cfg.ResultSets.Length = 1 then
+                        ISqlCommandImplementation.AsyncExecuteDataTable
+                    else
+                        ISqlCommandImplementation.AsyncExecuteDataTables
+                | ResultType.Records | ResultType.Tuples ->
+                    match cfg.ResultSets with
+                    | [| resultSet |] ->
+                        if isNull resultSet.SeqItemType then
+                            ISqlCommandImplementation.AsyncExecuteNonQuery
+                        else
+                            typeof<ISqlCommandImplementation>
+                                .GetMethod(nameof ISqlCommandImplementation.AsyncExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
+                                .MakeGenericMethod(resultSet.SeqItemType)
+                                .Invoke(null, [||]) |> unbox
+                    | _ ->
+                        ISqlCommandImplementation.AsyncExecuteMulti
+                | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
+
+            cfgExecuteCache.[commandNameHash] <- (cfg, execute)
+            cfg, execute
 
     let cmd =
         let cmd = new NpgsqlCommand (cfg.SqlStatement, CommandTimeout = commandTimeout)
@@ -74,29 +99,6 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         | Sync -> box t.Result
         | Async -> Async.AwaitTask t |> box
         | TaskAsync -> box t
-
-    let execute =
-        match cfg.ResultType with
-        | ResultType.DataReader ->
-            ISqlCommandImplementation.AsyncExecuteReader
-        | ResultType.DataTable ->
-            if cfg.ResultSets.Length = 1 then
-                ISqlCommandImplementation.AsyncExecuteDataTable
-            else
-                ISqlCommandImplementation.AsyncExecuteDataTables
-        | ResultType.Records | ResultType.Tuples ->
-            match cfg.ResultSets with
-            | [| resultSet |] ->
-                if isNull resultSet.SeqItemType then
-                    ISqlCommandImplementation.AsyncExecuteNonQuery
-                else
-                    typeof<ISqlCommandImplementation>
-                        .GetMethod(nameof ISqlCommandImplementation.AsyncExecuteList, BindingFlags.NonPublic ||| BindingFlags.Static)
-                        .MakeGenericMethod(resultSet.SeqItemType)
-                        .Invoke(null, [||]) |> unbox
-            | _ ->
-                ISqlCommandImplementation.AsyncExecuteMulti
-        | unexpected -> failwithf "Unexpected ResultType value: %O" unexpected
 
     interface ISqlCommand with
         member __.Execute parameters = execute (cfg, cmd, setupConnection, readerBehavior, parameters, Sync)
@@ -180,7 +182,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
                         ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-            ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
+            ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
             return results }
 
         mapTask (t, executionType)
@@ -193,7 +195,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         mapTask (t, executionType)
 
     // TODO output params
-    static member internal ExecuteSingle<'TItem> (reader: Common.DbDataReader, readerBehavior: CommandBehavior, resultSetDefinition, cfg) = Unsafe.uply {
+    static member internal ExecuteSingle<'TItem> () = Func<_, _, _, _, _>(fun reader (readerBehavior: CommandBehavior) resultSetDefinition cfg -> Unsafe.uply {
         let! xs = MapRowValues<'TItem> (reader, cfg.ResultType, resultSetDefinition)
 
         return
@@ -204,7 +206,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
             elif cfg.CollectionType = CollectionType.List then
                 ResizeArrayToList xs |> box
             else
-                box xs }
+                box xs })
             
     static member internal AsyncExecuteList<'TItem> () = fun (cfg, cmd, setupConnection, readerBehavior: CommandBehavior, parameters, executionType) ->
         if cfg.CollectionType = CollectionType.LazySeq && readerBehavior.HasFlag CommandBehavior.SingleRow |> not then
@@ -240,15 +242,24 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
             else
                 mapTask (xs, executionType)
 
-    static member private ReadResultSet (cursor: Common.DbDataReader) readerBehavior resultSetDefinition cfg =
+    static member private ReadResultSet (cursor: Common.DbDataReader, readerBehavior, resultSetDefinition, cfg) =
         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSetDefinition.ExpectedColumns)
+        
+        let func =
+            let mutable x = Unchecked.defaultof<_>
+            if executeSingleCache.TryGetValue (resultSetDefinition.SeqItemType, &x) then
+                x
+            else
+                let func = 
+                    typeof<ISqlCommandImplementation>
+                        .GetMethod(nameof ISqlCommandImplementation.ExecuteSingle, BindingFlags.NonPublic ||| BindingFlags.Static)
+                        .MakeGenericMethod(resultSetDefinition.SeqItemType)
+                        .Invoke(null, [||]) :?> Func<_, _, _, _, Ply.Ply<obj>>
 
-        let executeHandle = 
-            typeof<ISqlCommandImplementation>
-                .GetMethod(nameof ISqlCommandImplementation.ExecuteSingle, BindingFlags.NonPublic ||| BindingFlags.Static)
-                .MakeGenericMethod resultSetDefinition.SeqItemType
+                executeSingleCache.[resultSetDefinition.SeqItemType] <- func
+                func
 
-        executeHandle.Invoke (null, [| cursor; readerBehavior; resultSetDefinition; cfg |]) :?> Ply.Ply<obj>
+        func.Invoke (cursor, readerBehavior, resultSetDefinition, cfg)
 
     static member internal AsyncExecuteMulti (cfg, cmd, setupConnection, readerBehavior, parameters, executionType) =
         let t = Unsafe.uply {
@@ -262,12 +273,12 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
                 while go do
                     let currentStatement = GetStatementIndex cursor
-                    let! res = ISqlCommandImplementation.ReadResultSet cursor readerBehavior cfg.ResultSets.[currentStatement] cfg
+                    let! res = ISqlCommandImplementation.ReadResultSet (cursor, readerBehavior, cfg.ResultSets.[currentStatement], cfg)
                     results.[currentStatement] <- res
                     let! more = cursor.NextResultAsync ()
                     go <- more
 
-            ISqlCommandImplementation.SetNumberOfAffectedRows results cmd.Statements
+            ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
             return results }
 
         mapTask (t, executionType)
@@ -285,7 +296,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
         mapTask (t, executionType)
 
-    static member internal SetNumberOfAffectedRows (results: obj[]) (statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
+    static member internal SetNumberOfAffectedRows (results: obj[], statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
         for i in 0 .. statements.Count - 1 do
             if isNull results.[i] then
                 results.[i] <- int statements.[i].Rows |> box
