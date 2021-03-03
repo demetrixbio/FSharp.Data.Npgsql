@@ -80,7 +80,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                     (statements |> List.choose (fun s -> match s.Type with Query cols -> Some cols | _ -> None) |> List.concat |> List.exists (fun c -> c.ClrType = typeof<NetTopologySuite.Geometries.Geometry>))
 
                 let designTimeConfig = 
-                    Expr.NewDelegate (typeof<Func<int, DesignTimeConfig>>, [ Var ("x", typeof<int>) ],
+                    Expr.Lambda (Var ("x", typeof<unit>),
                         Expr.NewRecord (typeof<DesignTimeConfig>, [
                             Expr.Value sqlStatement
                             QuotationsFactory.ToSqlParamsExpr parameters
