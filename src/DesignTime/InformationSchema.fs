@@ -262,10 +262,10 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
             
             let resultSetSchemasFromNpgsql = [
                 if cursor.FieldCount > 0 then
-                    Utils.GetStatementIndex cursor, cursor.GetColumnSchema () |> Seq.toList
+                    Utils.GetStatementIndex.Invoke cursor, cursor.GetColumnSchema () |> Seq.toList
 
                     while cursor.NextResult () do
-                        Utils.GetStatementIndex cursor, cursor.GetColumnSchema () |> Seq.toList
+                        Utils.GetStatementIndex.Invoke cursor, cursor.GetColumnSchema () |> Seq.toList
                 ]
 
             [ 0 .. cursor.Statements.Count - 1 ]

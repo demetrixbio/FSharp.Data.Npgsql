@@ -76,10 +76,9 @@ type Utils () =
         | 1 -> Some source.[0]
         | _ -> invalidOp "The output sequence contains more than one element."
 
-    static member GetStatementIndex =
+    static member val GetStatementIndex =
         let mi = typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
-        let d = Delegate.CreateDelegate (typeof<Func<NpgsqlDataReader, int>>, mi) :?> Func<NpgsqlDataReader, int>
-        d.Invoke
+        Delegate.CreateDelegate (typeof<Func<NpgsqlDataReader, int>>, mi) :?> Func<NpgsqlDataReader, int>
 
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)

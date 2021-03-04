@@ -271,7 +271,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                 let mutable go = true
 
                 while go do
-                    let currentStatement = GetStatementIndex cursor
+                    let currentStatement = GetStatementIndex.Invoke cursor
                     let! res = ISqlCommandImplementation.ReadResultSet (cursor, cfg.ResultSets.[currentStatement], cfg)
                     results.[currentStatement] <- res
                     let! more = cursor.NextResultAsync ()
