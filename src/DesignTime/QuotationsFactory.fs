@@ -44,14 +44,6 @@ type internal QuotationsFactory private() =
         assert (List.length xs = 3)
         Arg3(xs.[0], xs.[1], xs.[2])
 
-    static let (|Arg4|) xs = 
-        assert (List.length xs = 4)
-        Arg4(xs.[0], xs.[1], xs.[2], xs.[3])
-
-    static let (|Arg5|) xs = 
-        assert (List.length xs = 5)
-        Arg5(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4])
-
     static let (|Arg6|) xs = 
         assert (List.length xs = 6)
         Arg6(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5])
@@ -64,15 +56,24 @@ type internal QuotationsFactory private() =
         use cmd = new NpgsqlCommand ()
         cmd.CommandTimeout
 
-    static member internal GetValueAtIndexExpr: (Expr * int) -> Expr =
+    static member val internal GetValueAtIndexExpr: (Expr * int) -> Expr =
         let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions").GetMethod("GetArray").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
-    static member internal ToSqlParamsExpr =
+    static member val internal ToSqlParamsExpr =
         let mi = typeof<Utils>.GetMethod (nameof Utils.ToSqlParam, BindingFlags.Static ||| BindingFlags.Public)
-        fun (ps: Parameter list) -> Expr.NewArray (typeof<NpgsqlParameter>, ps |> List.map (fun p ->
-            Expr.Call (mi,
-                [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
+        let miEmpty = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<NpgsqlParameter>
+        fun (ps: Parameter list) ->
+            if ps.IsEmpty then
+                Expr.Call (miEmpty, [])
+            else
+                Expr.NewArray (typeof<NpgsqlParameter>, ps |> List.map (fun p ->
+                    Expr.Call (mi,
+                        [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
+
+    static member val internal ParamArrayEmptyExpr =
+        let mi = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<string * obj>
+        Expr.Call (mi, [])
 
     static member internal GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
         Expr.Call (typeof<Utils>.GetMethod(nameof Utils.GetNullableValueFromDataRow).MakeGenericMethod t, [
@@ -116,18 +117,16 @@ type internal QuotationsFactory private() =
                 Expr.NewTuple [ Expr.Value param.Name; Expr.Coerce (value, typeof<obj>) ])
 
         let invokeCode exprArgs =
-            let methodInfo = typeof<ISqlCommand>.GetMethod(name)
-            let vals = mappedInputParamValues(exprArgs)
-            let paramValues = Expr.NewArray( typeof<string * obj>, elements = vals)
-            Expr.Call(Expr.Coerce(exprArgs.[0], erasedType), methodInfo, [ paramValues ])    
+            let vals = mappedInputParamValues exprArgs
+            let paramValues = if vals.IsEmpty then QuotationsFactory.ParamArrayEmptyExpr else Expr.NewArray (typeof<string * obj>, vals)
+            Expr.Call (Expr.Coerce (exprArgs.[0], erasedType), typeof<ISqlCommand>.GetMethod name, [ paramValues ])    
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
     static member internal GetRecordType (rootTypeName, columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
         columns 
-            |> Seq.groupBy (fun x -> x.Name) 
-            |> Seq.tryFind (fun (_, xs) -> Seq.length xs > 1)
-            |> Option.iter (fun (name, _) -> failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
+        |> List.groupBy (fun x -> x.Name)
+        |> List.iter (fun (name, xs) -> if not xs.Tail.IsEmpty then failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
         
         let createType typeName =
             let recordType = ProvidedTypeDefinition (typeName, baseType = Some typeof<obj[]>, hideObjectMethods = true)
@@ -412,7 +411,7 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
-    static member ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
+    static member val internal ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
 
     static member internal GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
         let ctorImpl = typeof<ISqlCommandImplementation>.GetConstructors() |> Array.exactlyOne
@@ -446,7 +445,7 @@ type internal QuotationsFactory private() =
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
-    static member EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: Type); Expr.NewArray (typeof<DataColumn>, []) ])
+    static member val internal EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: Type); Expr.Call (typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<DataColumn>, []) ])
 
     static member internal BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
         Expr.NewArray (typeof<ResultSetDefinition>,

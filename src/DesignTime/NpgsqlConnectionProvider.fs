@@ -82,7 +82,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                 let designTimeConfig = 
                     Expr.Lambda (Var ("x", typeof<unit>),
                         Expr.NewRecord (typeof<DesignTimeConfig>, [
-                            Expr.Value sqlStatement
+                            Expr.Value (sqlStatement.Trim ())
                             QuotationsFactory.ToSqlParamsExpr parameters
                             Expr.Value resultType
                             Expr.Value collectionType
