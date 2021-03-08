@@ -453,10 +453,8 @@ type internal QuotationsFactory private() =
             |> List.map (fun x ->
                 match x.ReturnType, x.Type with
                 | Some returnType, Query columns ->
-                    let seqItemTypeName = returnType.SeqItemTypeName
-
-                    Expr.NewRecord (typeof<ResultSetDefinition>, [
-                        if isNull seqItemTypeName then Expr.Value (null: Type) else Expr.Call (typeof<Type>.GetMethod (nameof Type.GetType, [| typeof<string>; typeof<bool> |]), [ Expr.Value seqItemTypeName; Expr.Value true ])
+                    Expr.Call (typeof<ResultSetDefinition>.GetMethod (nameof ResultSetDefinition.Create, BindingFlags.Static ||| BindingFlags.Public), [
+                        Expr.Value returnType.SeqItemTypeName
                         Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
                 | _ ->
                     QuotationsFactory.EmptyResultSet))
