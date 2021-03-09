@@ -25,7 +25,7 @@ type internal ReturnType = {
 
     member this.SeqItemTypeName = 
         match this.PerRow with
-        | Some x -> x.ErasedTo.PartiallyQualifiedName
+        | Some x -> x.ErasedTo.FullName
         | None -> null
 
 type internal Statement = {
@@ -38,8 +38,7 @@ type internal ProvidedTypeReuse =
     | WithCache of ConcurrentDictionary<string, ProvidedTypeDefinition>
     | NoReuse
 
-type internal QuotationsFactory private() = 
-
+type internal QuotationsFactory () = 
     static let (|Arg3|) xs = 
         assert (List.length xs = 3)
         Arg3(xs.[0], xs.[1], xs.[2])
@@ -56,11 +55,11 @@ type internal QuotationsFactory private() =
         use cmd = new NpgsqlCommand ()
         cmd.CommandTimeout
 
-    static member val internal GetValueAtIndexExpr: (Expr * int) -> Expr =
+    static member val GetValueAtIndexExpr: (Expr * int) -> Expr =
         let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions").GetMethod("GetArray").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 
-    static member val internal ToSqlParamsExpr =
+    static member val ToSqlParamsExpr =
         let mi = typeof<Utils>.GetMethod (nameof Utils.ToSqlParam, BindingFlags.Static ||| BindingFlags.Public)
         let miEmpty = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<NpgsqlParameter>
         fun (ps: Parameter list) ->
@@ -71,48 +70,47 @@ type internal QuotationsFactory private() =
                     Expr.Call (mi,
                         [ Expr.Value p.Name; Expr.Value p.NpgsqlDbType; Expr.Value (if p.DataType.IsFixedLength then 0 else p.MaxLength); Expr.Value p.Scale; Expr.Value p.Precision ])))
 
-    static member val internal ParamArrayEmptyExpr =
+    static member val ParamArrayEmptyExpr =
         let mi = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<string * obj>
         Expr.Call (mi, [])
 
-    static member internal GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
+    static member GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
         Expr.Call (typeof<Utils>.GetMethod(nameof Utils.GetNullableValueFromDataRow).MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name ])
 
-    static member internal SetNullableValueInDataRow (t: Type, name: string) (exprArgs: Expr list) =
+    static member SetNullableValueInDataRow (t: Type, name: string) (exprArgs: Expr list) =
         Expr.Call (typeof<Utils>.GetMethod(nameof Utils.SetNullableValueInDataRow).MakeGenericMethod t, [
             exprArgs.[0]
             Expr.Value name
             Expr.Coerce (exprArgs.[1], typeof<obj>) ])
 
-    static member internal GetNonNullableValueFromDataRow (name: string) (exprArgs: Expr list) =
+    static member GetNonNullableValueFromDataRow (name: string) (exprArgs: Expr list) =
         Expr.Call (exprArgs.Head, typeof<DataRow>.GetMethod ("get_Item", [| typeof<string> |]), [ Expr.Value name ])
 
-    static member internal SetNonNullableValueInDataRow (name: string) (exprArgs: Expr list) =
+    static member SetNonNullableValueInDataRow (name: string) (exprArgs: Expr list) =
         Expr.Call (exprArgs.Head, typeof<DataRow>.GetMethod ("set_Item", [| typeof<string>; typeof<obj> |]), [ Expr.Value name; Expr.Coerce (exprArgs.[1], typeof<obj>) ])
     
-    static member internal GetMapperFromOptionToObj (t: Type, value: Expr) =
+    static member GetMapperFromOptionToObj (t: Type, value: Expr) =
         Expr.Call (typeof<Utils>.GetMethod(nameof Utils.OptionToObj).MakeGenericMethod t, [ Expr.Coerce (value, typeof<obj>) ])
 
-    static member internal AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
+    static member AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType, name) =
         let mappedInputParamValues (exprArgs: Expr list) = 
             (exprArgs.Tail, sqlParameters)
             ||> List.map2 (fun expr param ->
                 let value = 
-                    if param.Direction = ParameterDirection.Input
-                    then 
-                        if param.Optional 
-                        then 
+                    if param.Direction = ParameterDirection.Input then 
+                        if param.Optional then 
                             QuotationsFactory.GetMapperFromOptionToObj(param.DataType.ClrType, expr)
                         else
                             expr
                     else
                         let t = param.DataType.ClrType
 
-                        if t.IsArray
-                        then Expr.Value(Array.CreateInstance(t.GetElementType(), param.MaxLength))
-                        else Expr.Value(Activator.CreateInstance(t), t)
+                        if t.IsArray then
+                            Expr.Value(Array.CreateInstance(t.GetElementType(), param.MaxLength))
+                        else
+                            Expr.Value(Activator.CreateInstance(t), t)
 
                 Expr.NewTuple [ Expr.Value param.Name; Expr.Coerce (value, typeof<obj>) ])
 
@@ -123,7 +121,7 @@ type internal QuotationsFactory private() =
 
         ProvidedMethod(name, executeArgs, providedOutputType, invokeCode)
 
-    static member internal GetRecordType (rootTypeName, columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
+    static member GetRecordType (rootTypeName, columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
         columns 
         |> List.groupBy (fun x -> x.Name)
         |> List.iter (fun (name, xs) -> if not xs.Tail.IsEmpty then failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
@@ -156,7 +154,7 @@ type internal QuotationsFactory private() =
         | NoReuse ->
             createType ("Record" + typeNameSuffix)
 
-    static member internal GetDataRowPropertyGetterAndSetterCode (column: Column) =
+    static member GetDataRowPropertyGetterAndSetterCode (column: Column) =
         let name = column.Name
         if column.Nullable then
             let setter = if column.ReadOnly then None else Some (QuotationsFactory.SetNullableValueInDataRow (column.ClrType, name))
@@ -165,7 +163,7 @@ type internal QuotationsFactory private() =
             let setter = if column.ReadOnly then None else Some (QuotationsFactory.SetNonNullableValueInDataRow name)
             QuotationsFactory.GetNonNullableValueFromDataRow name, setter
 
-    static member internal GetDataRowType (customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) = 
+    static member GetDataRowType (customTypes: Map<string, ProvidedTypeDefinition>, columns: Column list) = 
         let rowType = ProvidedTypeDefinition("Row", Some typeof<DataRow>)
             
         columns 
@@ -187,7 +185,7 @@ type internal QuotationsFactory private() =
 
         rowType
 
-    static member internal GetDataTableType
+    static member GetDataTableType
         (
             typeName, 
             dataRowType: ProvidedTypeDefinition,
@@ -323,7 +321,7 @@ type internal QuotationsFactory private() =
 
         tableType
 
-    static member internal GetOutputTypes (rootTypeName, sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse) =    
+    static member GetOutputTypes (rootTypeName, sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse) =    
         let returnType =
             match resultType, statementType with
             | ResultType.DataReader, _
@@ -382,7 +380,7 @@ type internal QuotationsFactory private() =
 
         { Type = statementType; Sql = sql; ReturnType = returnType }
 
-    static member internal GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
+    static member GetExecuteArgs(sqlParameters: Parameter list, customTypes: Map<string, ProvidedTypeDefinition>) = 
         [
             for p in sqlParameters do
                 let parameterName = p.Name
@@ -411,9 +409,9 @@ type internal QuotationsFactory private() =
                         yield ProvidedParameter(parameterName, parameterType = t)
         ]
 
-    static member val internal ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
+    static member val ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
 
-    static member internal GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
+    static member GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
         let ctorImpl = typeof<ISqlCommandImplementation>.GetConstructors() |> Array.exactlyOne
 
         if isExtended then
@@ -437,7 +435,7 @@ type internal QuotationsFactory private() =
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
 
-    static member internal AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
+    static member AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
         if resultType = ResultType.Records then
             returnType.PerRow
             |> Option.filter (fun x -> x.Provided <> x.ErasedTo && columnCount > 1)
@@ -445,21 +443,21 @@ type internal QuotationsFactory private() =
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
-    static member val internal EmptyResultSet = Expr.NewRecord (typeof<ResultSetDefinition>, [ Expr.Value (null: Type); Expr.Call (typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<DataColumn>, []) ])
+    static member val EmptyResultSet = Expr.PropertyGet (typeof<Utils>.GetProperty (nameof Utils.EmptyResultSet, BindingFlags.Static ||| BindingFlags.Public), [])
 
-    static member internal BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
+    static member BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
         Expr.NewArray (typeof<ResultSetDefinition>,
             statements
             |> List.map (fun x ->
                 match x.ReturnType, x.Type with
                 | Some returnType, Query columns ->
-                    Expr.Call (typeof<ResultSetDefinition>.GetMethod (nameof ResultSetDefinition.Create, BindingFlags.Static ||| BindingFlags.Public), [
-                        Expr.Value returnType.SeqItemTypeName
+                    Expr.NewRecord (typeof<ResultSetDefinition>, [
+                        Expr.Call (typeof<Utils>.GetMethod (nameof Utils.GetType, BindingFlags.Static ||| BindingFlags.Public), [ Expr.Value returnType.SeqItemTypeName ])
                         Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
                 | _ ->
                     QuotationsFactory.EmptyResultSet))
 
-    static member internal AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
+    static member AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
         
         let addRedirectToISqlCommandMethod outputType name xmlDoc = 

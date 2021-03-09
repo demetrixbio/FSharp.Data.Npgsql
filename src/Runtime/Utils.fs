@@ -80,6 +80,8 @@ type Utils () =
         let mi = typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
         Delegate.CreateDelegate (typeof<Func<NpgsqlDataReader, int>>, mi) :?> Func<NpgsqlDataReader, int>
 
+    static member val EmptyResultSet = { SeqItemType = null; ExpectedColumns = [||] }
+
     static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
 
@@ -97,9 +99,25 @@ type Utils () =
 
         c
 
+    static member GetType typeName = 
+        if isNull typeName then
+            null
+        else
+            let t = Type.GetType typeName
+
+            if isNull t then
+                let t = Type.GetType (typeName + ", FSharp.Core")
+
+                if isNull t then
+                    Type.GetType (typeName + ", Npgsql", true)
+                else
+                    t
+            else
+                t
+
     static member ToDataColumn (stringValues: string, isEnum, autoIncrement, allowDbNull, readonly, maxLength, partOfPk: bool, nullable: bool) =
         let [| columnName; typeName; pgTypeName; baseSchemaName; baseTableName |] = stringValues.Split '|'
-        let x = new DataColumn (columnName, Type.GetType (typeName, throwOnError = true))
+        let x = new DataColumn (columnName, Utils.GetType typeName)
 
         x.AutoIncrement <- autoIncrement
         x.AllowDBNull <- allowDbNull
@@ -128,9 +146,9 @@ type Utils () =
         x.ExtendedProperties.Add (SchemaTableColumn.BaseTableName, baseTableName)
         x
 
-    static member ToDataColumnSlim (stringValues: string, nullable: bool) =
-        let [| columnName; typeName |] = stringValues.Split '|'
-        new DataColumn (columnName, Type.GetType (typeName, true), AllowDBNull = nullable)
+    static member ToDataColumnSlim (stringValues: string) =
+        let [| columnName; typeName; nullable |] = stringValues.Split '|'
+        new DataColumn (columnName, Utils.GetType typeName, AllowDBNull = (nullable = "1"))
 
     static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
         let rowMapping, columnMappings = getRowAndColumnMappings (resultType, resultSet)

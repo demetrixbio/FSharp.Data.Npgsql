@@ -115,12 +115,9 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         for name, value in parameters do
             let p = cmd.Parameters.[name]
 
-            if p.Direction.HasFlag(ParameterDirection.Input) then
-                if value = null then
-                    p.Value <- DBNull.Value
-                else
-                    p.Value <- value
-            elif p.Direction.HasFlag(ParameterDirection.Output) && value :? Array then
+            if p.Direction.HasFlag ParameterDirection.Input then
+                p.Value <- if isNull value then DBNull.Value :> obj else value
+            elif p.Direction.HasFlag ParameterDirection.Output && value :? Array then
                 p.Size <- (value :?> Array).Length
 
     static member internal VerifyOutputColumns(cursor: Common.DbDataReader, expectedColumns: DataColumn[]) =

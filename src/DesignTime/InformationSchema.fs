@@ -27,10 +27,6 @@ type internal DbDataReader with
         let i = cursor.GetOrdinal(name)
         if cursor.IsDBNull( i) then None else Some <| cursor.GetValue( i)
 
-type internal Type with
-    member this.PartiallyQualifiedName = 
-        sprintf "%s, %s" this.FullName (this.Assembly.GetName().Name)
-
 //https://www.postgresql.org/docs/current/static/datatype.html#DATATYPE-TABLE
 let private builtins = [
     "boolean", typeof<bool>; "bool", typeof<bool>
@@ -193,12 +189,12 @@ type Column =
         if slim then
             let mi = typeof<Utils>.GetMethod (nameof Utils.ToDataColumnSlim, BindingFlags.Static ||| BindingFlags.Public)
             // use one composite string to reduce the number of expression nodes
-            let stringValues = sprintf "%s|%s" this.Name this.ClrType.PartiallyQualifiedName
-            Expr.Call (mi, [ Expr.Value stringValues; Expr.Value this.Nullable ])
+            let stringValues = sprintf "%s|%s|%s" this.Name this.ClrType.FullName (if this.Nullable then "1" else "0")
+            Expr.Call (mi, [ Expr.Value stringValues ])
         else
             let typeName = 
                 let clrType = if this.ClrType.IsArray then typeof<Array> else this.ClrType
-                clrType.PartiallyQualifiedName
+                clrType.FullName
 
             let mi = typeof<Utils>.GetMethod (nameof Utils.ToDataColumn, BindingFlags.Static ||| BindingFlags.Public)
             let stringValues = sprintf "%s|%s|%s|%s|%s" this.Name typeName this.DataType.Name this.BaseSchemaName this.BaseTableName

@@ -35,12 +35,6 @@ type ResultSetDefinition = {
     SeqItemType: System.Type
     ExpectedColumns: DataColumn[] }
 
-    with
-        static member Create (typeName, columns) = {
-            SeqItemType = if isNull typeName then null else System.Type.GetType (typeName, true);
-            ExpectedColumns = columns
-        }
-
 type LazySeq<'a> (s: 'a seq, reader: Common.DbDataReader, cmd: NpgsqlCommand) =
     member val Seq = s
 
