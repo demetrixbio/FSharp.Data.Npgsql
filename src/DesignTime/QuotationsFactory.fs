@@ -4,29 +4,17 @@ open System
 open System.Data
 open System.Reflection
 open FSharp.Quotations
-
 open ProviderImplementation.ProvidedTypes
-
 open Npgsql
 open FSharp.Data.Npgsql
 open InformationSchema
 open System.Collections.Concurrent
 open System.Threading.Tasks
 
-type internal RowType = {
-    Provided: Type
-    ErasedTo: Type
-}
-
 type internal ReturnType = {
     Single: Type
-    PerRow: RowType option
-}  with 
-
-    member this.SeqItemTypeName = 
-        match this.PerRow with
-        | Some x -> x.ErasedTo.FullName
-        | None -> null
+    RowProvidedType: Type option
+}
 
 type internal Statement = {
     Type: StatementType
@@ -72,6 +60,10 @@ type internal QuotationsFactory () =
 
     static member val ParamArrayEmptyExpr =
         let mi = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<string * obj>
+        Expr.Call (mi, [])
+
+    static member val DataColumnArrayEmptyExpr =
+        let mi = typeof<Array>.GetMethod(nameof Array.Empty, BindingFlags.Static ||| BindingFlags.Public).MakeGenericMethod typeof<DataColumn>
         Expr.Call (mi, [])
 
     static member GetNullableValueFromDataRow (t: Type, name: string) (exprArgs: Expr list) =
@@ -124,23 +116,29 @@ type internal QuotationsFactory () =
     static member GetRecordType (rootTypeName, columns: Column list, customTypes: Map<string, ProvidedTypeDefinition>, typeNameSuffix, providedTypeReuse) =
         columns 
         |> List.groupBy (fun x -> x.Name)
-        |> List.iter (fun (name, xs) -> if not xs.Tail.IsEmpty then failwithf "Non-unique column name %s is illegal for ResultType.Records." name)
+        |> List.iter (fun (name, xs) ->
+            if not xs.Tail.IsEmpty then
+                failwithf "Non-unique column name %s is not supported for ResultType.Records." name
+            if String.IsNullOrEmpty name then
+                failwithf "One or more columns do not have a name. Please give the columns an explicit alias.")
         
         let createType typeName =
-            let recordType = ProvidedTypeDefinition (typeName, baseType = Some typeof<obj[]>, hideObjectMethods = true)
+            let isErasedToTuple = columns.Length < 8
+            let baseType =
+                if isErasedToTuple then
+                    ProvidedTypeBuilder.MakeTupleType (columns |> List.sortBy (fun x -> x.Name) |> List.map (fun x -> x.MakeProvidedType customTypes))
+                else
+                    typeof<obj[]>
+
+            let recordType = ProvidedTypeDefinition (typeName, baseType = Some baseType, hideObjectMethods = true)
             
             columns
             |> List.sortBy (fun x -> x.Name)
             |> List.iteri (fun i col ->
-                let propertyName =
-                    if String.IsNullOrEmpty col.Name then
-                        let originalIndex = List.findIndex (fun x -> x = col) columns
-                        failwithf "Column #%i doesn't have a name. Only named columns are supported. Use an explicit alias." (originalIndex + 1)
-                    else
-                        col.Name
-
-                let propType = col.MakeProvidedType customTypes
-                ProvidedProperty (propertyName, propType, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
+                if isErasedToTuple then
+                    ProvidedProperty (col.Name, col.MakeProvidedType customTypes, fun args -> Expr.PropertyGet (Expr.Coerce (args.[0], baseType), baseType.GetProperty (sprintf "Item%d" (i + 1)))) |> recordType.AddMember
+                else
+                    ProvidedProperty (col.Name, col.MakeProvidedType customTypes, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
 
             recordType
 
@@ -328,7 +326,7 @@ type internal QuotationsFactory () =
             | _, Control ->
                 None
             | _, NonQuery ->
-                Some { Single = typeof<int>; PerRow = None }
+                Some { Single = typeof<int>; RowProvidedType = None }
             | ResultType.DataTable, Query columns ->
                 let dataRowType = QuotationsFactory.GetDataRowType (customTypes, columns)
                 let dataTableType =
@@ -340,29 +338,17 @@ type internal QuotationsFactory () =
 
                 dataTableType.AddMember dataRowType
 
-                Some { Single = dataTableType; PerRow = None }
+                Some { Single = dataTableType; RowProvidedType = None }
             | _, Query columns ->
-                let providedRowType, erasedToRowType =
+                let providedRowType =
                     if List.length columns = 1 then
-                        let column0 = columns.Head
-                        let erasedTo = column0.ClrTypeConsideringNullability
-                        let provided = column0.MakeProvidedType customTypes
-                        provided, erasedTo
+                        columns.Head.MakeProvidedType customTypes
                     elif resultType = ResultType.Records then 
-                        let provided = QuotationsFactory.GetRecordType (rootTypeName, columns, customTypes, typeNameSuffix, providedTypeReuse)
-                        upcast provided, typeof<obj[]>
+                        QuotationsFactory.GetRecordType (rootTypeName, columns, customTypes, typeNameSuffix, providedTypeReuse) :> Type
                     else
-                        let providedType =
-                            match columns with
-                            | [ x ] -> x.MakeProvidedType customTypes
-                            | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType customTypes |]
-
-                        let erasedToTupleType =
-                            match columns with
-                            | [ x ] -> x.ClrTypeConsideringNullability
-                            | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.ClrTypeConsideringNullability |]
-
-                        providedType, erasedToTupleType
+                        match columns with
+                        | [ x ] -> x.MakeProvidedType customTypes
+                        | xs -> Reflection.FSharpType.MakeTupleType [| for x in xs -> x.MakeProvidedType customTypes |]
 
                 Some {
                     Single =
@@ -376,7 +362,7 @@ type internal QuotationsFactory () =
                             ProvidedTypeBuilder.MakeGenericType (typedefof<LazySeq<_>>, [ providedRowType ])
                         else
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
-                    PerRow = Some { Provided = providedRowType; ErasedTo = erasedToRowType } }
+                    RowProvidedType = Some providedRowType }
 
         { Type = statementType; Sql = sql; ReturnType = returnType }
 
@@ -437,25 +423,20 @@ type internal QuotationsFactory () =
 
     static member AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
         if resultType = ResultType.Records then
-            returnType.PerRow
-            |> Option.filter (fun x -> x.Provided <> x.ErasedTo && columnCount > 1)
-            |> Option.iter (fun x -> declaringType.AddMember x.Provided)
+            returnType.RowProvidedType
+            |> Option.iter (fun x -> if columnCount > 1 then declaringType.AddMember x)
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
-    static member val EmptyResultSet = Expr.PropertyGet (typeof<Utils>.GetProperty (nameof Utils.EmptyResultSet, BindingFlags.Static ||| BindingFlags.Public), [])
-
-    static member BuildResultSetDefinitionsExpr (statements, slimDataColumns) =
-        Expr.NewArray (typeof<ResultSetDefinition>,
+    static member BuildDataColumnsExpr (statements, slimDataColumns) =
+        Expr.NewArray (typeof<DataColumn[]>,
             statements
             |> List.map (fun x ->
-                match x.ReturnType, x.Type with
-                | Some returnType, Query columns ->
-                    Expr.NewRecord (typeof<ResultSetDefinition>, [
-                        Expr.Call (typeof<Utils>.GetMethod (nameof Utils.GetType, BindingFlags.Static ||| BindingFlags.Public), [ Expr.Value returnType.SeqItemTypeName ])
-                        Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns)) ])
+                match x.Type with
+                | Query columns ->
+                    Expr.NewArray (typeof<DataColumn>, columns |> List.map (fun x -> x.ToDataColumnExpr slimDataColumns))
                 | _ ->
-                    QuotationsFactory.EmptyResultSet))
+                    QuotationsFactory.DataColumnArrayEmptyExpr))
 
     static member AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)

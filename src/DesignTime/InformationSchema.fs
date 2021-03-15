@@ -167,11 +167,6 @@ type Column =
 
     member this.ClrType = this.DataType.ClrType
 
-    member this.ClrTypeConsideringNullability = 
-        if this.Nullable
-        then typedefof<_ option>.MakeGenericType this.DataType.ClrType
-        else this.DataType.ClrType
-
     member this.HasDefaultConstraint = string this.DefaultConstraint <> ""
     member this.OptionalForInsert = this.Nullable || this.HasDefaultConstraint || this.AutoIncrement
 
