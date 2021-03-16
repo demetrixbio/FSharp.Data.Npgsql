@@ -115,6 +115,15 @@ let selectSingleColumn() =
     )
 
 [<Fact>]
+let ``selectSingleColumn tuple`` () =
+    use cmd = DvdRental.CreateCommand<"SELECT * FROM generate_series(0, 10)", ResultType = ResultType.Tuples>(connectionString)
+
+    Assert.Equal<_ seq>(
+        { 0 .. 10 }, 
+        cmd.Execute() |> Seq.choose id 
+    )
+
+[<Fact>]
 let paramInFilter() =
     use cmd = 
         DvdRental.CreateCommand<"
@@ -989,6 +998,13 @@ let ``LazySeq works`` () =
 
     Assert.Equal (5, actual.Seq |> Seq.take 5 |> Seq.length)
 
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT null::integer blah from film", CollectionType = CollectionType.LazySeq>(connectionString)
+    use actual = cmd.Execute()
+
+    actual.Seq
+    |> Seq.take 5
+    |> Seq.iter (fun v -> Assert.Equal (None, v))
+
 [<Fact>]
 let ``Async LazySeq works`` () =
     use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", CollectionType = CollectionType.LazySeq>(connectionString)
@@ -1032,7 +1048,7 @@ let ``Disposing of the LazySeq disposes of the reader, but the provided connecti
 [<Fact>]
 let ``Disposing of the command does not close the connection in case of xctor`` () =
     use conn = openConnection()
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film", XCtor = true>(conn)
+    use cmd = DvdRentalWithTypeReuse.CreateCommand<"SELECT * from film limit 1", XCtor = true>(conn)
     let _ = cmd.Execute()
     (cmd :> IDisposable).Dispose ()
 

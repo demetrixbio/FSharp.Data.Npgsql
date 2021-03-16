@@ -123,22 +123,27 @@ type internal QuotationsFactory () =
                 failwithf "One or more columns do not have a name. Please give the columns an explicit alias.")
         
         let createType typeName =
-            let isErasedToTuple = columns.Length < 8
-            let baseType =
-                if isErasedToTuple then
-                    ProvidedTypeBuilder.MakeTupleType (columns |> List.sortBy (fun x -> x.Name) |> List.map (fun x -> x.MakeProvidedType customTypes))
-                else
-                    typeof<obj[]>
-
+            let baseType = ProvidedTypeBuilder.MakeTupleType (columns |> List.sortBy (fun x -> x.Name) |> List.map (fun x -> x.MakeProvidedType customTypes))
             let recordType = ProvidedTypeDefinition (typeName, baseType = Some baseType, hideObjectMethods = true)
-            
+
             columns
             |> List.sortBy (fun x -> x.Name)
             |> List.iteri (fun i col ->
-                if isErasedToTuple then
-                    ProvidedProperty (col.Name, col.MakeProvidedType customTypes, fun args -> Expr.PropertyGet (Expr.Coerce (args.[0], baseType), baseType.GetProperty (sprintf "Item%d" (i + 1)))) |> recordType.AddMember
-                else
-                    ProvidedProperty (col.Name, col.MakeProvidedType customTypes, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i)) |> recordType.AddMember)
+                let rec accessor instance (baseType: Type) tupleIndex coerce =
+                    if tupleIndex < 7 then
+                        Expr.PropertyGet (
+                            (if coerce then Expr.Coerce (instance, baseType) else instance),
+                            baseType.GetProperty (sprintf "Item%d" (tupleIndex + 1))
+                        )
+                    else
+                        let constituentTuple = baseType.GetGenericArguments().[7]
+                        let rest =
+                            Expr.PropertyGet (
+                                (if coerce then Expr.Coerce (instance, baseType) else instance),
+                                baseType.GetProperty "Rest")
+                        accessor rest constituentTuple (tupleIndex - 7) false
+
+                ProvidedProperty (col.Name, col.MakeProvidedType customTypes, fun args -> accessor args.[0] baseType i true) |> recordType.AddMember)
 
             recordType
 

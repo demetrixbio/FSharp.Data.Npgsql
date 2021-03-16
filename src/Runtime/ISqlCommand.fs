@@ -218,10 +218,10 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                 let! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters)
                 
                 let xs =
-                    if cfg.ResultSets.[0].IsErasedToShortTuple then
+                    if cfg.ResultSets.[0].ExpectedColumns.Length > 1 then
                         NoBoxingMapRowValuesLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
                     else
-                        MapRowValuesLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
+                        MapRowValuesLazy<'TItem> (reader, cfg.ResultSets.[0])
 
                 return new LazySeq<'TItem> (xs, reader, cmd) }
 
