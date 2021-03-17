@@ -364,6 +364,27 @@ assert(Some( Some 1L) = cmd.Execute(firstName, lastName))
 
 If you're importing data to a table with an identity column and want the database to generate those values for you, you can instruct `BinaryImport` not to fill in identity columns with `actors.BinaryImport(conn, true)`.
 
+## PostGIS
+PostGIS columns and input parameters of type `geometry` are supported using [NetTopologySuite](https://github.com/NetTopologySuite/NetTopologySuite).
+
+```fsharp
+open NetTopologySuite.Geometries
+
+let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
+use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry">(connectionString)
+let res = cmd.Execute(input).Head.Value
+    
+Assert.Equal (input.Coordinate.X, res.Coordinate.X)
+```
+
+As of version 1.1.0, the type provider does not try to detect NetTopologySuite usage and set the relevant type handler on each Npgsql connection. Instead, if you intend to use `geometry`, register the type handler globally during the startup of your application.
+
+```fsharp
+open type Npgsql.NpgsqlNetTopologySuiteExtensions
+
+Npgsql.NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite () |> ignore
+```
+
 ## Limitations
 
   - One unfortunate PostgreSQL limitation is that column nullability cannot be inferred for derived columns. A command 
