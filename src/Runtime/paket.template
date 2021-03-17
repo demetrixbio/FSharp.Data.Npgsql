@@ -1,6 +1,6 @@
 type project
 id FSharp.Data.Npgsql5
-version 1.0.1
+version 1.1.0
 authors Demetrix; Dmitry Morozov; kerams
 owners Demetrix; Dmitry Morozov; kerams
 projectUrl https://github.com/kerams/FSharp.Data.Npgsql5
