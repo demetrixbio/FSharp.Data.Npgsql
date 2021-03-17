@@ -371,7 +371,7 @@ PostGIS columns and input parameters of type `geometry` are supported using [Net
 open NetTopologySuite.Geometries
 
 let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
-use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry">(connectionString)
+use cmd = DvdRental.CreateCommand<"select @p::geometry">(connectionString)
 let res = cmd.Execute(input).Head.Value
     
 Assert.Equal (input.Coordinate.X, res.Coordinate.X)
