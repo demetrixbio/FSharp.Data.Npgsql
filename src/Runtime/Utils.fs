@@ -14,7 +14,7 @@ open System.Linq.Expressions
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
-    static let makeOptionValue =
+    static let getColumnMapping =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
         let factory = Func<_, _>(fun (typeParam: Type) ->
             // PreComputeUnionConstructor returns obj[] -> obj, which would require an extra array allocation when creating option values
@@ -22,21 +22,19 @@ type Utils () =
             let param = Expression.Parameter typeof<obj>
             let expr =
                 Expression.Lambda<Func<obj, obj>> (
-                    Expression.New (
-                        typedefof<_ option>.MakeGenericType(typeParam).GetConstructor [| typeParam |],
-                        Expression.Convert (param, typeParam)
+                    Expression.Condition (
+                        Expression.Call (typeof<Convert>.GetMethod (nameof Convert.IsDBNull, Reflection.BindingFlags.Static ||| Reflection.BindingFlags.Public), param),
+                        Expression.Constant (null, typedefof<_ option>.MakeGenericType typeParam),
+                        Expression.New (
+                            typedefof<_ option>.MakeGenericType(typeParam).GetConstructor [| typeParam |],
+                            Expression.Convert (param, typeParam)
+                        )
                     ),
                     param)
 
-            let someCtor = expr.Compile ()
+            expr.Compile().Invoke)
 
-            fun (v: obj) -> if Convert.IsDBNull v then null else someCtor.Invoke v)
-
-        Func<_, _>(fun typeParam -> cache.GetOrAdd (typeParam, factory))
-
-    static let getColumnMapping =
-        let cache = ConcurrentDictionary<Type, obj -> obj> ()
-        fun (x: DataColumn) -> if x.AllowDBNull then cache.GetOrAdd (x.DataType, makeOptionValue) else id
+        fun (x: DataColumn) -> if x.AllowDBNull then cache.GetOrAdd (x.DataType, factory) else id
 
     static let getRowToTupleReader =
         let cache = ConcurrentDictionary<int, Func<DbDataReader, obj>> ()
@@ -188,7 +186,7 @@ type Utils () =
         let [| columnName; typeName; nullable |] = stringValues.Split '|'
         new DataColumn (columnName, Utils.GetType typeName, AllowDBNull = (nullable = "1"))
 
-    static member NoBoxingMapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
+    static member MapRowValuesOntoTuple<'TItem> (cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
         let results = ResizeArray<'TItem> ()
         let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
         
@@ -205,7 +203,7 @@ type Utils () =
 
         return results }
 
-    static member NoBoxingMapRowValuesLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
+    static member MapRowValuesOntoTupleLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
         seq {
             let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
 
@@ -215,7 +213,7 @@ type Utils () =
 
     static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet: ResultSetDefinition) =
         if resultSet.ExpectedColumns.Length > 1 then
-            Utils.NoBoxingMapRowValues<'TItem> (cursor, resultType, resultSet)
+            Utils.MapRowValuesOntoTuple<'TItem> (cursor, resultType, resultSet)
         else Unsafe.uply {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
             let results = ResizeArray<'TItem> ()

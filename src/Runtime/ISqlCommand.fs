@@ -219,7 +219,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                 
                 let xs =
                     if cfg.ResultSets.[0].ExpectedColumns.Length > 1 then
-                        NoBoxingMapRowValuesLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
+                        MapRowValuesOntoTupleLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
                     else
                         MapRowValuesLazy<'TItem> (reader, cfg.ResultSets.[0])
 

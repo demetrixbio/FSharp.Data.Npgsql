@@ -426,10 +426,10 @@ type internal QuotationsFactory () =
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
 
-    static member AddProvidedTypeToDeclaring resultType returnType columnCount (declaringType: ProvidedTypeDefinition) =
+    static member AddProvidedTypeToDeclaring resultType returnType (declaringType: ProvidedTypeDefinition) =
         if resultType = ResultType.Records then
             returnType.RowProvidedType
-            |> Option.iter (fun x -> if columnCount > 1 then declaringType.AddMember x)
+            |> Option.iter (fun x -> if x :? ProvidedTypeDefinition then declaringType.AddMember x)
         elif resultType = ResultType.DataTable && not returnType.Single.IsPrimitive then
             returnType.Single |> declaringType.AddMember
 
@@ -446,65 +446,45 @@ type internal QuotationsFactory () =
     static member AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
         
-        let addRedirectToISqlCommandMethod outputType name xmlDoc = 
-            let m = QuotationsFactory.AddGeneratedMethod (parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
-            Option.iter m.AddXmlDoc xmlDoc
-            cmdProvidedType.AddMember m
+        let addRedirectToISqlCommandMethods outputType xmlDoc =
+            let add outputType name xmlDoc =
+                let m = QuotationsFactory.AddGeneratedMethod (parameters, executeArgs, cmdProvidedType.BaseType, outputType, name) 
+                Option.iter m.AddXmlDoc xmlDoc
+                cmdProvidedType.AddMember m
+
+            if methodTypes.HasFlag MethodTypes.Sync then
+                add outputType "Execute" xmlDoc
+            if methodTypes.HasFlag MethodTypes.Async then
+                add (typedefof<Async<_>>.MakeGenericType outputType) "AsyncExecute" xmlDoc
+            if methodTypes.HasFlag MethodTypes.Task then
+                add (typedefof<Task<_>>.MakeGenericType outputType) "TaskAsyncExecute" xmlDoc
 
         match statements with
         | _ when resultType = ResultType.DataReader ->
-            if methodTypes.HasFlag MethodTypes.Sync then
-                addRedirectToISqlCommandMethod typeof<NpgsqlDataReader> "Execute" None
-            if methodTypes.HasFlag MethodTypes.Async then
-                addRedirectToISqlCommandMethod typeof<Async<NpgsqlDataReader>> "AsyncExecute" None
-            if methodTypes.HasFlag MethodTypes.Task then
-                addRedirectToISqlCommandMethod typeof<Task<NpgsqlDataReader>> "TaskAsyncExecute" None
-        | [ { ReturnType = Some returnType; Sql = sql; Type = typ } ] ->
+            addRedirectToISqlCommandMethods typeof<NpgsqlDataReader> None
+        | [ { ReturnType = Some returnType; Sql = sql } ] ->
             let xmlDoc = if returnType.Single = typeof<int> then sprintf "Number of rows affected by \"%s\"." sql |> Some else None
-
-            if methodTypes.HasFlag MethodTypes.Sync then
-                addRedirectToISqlCommandMethod returnType.Single "Execute" xmlDoc
-            if methodTypes.HasFlag MethodTypes.Async then
-                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ returnType.Single ])
-                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" xmlDoc
-            if methodTypes.HasFlag MethodTypes.Task then
-                let taskReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<Task<_>>, [ returnType.Single ])
-                addRedirectToISqlCommandMethod taskReturnType "TaskAsyncExecute" xmlDoc
-
-            let columnCount =
-                match typ with
-                | Query columns -> columns.Length
-                | _ -> 0
-
-            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType columnCount typeToAttachTo
+            addRedirectToISqlCommandMethods returnType.Single xmlDoc
+            QuotationsFactory.AddProvidedTypeToDeclaring resultType returnType typeToAttachTo
         | _ ->
             let resultSetsType = ProvidedTypeDefinition ("ResultSets", baseType = Some typeof<obj[]>, hideObjectMethods = true)
 
             statements
-            |> List.mapi (fun i statement -> i, statement)
-            |> List.choose (fun (i, statement) ->
+            |> List.iteri (fun i statement ->
                 match statement.Type, statement.ReturnType with
-                | NonQuery, Some rt -> Some (i, rt, sprintf "RowsAffected%d" (i + 1), sprintf "Number of rows affected by \"%s\"." statement.Sql)
-                | Query _, Some rt -> Some (i, rt, sprintf "ResultSet%d" (i + 1), sprintf "Rows returned for query \"%s\"." statement.Sql)
-                | _ -> None)
-            |> List.iter (fun (i, rt, propName, xmlDoc) ->
-                let prop = ProvidedProperty (propName, rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
-                prop.AddXmlDoc xmlDoc
-                resultSetsType.AddMember prop)
+                | NonQuery, _ ->
+                    let prop = ProvidedProperty (sprintf "RowsAffected%d" (i + 1), typeof<int>, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
+                    sprintf "Number of rows affected by \"%s\"." statement.Sql |> prop.AddXmlDoc
+                    resultSetsType.AddMember prop
+                | Query _, Some rt ->
+                    let prop = ProvidedProperty (sprintf "ResultSet%d" (i + 1), rt.Single, fun args -> QuotationsFactory.GetValueAtIndexExpr (Expr.Coerce (args.[0], typeof<obj[]>), i))
+                    sprintf "Rows returned for query \"%s\"." statement.Sql |> prop.AddXmlDoc
+                    resultSetsType.AddMember prop
+                | _ -> ()
 
-            statements
-            |> List.choose (fun statement -> statement.ReturnType |> Option.map (fun rt -> (match statement.Type with Query columns -> columns.Length | _ -> 0), rt))
-            |> List.iter (fun (columnCount, rt) -> QuotationsFactory.AddProvidedTypeToDeclaring resultType rt columnCount typeToAttachTo)
+                statement.ReturnType |> Option.iter (fun rt -> QuotationsFactory.AddProvidedTypeToDeclaring resultType rt typeToAttachTo))
 
-            if methodTypes.HasFlag MethodTypes.Sync then
-                addRedirectToISqlCommandMethod resultSetsType "Execute" None
-            if methodTypes.HasFlag MethodTypes.Async then
-                let asyncReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<_ Async>, [ resultSetsType ])
-                addRedirectToISqlCommandMethod asyncReturnType "AsyncExecute" None
-            if methodTypes.HasFlag MethodTypes.Task then
-                let taskReturnType = ProvidedTypeBuilder.MakeGenericType (typedefof<Task<_>>, [ resultSetsType ])
-                addRedirectToISqlCommandMethod taskReturnType "TaskAsyncExecute" None
-
+            addRedirectToISqlCommandMethods resultSetsType None
             cmdProvidedType.AddMember resultSetsType
 
 
