@@ -2,6 +2,7 @@
 
 open System
 open System.Data
+open System.Text.RegularExpressions
 open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 open Npgsql
@@ -31,15 +32,21 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
+        let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool) = 
+            if not globalXCtor then
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
+            else
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _
+        
+        let commandTypeName =
+            if typename <> "" then
+                typename
+            else
+                Regex.Replace(methodName, @"\s+", " ", RegexOptions.Multiline).Replace("\"", "").Replace("@", "").Replace("CreateCommand,CommandText=", "").Trim()
+        
         methodsCache.GetOrAdd(
-            rootType.Name + methodName,
-            fun _ ->
-                let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool) = 
-                    if not globalXCtor then
-                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _
-                    else
-                        args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _
-                        
+            commandTypeName,
+            fun _ ->    
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples) then
                     invalidArg "SingleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
@@ -60,11 +67,6 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             singleRow,
                             (if statements.Length > 1 then (i + 1).ToString () else ""),
                             providedTypeReuse))
-
-                let commandTypeName =
-                    if typename <> "" then
-                        typename
-                    else methodName.Replace("=", "").Replace("@", "").Replace("CreateCommand,CommandText", "")
 
                 let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<ISqlCommandImplementation>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType

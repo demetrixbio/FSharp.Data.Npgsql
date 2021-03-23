@@ -68,4 +68,4 @@
   ```
   
 ### 1.2.0 March 23rd, 2021
-* Merge keram's fork into FSharp.Data.Npgsql repo
+* Merge keram's fork into FSharp.Data.Npgsql repo. Getting rid of type reference error.

@@ -13,7 +13,7 @@ type NpgsqlProviders(config) as this =
     
     do 
         // register extension mappings
-        Npgsql.NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
+        NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
     
         this.Disposing.Add (fun _ ->
             NpgsqlConnectionProvider.methodsCache.Clear ()
