@@ -2,3 +2,7 @@ FSharp.Core
 Npgsql
 Npgsql.NetTopologySuite
 Ply
+
+group tpsdk
+File:ProvidedTypes.fsi
+File:ProvidedTypes.fs
