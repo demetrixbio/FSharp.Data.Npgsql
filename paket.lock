@@ -48,7 +48,7 @@ NUGET
 
 GROUP tests
 STORAGE: NONE
-RESTRICTION: == net50
+RESTRICTION: == net5.0
 NUGET
   remote: https://api.nuget.org/v3/index.json
     FSharp.Core (5.0)
