@@ -68,7 +68,7 @@
   ```
   
 ### 1.2.0 March 23rd, 2021
-* Merge keram's fork into FSharp.Data.Npgsql repo. Getting rid of type reference error. Details
+* Merge keram's fork into FSharp.Data.Npgsql repo.
 * BREAKING - Bumped Npgsql dependency to v5
 * BREAKING - Removed `NpgsqlCommand`
   - Create one root `NpgsqlConnection` type, and use `CreateCommand` to generate commands you need from that.
@@ -86,3 +86,6 @@
 * Added the [`MethodTypes`](#Method-types) static parameter
 * Added XML docs to result set properties, containing the corresponding SQL statements
 * Made a bunch of design- and runtime performance improvements
+
+### 1.2.1 March 24th, 2021
+* Fix missing type definition error due to cache invalidation / different name

@@ -2,7 +2,6 @@
 
 open System
 open System.Data
-open System.Text.RegularExpressions
 open FSharp.Quotations
 open ProviderImplementation.ProvidedTypes
 open Npgsql
@@ -11,6 +10,7 @@ open InformationSchema
 open System.Collections.Concurrent
 open System.Reflection
 
+let mutable cacheInstanceCount = 0
 let methodsCache = ConcurrentDictionary<string, ProvidedMethod> ()
 let typeCache = ConcurrentDictionary<string, ProvidedTypeDefinition> ()
 let schemaCache = ConcurrentDictionary<string, DbSchemaLookups> ()

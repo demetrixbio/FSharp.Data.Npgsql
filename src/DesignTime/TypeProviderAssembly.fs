@@ -1,6 +1,7 @@
 ﻿namespace FSharp.Data.Npgsql
 
 open System.Reflection
+open System.Threading
 open Microsoft.FSharp.Core.CompilerServices
 open ProviderImplementation.ProvidedTypes
 open FSharp.Data.Npgsql.DesignTime
@@ -14,11 +15,14 @@ type NpgsqlProviders(config) as this =
     do 
         // register extension mappings
         NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
+        Interlocked.Increment(ref NpgsqlConnectionProvider.cacheInstanceCount) |> ignore
     
         this.Disposing.Add (fun _ ->
-            NpgsqlConnectionProvider.methodsCache.Clear ()
-            NpgsqlConnectionProvider.typeCache.Clear ()
-            NpgsqlConnectionProvider.schemaCache.Clear ())
+            if NpgsqlConnectionProvider.cacheInstanceCount = 1 then
+                NpgsqlConnectionProvider.methodsCache.Clear ()
+                NpgsqlConnectionProvider.typeCache.Clear ()
+                NpgsqlConnectionProvider.schemaCache.Clear ()
+            Interlocked.Decrement(ref NpgsqlConnectionProvider.cacheInstanceCount) |> ignore)
 
         let assembly = Assembly.GetExecutingAssembly()
         let assemblyName = assembly.GetName().Name
