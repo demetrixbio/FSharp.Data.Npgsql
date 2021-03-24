@@ -38,11 +38,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
             else
                 args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _
         
-        let commandTypeName =
-            if typename <> "" then
-                typename
-            else
-                Regex.Replace(methodName, @"\s+", " ", RegexOptions.Multiline).Replace("\"", "").Replace("@", "").Replace("CreateCommand,CommandText=", "").Trim()
+        //let methodName = Regex.Replace(methodName, @"\s+", " ", RegexOptions.Multiline).Replace("\"", "").Replace("@", ":").Replace("CreateCommand,CommandText=", "").Trim()
+        let commandTypeName = if typename <> "" then typename else methodName
         
         methodsCache.GetOrAdd(
             commandTypeName,
@@ -86,7 +83,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition, c
                             Expr.Value prepare
                         ]))
 
-                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, methodName)
+                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName)
                 rootType.AddMember method
                 method)
     ))

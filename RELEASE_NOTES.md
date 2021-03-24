@@ -68,4 +68,21 @@
   ```
   
 ### 1.2.0 March 23rd, 2021
-* Merge keram's fork into FSharp.Data.Npgsql repo. Getting rid of type reference error.
+* Merge keram's fork into FSharp.Data.Npgsql repo. Getting rid of type reference error. Details
+* BREAKING - Bumped Npgsql dependency to v5
+* BREAKING - Removed `NpgsqlCommand`
+  - Create one root `NpgsqlConnection` type, and use `CreateCommand` to generate commands you need from that.
+* BREAKING - Removed the `Config` static parameter on `NpgsqlConnection` (primarily because of its limited utility and a [bug](https://github.com/dotnet/fsharp/issues/9265) in VS tooling that causes IntelliSense errors and will be fixed who knows when)
+  - Use an inline connection string in `NpgsqlConnection` or define a literal for it.
+* BREAKING - Removed the `Fsx` static parameter
+  - Always pass a connection string to `CreateCommand` in F# Interactive.
+* BREAKING - Renamed `ResultSetX` to `RowsAffectedX` for statements that are non-queries and return the number of affected rows
+  - For a command like `DvdRental.CreateCommand<"select * from film; delete from actor">(cs)` use `RowsAffected2` instead of `ResultSet2` to get the number of deleted rows.
+* BREAKING - Removed provided constructors for result set types
+* BREAKING - Made [`BinaryImport`](#Bulk-Copy) aware of identity columns
+* `BinaryImport` returns the number of imported rows as `uint64`
+* Added `TaskAsyncExecute` that returns `System.Threading.Tasks.Task<_>`
+* Added the [`CollectionType`](#Collection-types) static parameter
+* Added the [`MethodTypes`](#Method-types) static parameter
+* Added XML docs to result set properties, containing the corresponding SQL statements
+* Made a bunch of design- and runtime performance improvements

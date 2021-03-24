@@ -1,26 +1,5 @@
 ## Description
-FSharp.Data.Npgsql5 is an F# type provider library built on top of [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html).
-
-Forked from https://github.com/demetrixbio/FSharp.Data.Npgsql, ported to Npgsql 5 with a bunch of improvements and some breaking changes. Credits to original authors and contributors.
-
-### Differences between FSharp.Data.Npgsql 0.2.10-beta and FSharp.Data.Npgsql5 0.8.0
-- BREAKING - Bumped Npgsql dependency to v5
-- BREAKING - Removed `NpgsqlCommand`
-  - Create one root `NpgsqlConnection` type, and use `CreateCommand` to generate commands you need from that.
-- BREAKING - Removed the `Config` static parameter on `NpgsqlConnection` (primarily because of its limited utility and a [bug](https://github.com/dotnet/fsharp/issues/9265) in VS tooling that causes IntelliSense errors and will be fixed who knows when)
-  - Use an inline connection string in `NpgsqlConnection` or define a literal for it.
-- BREAKING - Removed the `Fsx` static parameter
-  - Always pass a connection string to `CreateCommand` in F# Interactive.
-- BREAKING - Renamed `ResultSetX` to `RowsAffectedX` for statements that are non-queries and return the number of affected rows
-  - For a command like `DvdRental.CreateCommand<"select * from film; delete from actor">(cs)` use `RowsAffected2` instead of `ResultSet2` to get the number of deleted rows.
-- BREAKING - Removed provided constructors for result set types
-- BREAKING - Made [`BinaryImport`](#Bulk-Copy) aware of identity columns
-- `BinaryImport` returns the number of imported rows as `uint64`
-- Added `TaskAsyncExecute` that returns `System.Threading.Tasks.Task<_>`
-- Added the [`CollectionType`](#Collection-types) static parameter
-- Added the [`MethodTypes`](#Method-types) static parameter
-- Added XML docs to result set properties, containing the corresponding SQL statements
-- Made a bunch of design- and runtime performance improvements
+FSharp.Data.Npgsql is an F# type provider library built on top of [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html).
 
 ## Nuget package
 FSharp.Data.Npgsql5 [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql5.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql5)
