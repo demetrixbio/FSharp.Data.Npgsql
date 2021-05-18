@@ -89,3 +89,6 @@
 
 ### 1.2.1 March 24th, 2021
 * Fix missing type definition error due to cache invalidation / different name
+
+### 1.2.2 May 18th, 2021
+* Default command timeout for data table and command taken from connection string. Connection/command level override for timeout variable exposed
