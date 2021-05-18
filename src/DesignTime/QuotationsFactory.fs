@@ -39,10 +39,6 @@ type internal QuotationsFactory () =
         assert (List.length xs = 7)
         Arg7(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5], xs.[6])
 
-    static let defaultCommandTimeout =
-        use cmd = new NpgsqlCommand ()
-        cmd.CommandTimeout
-
     static member val GetValueAtIndexExpr: (Expr * int) -> Expr =
         let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions").GetMethod("GetArray").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
@@ -291,8 +287,9 @@ type internal QuotationsFactory () =
             let commonParams = [
                 ProvidedParameter("batchSize", typeof<int>, optionalValue = 1)
                 ProvidedParameter("continueUpdateOnError", typeof<bool>, optionalValue = false) 
-                ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.OverwriteChanges) 
-                ProvidedParameter("batchTimeout", typeof<int>, optionalValue = defaultCommandTimeout) 
+                ProvidedParameter("conflictOption", typeof<ConflictOption>, optionalValue = ConflictOption.OverwriteChanges)
+                // if invoked with default - timeout is taken from NpgsqlConnection constructed from connection string
+                ProvidedParameter("batchTimeout", typeof<int>, optionalValue = 0)
             ]
 
             tableType.AddMembers [
@@ -413,7 +410,7 @@ type internal QuotationsFactory () =
             let parameters = [
                 ProvidedParameter("connection", typeof<NpgsqlConnection>) 
                 ProvidedParameter("transaction", typeof<NpgsqlTransaction>, optionalValue = null)
-                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
+                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = 0) ]
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
         else
@@ -422,7 +419,7 @@ type internal QuotationsFactory () =
 
             let parameters = [
                 ProvidedParameter("connectionString", typeof<string>)
-                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = defaultCommandTimeout) ]
+                ProvidedParameter("commandTimeout", typeof<int>, optionalValue = 0) ]
 
             ProvidedMethod (methodName, parameters, cmdProvidedType, body, true)
 

@@ -97,7 +97,7 @@ type Utils () =
         let mi = typeof<NpgsqlDataReader>.GetProperty("StatementIndex", Reflection.BindingFlags.Instance ||| Reflection.BindingFlags.NonPublic).GetMethod
         Delegate.CreateDelegate (typeof<Func<NpgsqlDataReader, int>>, mi) :?> Func<NpgsqlDataReader, int>
 
-    static member ToSqlParam (name, dbType: NpgsqlTypes.NpgsqlDbType, size, scale, precision) = 
+    static member ToSqlParam (name, dbType: NpgsqlDbType, size, scale, precision) = 
         NpgsqlParameter (name, dbType, size, Scale = scale, Precision = precision)
 
     static member CloneDataColumn (column: DataColumn) =
@@ -253,9 +253,10 @@ type Utils () =
     static member SetNullableValueInDataRow<'a> (row: DataRow, name: string, value: obj) =
         row.[name] <- Utils.OptionToObj<'a> value
 
-    static member UpdateDataTable(table: DataTable<DataRow>, connection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 
-
+    static member UpdateDataTable(table: DataTable<DataRow>, connection : NpgsqlConnection, transaction, batchSize, continueUpdateOnError, conflictOption, batchTimeout) = 
         if batchSize <= 0 then invalidArg "batchSize" "Batch size has to be larger than 0."
+        
+        let batchTimeout = if batchTimeout = 0 then connection.CommandTimeout else batchTimeout
         if batchTimeout <= 0 then invalidArg "batchTimeout" "Batch timeout has to be larger than 0."
 
         use selectCommand = table.SelectCommand.Clone()

@@ -29,16 +29,18 @@ type DesignTimeConfig = {
     SingleRow: bool
     ResultSets: ResultSetDefinition[]
     Prepare: bool
+    CommandTimeout : int
 }
     with
-        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare) = {
+        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout) = {
             SqlStatement = sql
             Parameters = ps
             ResultType = resultType
             CollectionType = collection
             SingleRow = singleRow
             ResultSets = columns |> Array.map (fun r -> CreateResultSetDefinition (r, resultType))
-            Prepare = prepare }
+            Prepare = prepare
+            CommandTimeout = commandTimeout }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> DesignTimeConfig, connection, commandTimeout) =
@@ -79,6 +81,23 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
             cfg, execute
 
     let cmd =
+        // command timeout priority:
+        // 1. provided explicitly by NpgsqlCommand constructor
+        // 2. provided explicitly by NpgsqlConnection constructor, inherited by command via connection.CreateCommand method
+        // 3. provided via connection string
+        // 4. default from Npgsql
+        let commandTimeout =
+            if commandTimeout <> 0 then
+                commandTimeout
+            elif cfg.CommandTimeout <> 0 then
+                cfg.CommandTimeout
+            else
+                match connection with
+                | Choice1Of2 (connectionString : string) ->
+                    NpgsqlConnectionStringBuilder(connectionString).CommandTimeout
+                | Choice2Of2 (connection : NpgsqlConnection, _) ->
+                    connection.CommandTimeout
+        
         let cmd = new NpgsqlCommand (cfg.SqlStatement, CommandTimeout = commandTimeout)
         for p in cfg.Parameters do
             p.Clone () |> cmd.Parameters.Add |> ignore
