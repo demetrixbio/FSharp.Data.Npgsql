@@ -92,3 +92,6 @@
 
 ### 1.2.2 May 18th, 2021
 * Default command timeout for data table and command taken from connection string. Connection/command level override for timeout variable exposed
+
+### 1.2.3 May 24th, 2021
+* Command timeout defaults to infinity in NpgsqlConnection/NpgsqlCommand constructors

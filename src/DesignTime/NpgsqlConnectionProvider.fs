@@ -207,7 +207,7 @@ let internal getProviderType (assembly, nameSpace) =
             ProvidedStaticParameter("ReuseProvidedTypes", typeof<bool>, false) 
             ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
             ProvidedStaticParameter("CollectionType", typeof<CollectionType>, CollectionType.List)
-            ProvidedStaticParameter("CommandTimeout", typeof<int>, 30)
+            ProvidedStaticParameter("CommandTimeout", typeof<int>, 0)
         ],
         fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6])))
 
