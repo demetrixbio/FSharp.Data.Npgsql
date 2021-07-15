@@ -289,7 +289,7 @@ type Utils () =
         let results = ResizeArray<'TItem> ()
         let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
         
-        let! go = cursor.ReadAsync ()
+        let! go = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
         let mutable go = go
 
         while go do
@@ -297,7 +297,7 @@ type Utils () =
             |> unbox
             |> results.Add
 
-            let! cont = cursor.ReadAsync ()
+            let! cont = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
             go <- cont
 
         return results }
@@ -306,7 +306,7 @@ type Utils () =
         seq {
             let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
 
-            while cursor.Read () do
+            while Utils.Read (10, 1000, cursor) do // TODO: pull args from cfg.
                 rowReader.Invoke cursor |> unbox<'TItem>
         }
 
@@ -317,7 +317,7 @@ type Utils () =
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
             let results = ResizeArray<'TItem> ()
             
-            let! go = cursor.ReadAsync ()
+            let! go = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
             let mutable go = go
 
             while go do
@@ -326,7 +326,7 @@ type Utils () =
                 |> unbox
                 |> results.Add
 
-                let! cont = cursor.ReadAsync ()
+                let! cont = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
                 go <- cont
 
             return results }
@@ -335,7 +335,7 @@ type Utils () =
         seq {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
 
-            while cursor.Read () do
+            while Utils.Read (10, 1000, cursor) do // TODO: pull args from cfg.
                 cursor.GetValue 0
                 |> columnMapping
                 |> unbox<'TItem>
