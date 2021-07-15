@@ -160,13 +160,13 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
     static member internal AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters) = Unsafe.uply {
         ISqlCommandImplementation.SetParameters (cmd, parameters)
-        do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) // TODO: pull args from cfg.
+        do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) (* TODO: pull args from cfg. *)
         let readerBehavior = getReaderBehavior (connection, cfg)
 
         if cfg.Prepare then
-            do! cmd.PrepareAsync ()
+            do! Utils.PrepareAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)
 
-        let! cursor = cmd.ExecuteReaderAsync readerBehavior
+        let! cursor = Utils.ExecuteReaderAsync (10, 1000, readerBehavior, cmd) (* TODO: pull args from cfg. *)
         return cursor :?> NpgsqlDataReader }
 
     static member internal AsyncExecuteReader (cfg, cmd, connection, parameters, executionType) =
@@ -304,14 +304,14 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteNonQuery (cfg, cmd, connection, parameters, executionType) = 
         let t = Unsafe.uply {
             ISqlCommandImplementation.SetParameters (cmd, parameters)
-            do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) // TODO: pull args from cfg.
+            do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) (* TODO: pull args from cfg. *)
             let readerBehavior = getReaderBehavior (connection, cfg)
             use _ = if readerBehavior.HasFlag CommandBehavior.CloseConnection then cmd.Connection else null
 
             if cfg.Prepare then
                 do! cmd.PrepareAsync ()
 
-            return! cmd.ExecuteNonQueryAsync () }
+            return! Utils.ExecuteNonQueryAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)}
 
         mapTask (t, executionType)
 

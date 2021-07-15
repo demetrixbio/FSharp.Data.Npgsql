@@ -66,15 +66,15 @@ type Utils () =
                 else
                     return (raise (AggregateException (Seq.rev exns))) }
 
-    static let rec ExecuteReaderAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
+    static let rec ExecuteReaderAsync' (tries, exns, retries, wait, behavior: CommandBehavior, cmd: NpgsqlCommand) =
         async {
-            let! choice = cmd.ExecuteReaderAsync () |> Async.AwaitTask |> Async.Catch
+            let! choice = cmd.ExecuteReaderAsync behavior |> Async.AwaitTask |> Async.Catch
             match choice with
             | Choice1Of2 task -> return task
             | Choice2Of2 exn ->
                 if retries < 1 || tries < retries then
                     do! Async.Sleep wait
-                    return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, cmd)
+                    return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, behavior, cmd)
                 else
                     return (raise (AggregateException (Seq.rev exns))) }
 
@@ -169,9 +169,9 @@ type Utils () =
         async {
             return! PrepareAsync' (0, [], retries, wait, cmd) }
 
-    static member ExecuteReaderAsync (retries, wait, cmd) =
+    static member ExecuteReaderAsync (retries, wait, behavior, cmd) =
         async {
-            return! ExecuteReaderAsync' (0, [], retries, wait, cmd) }
+            return! ExecuteReaderAsync' (0, [], retries, wait, behavior, cmd) }
 
     static member ExecuteNonQueryAsync (retries, wait, cmd) =
         async {
@@ -289,7 +289,7 @@ type Utils () =
         let results = ResizeArray<'TItem> ()
         let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
         
-        let! go = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
+        let! go = Utils.ReadAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
         let mutable go = go
 
         while go do
@@ -297,7 +297,7 @@ type Utils () =
             |> unbox
             |> results.Add
 
-            let! cont = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
+            let! cont = Utils.ReadAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
             go <- cont
 
         return results }
@@ -306,7 +306,7 @@ type Utils () =
         seq {
             let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
 
-            while Utils.Read (10, 1000, cursor) do // TODO: pull args from cfg.
+            while Utils.Read (10, 1000, cursor) do (* TODO: pull args from cfg. *)
                 rowReader.Invoke cursor |> unbox<'TItem>
         }
 
@@ -317,7 +317,7 @@ type Utils () =
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
             let results = ResizeArray<'TItem> ()
             
-            let! go = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
+            let! go = Utils.ReadAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
             let mutable go = go
 
             while go do
@@ -326,7 +326,7 @@ type Utils () =
                 |> unbox
                 |> results.Add
 
-                let! cont = Utils.ReadAsync (10, 1000, cursor) // TODO: pull args from cfg.
+                let! cont = Utils.ReadAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
                 go <- cont
 
             return results }
@@ -335,7 +335,7 @@ type Utils () =
         seq {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
 
-            while Utils.Read (10, 1000, cursor) do // TODO: pull args from cfg.
+            while Utils.Read (10, 1000, cursor) do (* TODO: pull args from cfg. *)
                 cursor.GetValue 0
                 |> columnMapping
                 |> unbox<'TItem>
