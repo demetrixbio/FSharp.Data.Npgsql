@@ -309,7 +309,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
             use _ = if readerBehavior.HasFlag CommandBehavior.CloseConnection then cmd.Connection else null
 
             if cfg.Prepare then
-                do! cmd.PrepareAsync ()
+                do! Utils.PrepareAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)
 
             return! Utils.ExecuteNonQueryAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)}
 
