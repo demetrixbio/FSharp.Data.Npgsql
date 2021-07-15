@@ -109,15 +109,26 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         ||| if cfg.ResultType = ResultType.DataTable then CommandBehavior.KeyInfo else CommandBehavior.Default
         ||| match connection with Choice1Of2 _ -> CommandBehavior.CloseConnection | _ -> CommandBehavior.Default
 
-    static let setupConnection (cmd: NpgsqlCommand, connection) =
-        match connection with
-        | Choice2Of2 (conn, tx) ->
-            cmd.Connection <- conn
-            cmd.Transaction <- tx
-            System.Threading.Tasks.Task.CompletedTask
-        | Choice1Of2 connectionString ->
-            cmd.Connection <- new NpgsqlConnection (connectionString)
-            cmd.Connection.OpenAsync ()
+    static let rec setupConnectionAsyncInternal (tries, exns, cmd: NpgsqlCommand, connection) =
+        async {
+            match connection with
+            | Choice2Of2 (conn, tx) ->
+                cmd.Connection <- conn
+                cmd.Transaction <- tx
+            | Choice1Of2 connectionString ->
+                cmd.Connection <- new NpgsqlConnection (connectionString)
+                let! choice = cmd.Connection.OpenAsync () |> Async.AwaitTask |> Async.Catch
+                match choice with
+                | Choice1Of2 () -> ()
+                | Choice2Of2 exn ->
+                    if tries < 10 then // TODO: get value from cfg
+                        do! Async.Sleep 1000 // TODO: get value from cfg
+                        do! setupConnectionAsyncInternal (tries+1, exn :: exns, cmd, connection)
+                    else raise (AggregateException (Seq.rev exns)) }
+
+    static let rec setupConnectionAsync (cmd, connection) =
+        async {
+            do! setupConnectionAsyncInternal (0, [], cmd, connection) }
 
     static let mapTask (t: Ply.Ply<_>, executionType) =
         let t = task { return! t }
@@ -170,7 +181,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
     static member internal AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters) = Unsafe.uply {
         ISqlCommandImplementation.SetParameters (cmd, parameters)
-        do! setupConnection (cmd, connection)
+        do! setupConnectionAsync (cmd, connection)
         let readerBehavior = getReaderBehavior (connection, cfg)
 
         if cfg.Prepare then
@@ -314,7 +325,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteNonQuery (cfg, cmd, connection, parameters, executionType) = 
         let t = Unsafe.uply {
             ISqlCommandImplementation.SetParameters (cmd, parameters)
-            do! setupConnection (cmd, connection)
+            do! setupConnectionAsync (cmd, connection)
             let readerBehavior = getReaderBehavior (connection, cfg)
             use _ = if readerBehavior.HasFlag CommandBehavior.CloseConnection then cmd.Connection else null
 
