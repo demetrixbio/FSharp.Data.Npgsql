@@ -5,6 +5,7 @@ open System.Data
 open System.Data.Common
 open System.Collections.Concurrent
 open System.ComponentModel
+open System.Threading
 open Npgsql
 open NpgsqlTypes
 open FSharp.Control.Tasks.NonAffine
@@ -14,6 +15,45 @@ open System.Linq.Expressions
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
+
+    static let rec SetupConnectionAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand, connection) =
+        async {
+            match connection with
+            | Choice1Of2 connectionString ->
+                cmd.Connection <- new NpgsqlConnection (connectionString)
+                let! choice = cmd.Connection.OpenAsync () |> Async.AwaitTask |> Async.Catch
+                match choice with
+                | Choice1Of2 () -> ()
+                | Choice2Of2 exn ->
+                    if retries < 1 || tries < retries then
+                        do! Async.Sleep wait
+                        do! SetupConnectionAsync' (tries+1, exn :: exns, retries, wait, cmd, connection)
+                    else raise (AggregateException (Seq.rev exns))
+            | Choice2Of2 (conn, tx) ->
+                cmd.Connection <- conn
+                cmd.Transaction <- tx }
+
+    static let rec Read' (tries, exns, retries, wait: int, cursor: DbDataReader) =
+        try cursor.Read ()
+        with exn ->
+            if retries < 1 || tries < retries then
+                Thread.Sleep wait
+                Read' (tries+1, exn :: exns, retries, wait, cursor)
+            else
+                raise (AggregateException (Seq.rev exns))
+
+    static let rec ReadAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
+        async {
+            let! choice = cursor.ReadAsync () |> Async.AwaitTask |> Async.Catch
+            match choice with
+            | Choice1Of2 go -> return go
+            | Choice2Of2 exn ->
+                if tries < retries then // TODO: get value from cfg
+                    do! Async.Sleep 1000 // TODO: get value from cfg
+                    return! ReadAsync' (tries+1, exn :: exns, retries, wait, cursor)
+                else
+                    return (raise (AggregateException (Seq.rev exns))) }
+
     static let getColumnMapping =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
         let factory = Func<_, _>(fun (typeParam: Type) ->
@@ -77,6 +117,17 @@ type Utils () =
 
                 cache.[resultSet.ExpectedColumns.GetHashCode ()] <- func
                 func
+
+    static member SetupConnectionAsync (retris, wait, cmd, connection) =
+        async {
+            do! SetupConnectionAsync' (0, [], retris, wait, cmd, connection) }
+
+    static member Read (retries, wait, cursor) =
+        Read' (0, [], retries, wait, cursor)
+
+    static member ReadAsync (retries, wait, cursor) =
+        async {
+            return! ReadAsync' (0, [], retries, wait, cursor) }
 
     static member ResizeArrayToList ra =
         let rec inner (ra: ResizeArray<'a>, index, acc) = 
