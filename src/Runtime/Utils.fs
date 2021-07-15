@@ -48,9 +48,45 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if tries < retries then // TODO: get value from cfg
-                    do! Async.Sleep 1000 // TODO: get value from cfg
+                if retries < 1 || tries < retries then
+                    do! Async.Sleep wait
                     return! ReadAsync' (tries+1, exn :: exns, retries, wait, cursor)
+                else
+                    return (raise (AggregateException (Seq.rev exns))) }
+
+    static let rec PrepareAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
+        async {
+            let! choice = cmd.PrepareAsync () |> Async.AwaitTask |> Async.Catch
+            match choice with
+            | Choice1Of2 () -> return ()
+            | Choice2Of2 exn ->
+                if retries < 1 || tries < retries then
+                    do! Async.Sleep wait
+                    return! PrepareAsync' (tries+1, exn :: exns, retries, wait, cmd)
+                else
+                    return (raise (AggregateException (Seq.rev exns))) }
+
+    static let rec ExecuteReaderAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
+        async {
+            let! choice = cmd.ExecuteReaderAsync () |> Async.AwaitTask |> Async.Catch
+            match choice with
+            | Choice1Of2 task -> return task
+            | Choice2Of2 exn ->
+                if retries < 1 || tries < retries then
+                    do! Async.Sleep wait
+                    return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, cmd)
+                else
+                    return (raise (AggregateException (Seq.rev exns))) }
+
+    static let rec ExecuteNonQueryAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
+        async {
+            let! choice = cmd.ExecuteNonQueryAsync () |> Async.AwaitTask |> Async.Catch
+            match choice with
+            | Choice1Of2 rowsAffected -> return rowsAffected
+            | Choice2Of2 exn ->
+                if retries < 1 || tries < retries then
+                    do! Async.Sleep wait
+                    return! ExecuteNonQueryAsync' (tries+1, exn :: exns, retries, wait, cmd)
                 else
                     return (raise (AggregateException (Seq.rev exns))) }
 
@@ -118,9 +154,9 @@ type Utils () =
                 cache.[resultSet.ExpectedColumns.GetHashCode ()] <- func
                 func
 
-    static member SetupConnectionAsync (retris, wait, cmd, connection) =
+    static member SetupConnectionAsync (retries, wait, cmd, connection) =
         async {
-            do! SetupConnectionAsync' (0, [], retris, wait, cmd, connection) }
+            do! SetupConnectionAsync' (0, [], retries, wait, cmd, connection) }
 
     static member Read (retries, wait, cursor) =
         Read' (0, [], retries, wait, cursor)
@@ -128,6 +164,18 @@ type Utils () =
     static member ReadAsync (retries, wait, cursor) =
         async {
             return! ReadAsync' (0, [], retries, wait, cursor) }
+
+    static member PrepareAsync (retries, wait, cmd) =
+        async {
+            return! PrepareAsync' (0, [], retries, wait, cmd) }
+
+    static member ExecuteReaderAsync (retries, wait, cmd) =
+        async {
+            return! ExecuteReaderAsync' (0, [], retries, wait, cmd) }
+
+    static member ExecuteNonQueryAsync (retries, wait, cmd) =
+        async {
+            return! ExecuteNonQueryAsync' (0, [], retries, wait, cmd) }
 
     static member ResizeArrayToList ra =
         let rec inner (ra: ResizeArray<'a>, index, acc) = 
