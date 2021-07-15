@@ -25,7 +25,8 @@ type Utils () =
                 match choice with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 exn ->
-                    if retries < 1 || tries < retries then
+                    if (retries < 1 || tries < retries) &&
+                       (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
                         do! Async.Sleep wait
                         do! SetupConnectionAsync' (tries+1, exn :: exns, retries, wait, cmd, connection)
                     else raise (AggregateException (Seq.rev exns))
@@ -36,7 +37,7 @@ type Utils () =
     static let rec Read' (tries, exns, retries, wait: int, cursor: DbDataReader) =
         try cursor.Read ()
         with exn ->
-            if retries < 1 || tries < retries then
+            if (retries < 1 || tries < retries) then
                 Thread.Sleep wait
                 Read' (tries+1, exn :: exns, retries, wait, cursor)
             else
@@ -48,7 +49,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if retries < 1 || tries < retries then
+                if (retries < 1 || tries < retries) then
                     do! Async.Sleep wait
                     return! ReadAsync' (tries+1, exn :: exns, retries, wait, cursor)
                 else
@@ -60,7 +61,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if retries < 1 || tries < retries then
+                if (retries < 1 || tries < retries) then
                     do! Async.Sleep wait
                     return! NextResultAsync' (tries+1, exn :: exns, retries, wait, cursor)
                 else
@@ -72,7 +73,8 @@ type Utils () =
             match choice with
             | Choice1Of2 () -> return ()
             | Choice2Of2 exn ->
-                if retries < 1 || tries < retries then
+                if  (retries < 1 || tries < retries) &&
+                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
                     do! Async.Sleep wait
                     return! PrepareAsync' (tries+1, exn :: exns, retries, wait, cmd)
                 else
@@ -84,7 +86,8 @@ type Utils () =
             match choice with
             | Choice1Of2 task -> return task
             | Choice2Of2 exn ->
-                if retries < 1 || tries < retries then
+                if  (retries < 1 || tries < retries) &&
+                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
                     do! Async.Sleep wait
                     return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, behavior, cmd)
                 else
@@ -96,7 +99,8 @@ type Utils () =
             match choice with
             | Choice1Of2 rowsAffected -> return rowsAffected
             | Choice2Of2 exn ->
-                if retries < 1 || tries < retries then
+                if  (retries < 1 || tries < retries) &&
+                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
                     do! Async.Sleep wait
                     return! ExecuteNonQueryAsync' (tries+1, exn :: exns, retries, wait, cmd)
                 else
