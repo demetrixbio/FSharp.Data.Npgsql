@@ -293,7 +293,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                     let currentStatement = GetStatementIndex.Invoke cursor
                     let! res = ISqlCommandImplementation.ReadResultSet (cursor, cfg.ResultSets.[currentStatement], cfg)
                     results.[currentStatement] <- res
-                    let! more = cursor.NextResultAsync ()
+                    let! more = Utils.NextResultAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
                     go <- more
 
             ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)

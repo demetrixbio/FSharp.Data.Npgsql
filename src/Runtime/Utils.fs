@@ -54,6 +54,18 @@ type Utils () =
                 else
                     return (raise (AggregateException (Seq.rev exns))) }
 
+    static let rec NextResultAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
+        async {
+            let! choice = cursor.NextResultAsync () |> Async.AwaitTask |> Async.Catch
+            match choice with
+            | Choice1Of2 go -> return go
+            | Choice2Of2 exn ->
+                if retries < 1 || tries < retries then
+                    do! Async.Sleep wait
+                    return! NextResultAsync' (tries+1, exn :: exns, retries, wait, cursor)
+                else
+                    return (raise (AggregateException (Seq.rev exns))) }
+
     static let rec PrepareAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
         async {
             let! choice = cmd.PrepareAsync () |> Async.AwaitTask |> Async.Catch
@@ -164,6 +176,10 @@ type Utils () =
     static member ReadAsync (retries, wait, cursor) =
         async {
             return! ReadAsync' (0, [], retries, wait, cursor) }
+
+    static member NextResultAsync (retries, wait, cursor) =
+        async {
+            return! NextResultAsync' (0, [], retries, wait, cursor) }
 
     static member PrepareAsync (retries, wait, cmd) =
         async {
