@@ -1070,35 +1070,35 @@ let ``Manually mapped and cast composite type works`` () =
     Assert.Equal ("blah", res.SomeText)
     Assert.Equal<int> ([| 1; 2 |], res.SomeArray)
 
-[<Fact>]
-let ``NetTopology.Geometry roundtrip works`` () =
-    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry">(connectionString)
-    let res = cmd.Execute(input).Head.Value
-    
-    Assert.Equal (input.Coordinate.X, res.Coordinate.X)
-
-[<Fact>]
-let ``NetTopology.Geometry roundtrip works record`` () =
-    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg">(connectionString)
-    let res = cmd.Execute(input).Head.g.Value
-    
-    Assert.Equal (input.Coordinate.X, res.Coordinate.X)
-
-[<Fact>]
-let ``NetTopology.Geometry roundtrip works record single row`` () =
-    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg", SingleRow = true>(connectionString)
-    let res = cmd.Execute(input).Value
-    
-    Assert.Equal (input.Coordinate.X, res.g.Value.Coordinate.X)
-    Assert.Equal (None, res.gg)
-
-[<Fact>]
-let ``NetTopology.Geometry roundtrip works tuple`` () =
-    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
-    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg", ResultType = ResultType.Tuples>(connectionString)
-    let res, _, _ = cmd.Execute(input).Head
-    
-    Assert.Equal (input.Coordinate.X, res.Value.Coordinate.X)
+//[<Fact>]
+//let ``NetTopology.Geometry roundtrip works`` () =
+//    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
+//    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry">(connectionString)
+//    let res = cmd.Execute(input).Head.Value
+//    
+//    Assert.Equal (input.Coordinate.X, res.Coordinate.X)
+//
+//[<Fact>]
+//let ``NetTopology.Geometry roundtrip works record`` () =
+//    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
+//    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg">(connectionString)
+//    let res = cmd.Execute(input).Head.g.Value
+//    
+//    Assert.Equal (input.Coordinate.X, res.Coordinate.X)
+//
+//[<Fact>]
+//let ``NetTopology.Geometry roundtrip works record single row`` () =
+//    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
+//    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg", SingleRow = true>(connectionString)
+//    let res = cmd.Execute(input).Value
+//    
+//    Assert.Equal (input.Coordinate.X, res.g.Value.Coordinate.X)
+//    Assert.Equal (None, res.gg)
+//
+//[<Fact>]
+//let ``NetTopology.Geometry roundtrip works tuple`` () =
+//    let input = Geometry.DefaultFactory.CreatePoint (Coordinate (55., 0.))
+//    use cmd = DvdRentalWithTypeReuse.CreateCommand<"select @p::geometry g, 0 blah, null::geometry gg", ResultType = ResultType.Tuples>(connectionString)
+//    let res, _, _ = cmd.Execute(input).Head
+//    
+//    Assert.Equal (input.Coordinate.X, res.Value.Coordinate.X)
