@@ -5,6 +5,7 @@ open System.Data
 open System.Data.Common
 open System.Collections.Concurrent
 open System.ComponentModel
+open System.Threading
 open System.Linq.Expressions
 open Npgsql
 open NpgsqlTypes
@@ -16,6 +17,7 @@ open FSharp.Control.Tasks.NonAffine
 module internal LocalExtensions =
 
     type String with
+
         member this.ErrorClass =
             if this.Length >= 2
             then this.Substring 2
@@ -23,36 +25,52 @@ module internal LocalExtensions =
 
 [<RequireQualifiedAccess>]
 module internal Async =
+
+    let ShouldRetry (triesCurrent, triesMax) =
+        triesMax <= 0 || triesCurrent < triesMax
+
+    let ShouldRetryWithConnection (triesCurrent, triesMax, connection: NpgsqlConnection) =
+        ShouldRetry (triesCurrent, triesMax) &&
+        (connection.State &&& ConnectionState.Open = ConnectionState.Open)
+
+    let rec FilterDb (exn: Exception) =
+        match exn with
+        | :? PostgresException as pgexn ->
+            let sqlState = pgexn.SqlState
+            let errorClass = sqlState.ErrorClass
+            if  sqlState = PostgresErrorCodes.IoError ||
+                sqlState = PostgresErrorCodes.DeadlockDetected ||
+                sqlState = PostgresErrorCodes.LockNotAvailable ||
+                sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
+                sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
+                sqlState = PostgresErrorCodes.TooManyConnections ||
+                errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
+                errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then
+                true
+            else false
+        | :? NpgsqlException ->
+            true
+        | :? AggregateException as aggexn ->
+            Seq.forall FilterDb aggexn.InnerExceptions
+
     let CatchDb a =
         async {
             try
                 let! result = a
                 return Choice1Of2 result
-            with
-            | :? PostgresException as pgexn ->
-                let sqlState = pgexn.SqlState
-                let errorClass = sqlState.ErrorClass
-                if  sqlState = PostgresErrorCodes.IoError ||
-                    sqlState = PostgresErrorCodes.DeadlockDetected ||
-                    sqlState = PostgresErrorCodes.LockNotAvailable ||
-                    sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
-                    sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
-                    errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
-                    errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then
-                    return Choice2Of2 (pgexn :> Exception)
-                else return raise pgexn
-            | :? NpgsqlException as npgsexn -> return (Choice2Of2 (npgsexn :> Exception))
-            | exn -> return raise exn }
+            with exn when FilterDb exn ->
+                return Choice2Of2 exn }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
 
-    static let ShouldRetry (triesCurrent, triesMax) =
-        triesMax <= 0 || triesCurrent < triesMax
-
-    static let ShouldRetryWithConnection (triesCurrent, triesMax, connection: NpgsqlConnection) =
-        ShouldRetry (triesCurrent, triesMax) &&
-        (connection.State &&& ConnectionState.Open = ConnectionState.Open)
+    static let rec LoadDataTable' (triesCurrent, exns, triesMax, (retryWaitTime: int), cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
+        try result.Load cursor
+        with exn when Async.FilterDb exn ->
+            if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                Thread.Sleep retryWaitTime
+                LoadDataTable' (triesCurrent + 1, exn :: exns, triesMax, retryWaitTime, cursor, cmd, result)
+            else raise (AggregateException (Seq.rev exns))
 
     static let rec SetupConnectionAsync' (triesCurrent, exns, triesMax, retryWaitTime, cmd: NpgsqlCommand, connection) =
         async {
@@ -63,7 +81,7 @@ type Utils () =
                 match choice with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 exn ->
-                    if ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                    if Async.ShouldRetry (triesCurrent, triesMax) then
                         do! Async.Sleep retryWaitTime
                         do! SetupConnectionAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd, connection)
                     else return raise (AggregateException (Seq.rev exns))
@@ -77,7 +95,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if ShouldRetry (triesCurrent, triesMax) then
+                if Async.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
                     return! ReadAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -88,7 +106,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if ShouldRetry (triesCurrent, triesMax) then
+                if Async.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
                     return! NextResultAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -99,7 +117,7 @@ type Utils () =
             match choice with
             | Choice1Of2 () -> return ()
             | Choice2Of2 exn ->
-                if ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! PrepareAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -108,9 +126,9 @@ type Utils () =
         async {
             let! choice = cmd.ExecuteReaderAsync behavior |> Async.AwaitTask |> Async.CatchDb
             match choice with
-            | Choice1Of2 task -> return task
+            | Choice1Of2 reader -> return reader
             | Choice2Of2 exn ->
-                if ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! ExecuteReaderAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, behavior, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -121,7 +139,7 @@ type Utils () =
             match choice with
             | Choice1Of2 rowsAffected -> return rowsAffected
             | Choice2Of2 exn ->
-                if ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! ExecuteNonQueryAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -189,6 +207,9 @@ type Utils () =
 
                 cache.[resultSet.ExpectedColumns.GetHashCode ()] <- func
                 func
+
+    static member LoadDataTable (tries, retryWaitTime, cursor, cmd, result) =
+        LoadDataTable' (0, [], tries, retryWaitTime, cursor, cmd, result)
 
     static member SetupConnectionAsync (tries, retryWaitTime, cmd, connection) =
         async {

@@ -152,6 +152,14 @@ let paramInLimit() =
 let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
 
 [<Fact>]
+let retryWorks () =
+    seq {
+        for _ in 1 .. 20 do
+            let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 10>(connectionString)
+            yield cmd.AsyncExecute () }
+    |> Async.Parallel
+
+[<Fact>]
 let dateTableWithUpdate() =
 
     let rental_id = 2

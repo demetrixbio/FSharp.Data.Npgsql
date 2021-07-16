@@ -176,13 +176,14 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteReader (cfg, cmd, connection, parameters, executionType) =
         mapTask (ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters), executionType)
 
-    static member internal LoadDataTable (cursor: Common.DbDataReader) cmd (columns: DataColumn[]) =
+    static member internal LoadDataTable cfg (cursor: Common.DbDataReader) (cmd: NpgsqlCommand) (columns: DataColumn[]) =
+
         let result = new FSharp.Data.Npgsql.DataTable<DataRow>(selectCommand = cmd)
 
         for c in columns do
             CloneDataColumn c |> result.Columns.Add
 
-        result.Load cursor
+        Utils.LoadDataTable (cfg.Tries, cfg.RetryWaitTime, cursor, cmd, result)
         result
 
     static member internal AsyncExecuteDataTables (cfg, cmd, connection, parameters, executionType) =
@@ -197,7 +198,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                         null
                     else
                         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
-                        ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
+                        ISqlCommandImplementation.LoadDataTable cfg cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
             ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
             return results }
@@ -207,7 +208,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteDataTable (cfg, cmd, connection, parameters, executionType) =
         let t = Unsafe.uply {
             use! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters) 
-            return ISqlCommandImplementation.LoadDataTable reader (cmd.Clone()) cfg.ResultSets.[0].ExpectedColumns }
+            return ISqlCommandImplementation.LoadDataTable cfg reader (cmd.Clone()) cfg.ResultSets.[0].ExpectedColumns }
 
         mapTask (t, executionType)
 
