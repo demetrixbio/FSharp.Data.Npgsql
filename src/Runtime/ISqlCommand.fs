@@ -29,10 +29,12 @@ type DesignTimeConfig = {
     SingleRow: bool
     ResultSets: ResultSetDefinition[]
     Prepare: bool
-    CommandTimeout : int
+    CommandTimeout: int
+    Retries: int
+    RetryWaitTime: int
 }
     with
-        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout) = {
+        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout, retries, retryWaitTime) = {
             SqlStatement = sql
             Parameters = ps
             ResultType = resultType
@@ -40,7 +42,9 @@ type DesignTimeConfig = {
             SingleRow = singleRow
             ResultSets = columns |> Array.map (fun r -> CreateResultSetDefinition (r, resultType))
             Prepare = prepare
-            CommandTimeout = commandTimeout }
+            CommandTimeout = commandTimeout
+            Retries = retries
+            RetryWaitTime = retryWaitTime }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> DesignTimeConfig, connection, commandTimeout) =

@@ -5,11 +5,10 @@ open System.Data
 open System.Data.Common
 open System.Collections.Concurrent
 open System.ComponentModel
-open System.Threading
+open System.Linq.Expressions
 open Npgsql
 open NpgsqlTypes
 open FSharp.Control.Tasks.NonAffine
-open System.Linq.Expressions
 
 #nowarn "0025"
 
@@ -33,7 +32,7 @@ module internal Async =
             | :? PostgresException as pgexn ->
                 let sqlState = pgexn.SqlState
                 let errorClass = sqlState.ErrorClass
-                if sqlState = PostgresErrorCodes.IoError ||
+                if  sqlState = PostgresErrorCodes.IoError ||
                     sqlState = PostgresErrorCodes.DeadlockDetected ||
                     sqlState = PostgresErrorCodes.LockNotAvailable ||
                     sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||

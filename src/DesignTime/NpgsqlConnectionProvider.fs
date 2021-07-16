@@ -18,7 +18,8 @@ let schemaCache = ConcurrentDictionary<string, DbSchemaLookups> ()
 let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                            commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
                            dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare: bool,
-                           providedTypeReuse, methodTypes, globalCollectionType: CollectionType, globalCommandTimeout : int) = 
+                           providedTypeReuse, methodTypes, globalCollectionType: CollectionType, globalCommandTimeout: int,
+                           globalRetries: int, globalRetryWaitTime: int) = 
         
     let staticParams = 
         [
@@ -31,15 +32,17 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
             if not globalXCtor then yield ProvidedStaticParameter("XCtor", typeof<bool>, false)
             yield ProvidedStaticParameter("Prepare", typeof<bool>, globalPrepare)
             yield ProvidedStaticParameter("CommandTimeout", typeof<int>, globalCommandTimeout)
+            yield ProvidedStaticParameter("Retries", typeof<int>, globalRetries)
+            yield ProvidedStaticParameter("RetryWaitTime", typeof<int>, globalRetryWaitTime)
         ]
 
     let m = ProvidedMethod("CreateCommand", [], typeof<obj>, isStatic = true)
     m.DefineStaticParameters(staticParams, (fun methodName args ->
-        let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool), (commandTimeout : int) = 
+        let sqlStatement, resultType, collectionType, singleRow, allParametersOptional, typename, xctor, (prepare: bool), (commandTimeout: int), (retries: int), (retryWaitTime: int) = 
             if not globalXCtor then
-                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _, args.[8] :?> _
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, args.[6] :?> _, args.[7] :?> _, args.[8] :?> _, args.[9] :?> _, args.[10] :?> _
             else
-                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _, args.[7] :?> _
+                args.[0] :?> _ , args.[1] :?> _, args.[2] :?> _, args.[3] :?> _, args.[4] :?> _, args.[5] :?> _, true, args.[6] :?> _, args.[7] :?> _, args.[8] :?> _, args.[9] :?> _
         
         //let methodName = Regex.Replace(methodName, @"\s+", " ", RegexOptions.Multiline).Replace("\"", "").Replace("@", ":").Replace("CreateCommand,CommandText=", "").Trim()
         let commandTypeName = if typename <> "" then typename else methodName
@@ -85,6 +88,8 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                             QuotationsFactory.BuildDataColumnsExpr (statements, resultType <> ResultType.DataTable)
                             Expr.Value prepare
                             Expr.Value commandTimeout
+                            Expr.Value retries
+                            Expr.Value retryWaitTime
                         ]))
 
                 let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName)
@@ -160,7 +165,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 
     tables
 
-let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout) =
+let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout, retries, retryWaitTime) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition (assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
@@ -191,7 +196,7 @@ let createRootType (assembly, nameSpace: string, typeName, connectionString, xct
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
     let providedTypeReuse = if reuseProvidedTypes then WithCache typeCache else NoReuse
-    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout)
+    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout, retries, retryWaitTime)
 
     databaseRootType
 
@@ -208,8 +213,10 @@ let internal getProviderType (assembly, nameSpace) =
             ProvidedStaticParameter("MethodTypes", typeof<MethodTypes>, MethodTypes.Sync ||| MethodTypes.Async)
             ProvidedStaticParameter("CollectionType", typeof<CollectionType>, CollectionType.List)
             ProvidedStaticParameter("CommandTimeout", typeof<int>, 0)
+            ProvidedStaticParameter("Retries", typeof<int>, 10)
+            ProvidedStaticParameter("RetryWaitTime", typeof<int>, 1000)
         ],
-        fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6])))
+        fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8])))
 
     providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects, tables and functions.</summary> 
@@ -220,6 +227,8 @@ let internal getProviderType (assembly, nameSpace) =
 <param name='MethodTypes'>Indicates whether to generate Execute, AsyncExecute or both methods for commands.</param>
 <param name='CollectionType'>Indicates whether rows should be returned in a list, array or ResizeArray.</param>
 <param name='CommandTimeout'>The time to wait (in seconds) while trying to execute a command before terminating the attempt and generating an error. Set to zero for infinity.</param>
+<param name='Retries'>The number of retries alotted for a database operation. Set to 0 for infinity.</param>
+<param name='RetryWaitTime'>The time to wait (in milliseconds) while waiting to retry a databased operation before terminating the attempt and generating an error. Set to zero for infinity.</param>
 """
     providerType
 
