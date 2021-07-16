@@ -5,7 +5,6 @@ open System.Data
 open System.Data.Common
 open System.Collections.Concurrent
 open System.ComponentModel
-open System.Threading
 open System.Linq.Expressions
 open Npgsql
 open NpgsqlTypes
@@ -72,7 +71,8 @@ type Utils () =
         try result.Load cursor
         with exn when Retry.ShouldRetryException exn ->
             if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
-                Thread.Sleep retryWaitTime
+                // NOTE: doing a Thread.Sleep here doesn't help.
+                // I am not convinced this code is meant to be run parallel.
                 LoadDataTable' (triesCurrent + 1, exn :: exns, triesMax, retryWaitTime, cursor, cmd, result)
             else raise (AggregateException (Seq.rev exns))
 
