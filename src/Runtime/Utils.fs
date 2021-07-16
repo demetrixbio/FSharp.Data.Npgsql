@@ -22,27 +22,28 @@ module internal LocalExtensions =
             then this.Substring 2
             else raise (InvalidOperationException ())
 
-    module Async =
-        let CatchDb a =
-            async {
-                try
-                    let! result = a
-                    return Choice1Of2 result
-                with
-                | :? PostgresException as pgexn ->
-                    let sqlState = pgexn.SqlState
-                    let errorClass = sqlState.ErrorClass
-                    if sqlState = PostgresErrorCodes.IoError ||
-                       sqlState = PostgresErrorCodes.DeadlockDetected ||
-                       sqlState = PostgresErrorCodes.LockNotAvailable ||
-                       sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
-                       sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
-                       errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
-                       errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then
-                       return Choice2Of2 (pgexn :> Exception)
-                    else return raise pgexn
-                | :? NpgsqlException as npgsexn -> return (Choice2Of2 (npgsexn :> Exception))
-                | exn -> return raise exn }
+[<RequireQualifiedAccess>]
+module internal Async =
+    let CatchDb a =
+        async {
+            try
+                let! result = a
+                return Choice1Of2 result
+            with
+            | :? PostgresException as pgexn ->
+                let sqlState = pgexn.SqlState
+                let errorClass = sqlState.ErrorClass
+                if sqlState = PostgresErrorCodes.IoError ||
+                    sqlState = PostgresErrorCodes.DeadlockDetected ||
+                    sqlState = PostgresErrorCodes.LockNotAvailable ||
+                    sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
+                    sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
+                    errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
+                    errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then
+                    return Choice2Of2 (pgexn :> Exception)
+                else return raise pgexn
+            | :? NpgsqlException as npgsexn -> return (Choice2Of2 (npgsexn :> Exception))
+            | exn -> return raise exn }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
@@ -71,15 +72,6 @@ type Utils () =
                 cmd.Connection <- conn
                 cmd.Transaction <- tx }
 
-    static let rec Read' (tries, exns, retries, wait: int, cursor: DbDataReader) =
-        try cursor.Read ()
-        with exn ->
-            if ShouldRetry (tries, retries) then
-                Thread.Sleep wait
-                Read' (tries+1, exn :: exns, retries, wait, cursor)
-            else
-                raise (AggregateException (Seq.rev exns))
-
     static let rec ReadAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
         async {
             let! choice = cursor.ReadAsync () |> Async.AwaitTask |> Async.CatchDb
@@ -89,8 +81,7 @@ type Utils () =
                 if ShouldRetry (tries, retries) then
                     do! Async.Sleep wait
                     return! ReadAsync' (tries+1, exn :: exns, retries, wait, cursor)
-                else
-                    return raise (AggregateException (Seq.rev exns)) }
+                else return raise (AggregateException (Seq.rev exns)) }
 
     static let rec NextResultAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
         async {
@@ -101,8 +92,7 @@ type Utils () =
                 if ShouldRetry (tries, retries) then
                     do! Async.Sleep wait
                     return! NextResultAsync' (tries+1, exn :: exns, retries, wait, cursor)
-                else
-                    return raise (AggregateException (Seq.rev exns)) }
+                else return raise (AggregateException (Seq.rev exns)) }
 
     static let rec PrepareAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
         async {
@@ -113,8 +103,7 @@ type Utils () =
                 if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! PrepareAsync' (tries+1, exn :: exns, retries, wait, cmd)
-                else
-                    return raise (AggregateException (Seq.rev exns)) }
+                else return raise (AggregateException (Seq.rev exns)) }
 
     static let rec ExecuteReaderAsync' (tries, exns, retries, wait, behavior: CommandBehavior, cmd: NpgsqlCommand) =
         async {
@@ -125,8 +114,7 @@ type Utils () =
                 if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, behavior, cmd)
-                else
-                    return raise (AggregateException (Seq.rev exns)) }
+                else return raise (AggregateException (Seq.rev exns)) }
 
     static let rec ExecuteNonQueryAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
         async {
@@ -137,8 +125,7 @@ type Utils () =
                 if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! ExecuteNonQueryAsync' (tries+1, exn :: exns, retries, wait, cmd)
-                else
-                    return raise (AggregateException (Seq.rev exns)) }
+                else return raise (AggregateException (Seq.rev exns)) }
 
     static let getColumnMapping =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
@@ -207,9 +194,6 @@ type Utils () =
     static member SetupConnectionAsync (retries, wait, cmd, connection) =
         async {
             do! SetupConnectionAsync' (0, [], retries, wait, cmd, connection) }
-
-    static member Read (retries, wait, cursor) =
-        Read' (0, [], retries, wait, cursor)
 
     static member ReadAsync (retries, wait, cursor) =
         async {
@@ -360,7 +344,7 @@ type Utils () =
         seq {
             let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
 
-            while Utils.Read (10, 1000, cursor) do (* TODO: pull args from cfg. *)
+            while Utils.ReadAsync (10, 1000, cursor) |> Async.RunSynchronously do (* TODO: pull args from cfg. *)
                 rowReader.Invoke cursor |> unbox<'TItem>
         }
 
@@ -389,7 +373,7 @@ type Utils () =
         seq {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
 
-            while Utils.Read (10, 1000, cursor) do (* TODO: pull args from cfg. *)
+            while Utils.ReadAsync (10, 1000, cursor) |> Async.RunSynchronously do (* TODO: pull args from cfg. *)
                 cursor.GetValue 0
                 |> columnMapping
                 |> unbox<'TItem>
