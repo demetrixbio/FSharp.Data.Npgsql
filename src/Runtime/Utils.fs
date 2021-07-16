@@ -14,7 +14,7 @@ open System.Linq.Expressions
 #nowarn "0025"
 
 [<AutoOpen>]
-module internal StringExtensions =
+module internal LocalExtensions =
 
     type String with
         member this.ErrorClass =
@@ -22,42 +22,51 @@ module internal StringExtensions =
             then this.Substring 2
             else raise (InvalidOperationException ())
 
+    module Async =
+        let CatchDb a =
+            async {
+                try
+                    let! result = a
+                    return Choice1Of2 result
+                with
+                | :? PostgresException as pgexn ->
+                    let sqlState = pgexn.SqlState
+                    let errorClass = sqlState.ErrorClass
+                    if sqlState = PostgresErrorCodes.IoError ||
+                       sqlState = PostgresErrorCodes.DeadlockDetected ||
+                       sqlState = PostgresErrorCodes.LockNotAvailable ||
+                       sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
+                       sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
+                       errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
+                       errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then
+                       return Choice2Of2 (pgexn :> Exception)
+                    else return raise pgexn
+                | :? NpgsqlException as npgsexn -> return (Choice2Of2 (npgsexn :> Exception))
+                | exn -> return raise exn }
+
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
 
-    static let ShouldRetry (tries, retries, exn : Exception) =
-        let exceptionRetry =
-            match exn with
-            | :? PostgresException as pgexn ->
-                let sqlState = pgexn.SqlState
-                let errorClass = sqlState.ErrorClass
-                sqlState = PostgresErrorCodes.IoError ||
-                sqlState = PostgresErrorCodes.DeadlockDetected ||
-                sqlState = PostgresErrorCodes.LockNotAvailable ||
-                sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
-                sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
-                errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
-                errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass
-            | :? NpgsqlException -> true
-            | _ -> false
-        if exceptionRetry
-        then retries < 1 || tries < retries
-        else false
+    static let ShouldRetry (tries, retries) =
+        retries < 1 || tries < retries
+
+    static let ShouldRetryWithConnection (tries, retries, connection: NpgsqlConnection) =
+        ShouldRetry (tries, retries) &&
+        (connection.State &&& ConnectionState.Open = ConnectionState.Open)
 
     static let rec SetupConnectionAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand, connection) =
         async {
             match connection with
             | Choice1Of2 connectionString ->
                 cmd.Connection <- new NpgsqlConnection (connectionString)
-                let! choice = cmd.Connection.OpenAsync () |> Async.AwaitTask |> Async.Catch
+                let! choice = cmd.Connection.OpenAsync () |> Async.AwaitTask |> Async.CatchDb
                 match choice with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 exn ->
-                    if ShouldRetry (tries, retries, exn) &&
-                       (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
+                    if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                         do! Async.Sleep wait
                         do! SetupConnectionAsync' (tries+1, exn :: exns, retries, wait, cmd, connection)
-                    else raise (AggregateException (Seq.rev exns))
+                    else return raise (AggregateException (Seq.rev exns))
             | Choice2Of2 (conn, tx) ->
                 cmd.Connection <- conn
                 cmd.Transaction <- tx }
@@ -65,7 +74,7 @@ type Utils () =
     static let rec Read' (tries, exns, retries, wait: int, cursor: DbDataReader) =
         try cursor.Read ()
         with exn ->
-            if ShouldRetry (tries, retries, exn) then
+            if ShouldRetry (tries, retries) then
                 Thread.Sleep wait
                 Read' (tries+1, exn :: exns, retries, wait, cursor)
             else
@@ -73,66 +82,63 @@ type Utils () =
 
     static let rec ReadAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
         async {
-            let! choice = cursor.ReadAsync () |> Async.AwaitTask |> Async.Catch
+            let! choice = cursor.ReadAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if ShouldRetry (tries, retries, exn) then
+                if ShouldRetry (tries, retries) then
                     do! Async.Sleep wait
                     return! ReadAsync' (tries+1, exn :: exns, retries, wait, cursor)
                 else
-                    return (raise (AggregateException (Seq.rev exns))) }
+                    return raise (AggregateException (Seq.rev exns)) }
 
     static let rec NextResultAsync' (tries, exns, retries, wait, cursor: DbDataReader) =
         async {
-            let! choice = cursor.NextResultAsync () |> Async.AwaitTask |> Async.Catch
+            let! choice = cursor.NextResultAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if ShouldRetry (tries, retries, exn) then
+                if ShouldRetry (tries, retries) then
                     do! Async.Sleep wait
                     return! NextResultAsync' (tries+1, exn :: exns, retries, wait, cursor)
                 else
-                    return (raise (AggregateException (Seq.rev exns))) }
+                    return raise (AggregateException (Seq.rev exns)) }
 
     static let rec PrepareAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
         async {
-            let! choice = cmd.PrepareAsync () |> Async.AwaitTask |> Async.Catch
+            let! choice = cmd.PrepareAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
             | Choice1Of2 () -> return ()
             | Choice2Of2 exn ->
-                if  ShouldRetry (tries, retries, exn) &&
-                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
+                if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! PrepareAsync' (tries+1, exn :: exns, retries, wait, cmd)
                 else
-                    return (raise (AggregateException (Seq.rev exns))) }
+                    return raise (AggregateException (Seq.rev exns)) }
 
     static let rec ExecuteReaderAsync' (tries, exns, retries, wait, behavior: CommandBehavior, cmd: NpgsqlCommand) =
         async {
-            let! choice = cmd.ExecuteReaderAsync behavior |> Async.AwaitTask |> Async.Catch
+            let! choice = cmd.ExecuteReaderAsync behavior |> Async.AwaitTask |> Async.CatchDb
             match choice with
             | Choice1Of2 task -> return task
             | Choice2Of2 exn ->
-                if  ShouldRetry (tries, retries, exn) &&
-                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
+                if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! ExecuteReaderAsync' (tries+1, exn :: exns, retries, wait, behavior, cmd)
                 else
-                    return (raise (AggregateException (Seq.rev exns))) }
+                    return raise (AggregateException (Seq.rev exns)) }
 
     static let rec ExecuteNonQueryAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand) =
         async {
-            let! choice = cmd.ExecuteNonQueryAsync () |> Async.AwaitTask |> Async.Catch
+            let! choice = cmd.ExecuteNonQueryAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
             | Choice1Of2 rowsAffected -> return rowsAffected
             | Choice2Of2 exn ->
-                if  ShouldRetry (tries, retries, exn) &&
-                    (cmd.Connection.State &&& ConnectionState.Open = ConnectionState.Open) then
+                if ShouldRetryWithConnection (tries, retries, cmd.Connection) then
                     do! Async.Sleep wait
                     return! ExecuteNonQueryAsync' (tries+1, exn :: exns, retries, wait, cmd)
                 else
-                    return (raise (AggregateException (Seq.rev exns))) }
+                    return raise (AggregateException (Seq.rev exns)) }
 
     static let getColumnMapping =
         let cache = ConcurrentDictionary<Type, obj -> obj> ()
