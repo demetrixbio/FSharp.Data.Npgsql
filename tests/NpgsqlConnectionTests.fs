@@ -156,11 +156,10 @@ let retryWorks () =
     seq {
         for _ in 1 .. 20 do
             let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 10>(connectionString)
-            yield
-                (async {
-                    let! result = cmd.AsyncExecute ()
-                    (cmd :> IDisposable).Dispose ()
-                    return result }) }
+            yield async {
+                let! result = cmd.AsyncExecute ()
+                (cmd :> IDisposable).Dispose ()
+                return result } }
     |> Async.Parallel
 
 [<Fact>]
