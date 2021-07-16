@@ -30,11 +30,11 @@ type DesignTimeConfig = {
     ResultSets: ResultSetDefinition[]
     Prepare: bool
     CommandTimeout: int
-    Retries: int
+    Tries: int
     RetryWaitTime: int
 }
     with
-        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout, retries, retryWaitTime) = {
+        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout, tries, retryWaitTime) = {
             SqlStatement = sql
             Parameters = ps
             ResultType = resultType
@@ -43,7 +43,7 @@ type DesignTimeConfig = {
             ResultSets = columns |> Array.map (fun r -> CreateResultSetDefinition (r, resultType))
             Prepare = prepare
             CommandTimeout = commandTimeout
-            Retries = retries
+            Tries = tries
             RetryWaitTime = retryWaitTime }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
@@ -164,13 +164,13 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
     static member internal AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters) = Unsafe.uply {
         ISqlCommandImplementation.SetParameters (cmd, parameters)
-        do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) (* TODO: pull args from cfg. *)
+        do! Utils.SetupConnectionAsync (cfg.Tries, cfg.RetryWaitTime, cmd, connection)
         let readerBehavior = getReaderBehavior (connection, cfg)
 
         if cfg.Prepare then
-            do! Utils.PrepareAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)
+            do! Utils.PrepareAsync (cfg.Tries, cfg.RetryWaitTime, cmd)
 
-        let! cursor = Utils.ExecuteReaderAsync (10, 1000, readerBehavior, cmd) (* TODO: pull args from cfg. *)
+        let! cursor = Utils.ExecuteReaderAsync (cfg.Tries, cfg.RetryWaitTime, readerBehavior, cmd)
         return cursor :?> NpgsqlDataReader }
 
     static member internal AsyncExecuteReader (cfg, cmd, connection, parameters, executionType) =
@@ -213,7 +213,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
     // TODO output params
     static member internal ExecuteSingle<'TItem> () = Func<_, _, _, _>(fun reader resultSetDefinition cfg -> Unsafe.uply {
-        let! xs = MapRowValues<'TItem> (reader, cfg.ResultType, resultSetDefinition)
+        let! xs = MapRowValues<'TItem> (cfg.Tries, cfg.RetryWaitTime, reader, cfg.ResultType, resultSetDefinition)
 
         return
             if cfg.SingleRow then
@@ -232,9 +232,9 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                 
                 let xs =
                     if cfg.ResultSets.[0].ExpectedColumns.Length > 1 then
-                        MapRowValuesOntoTupleLazy<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0])
+                        MapRowValuesOntoTupleLazy<'TItem> (cfg.Tries, cfg.RetryWaitTime, reader, cfg.ResultType, cfg.ResultSets.[0])
                     else
-                        MapRowValuesLazy<'TItem> (reader, cfg.ResultSets.[0])
+                        MapRowValuesLazy<'TItem> (cfg.Tries, cfg.RetryWaitTime, reader, cfg.ResultSets.[0])
 
                 return new LazySeq<'TItem> (xs, reader, cmd) }
 
@@ -242,7 +242,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         else
             let xs = Unsafe.uply {
                 use! reader = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters)
-                return! MapRowValues<'TItem> (reader, cfg.ResultType, cfg.ResultSets.[0]) }
+                return! MapRowValues<'TItem> (cfg.Tries, cfg.RetryWaitTime, reader, cfg.ResultType, cfg.ResultSets.[0]) }
 
             if cfg.SingleRow then
                 let t = Unsafe.uply {
@@ -297,7 +297,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
                     let currentStatement = GetStatementIndex.Invoke cursor
                     let! res = ISqlCommandImplementation.ReadResultSet (cursor, cfg.ResultSets.[currentStatement], cfg)
                     results.[currentStatement] <- res
-                    let! more = Utils.NextResultAsync (10, 1000, cursor) (* TODO: pull args from cfg. *)
+                    let! more = Utils.NextResultAsync (cfg.Tries, cfg.RetryWaitTime, cursor)
                     go <- more
 
             ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
@@ -308,14 +308,14 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteNonQuery (cfg, cmd, connection, parameters, executionType) = 
         let t = Unsafe.uply {
             ISqlCommandImplementation.SetParameters (cmd, parameters)
-            do! Utils.SetupConnectionAsync (10, 1000, cmd, connection) (* TODO: pull args from cfg. *)
+            do! Utils.SetupConnectionAsync (cfg.Tries, cfg.RetryWaitTime, cmd, connection)
             let readerBehavior = getReaderBehavior (connection, cfg)
             use _ = if readerBehavior.HasFlag CommandBehavior.CloseConnection then cmd.Connection else null
 
             if cfg.Prepare then
-                do! Utils.PrepareAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)
+                do! Utils.PrepareAsync (cfg.Tries, cfg.RetryWaitTime, cmd)
 
-            return! Utils.ExecuteNonQueryAsync (10, 1000, cmd) (* TODO: pull args from cfg. *)}
+            return! Utils.ExecuteNonQueryAsync (cfg.Tries, cfg.RetryWaitTime, cmd) }
 
         mapTask (t, executionType)
 
