@@ -31,19 +31,17 @@ type Utils () =
             | :? PostgresException as pgexn ->
                 let sqlState = pgexn.SqlState
                 let errorClass = sqlState.ErrorClass
-                if errorClass = PostgresErrorCodes.ConnectionException.ErrorClass then true
-                elif errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass then true
-                elif sqlState = PostgresErrorCodes.IoError then true
-                elif sqlState = PostgresErrorCodes.DeadlockDetected then true
-                elif sqlState = PostgresErrorCodes.LockNotAvailable then true
-                elif sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation then true
-                elif sqlState = PostgresErrorCodes.InFailedSqlTransaction then true
-                else false
+                sqlState = PostgresErrorCodes.IoError ||
+                sqlState = PostgresErrorCodes.DeadlockDetected ||
+                sqlState = PostgresErrorCodes.LockNotAvailable ||
+                sqlState = PostgresErrorCodes.TransactionIntegrityConstraintViolation ||
+                sqlState = PostgresErrorCodes.InFailedSqlTransaction ||
+                errorClass = PostgresErrorCodes.ConnectionException.ErrorClass ||
+                errorClass = PostgresErrorCodes.InsufficientResources.ErrorClass
             | :? NpgsqlException -> true
             | _ -> false
-        if exceptionRetry then
-            retries < 1 ||
-            tries < retries
+        if exceptionRetry
+        then retries < 1 || tries < retries
         else false
 
     static let rec SetupConnectionAsync' (tries, exns, retries, wait, cmd: NpgsqlCommand, connection) =
