@@ -52,6 +52,7 @@ module internal Async =
             true
         | :? AggregateException as aggexn ->
             Seq.forall FilterDb aggexn.InnerExceptions
+        | _ -> false
 
     let CatchDb a =
         async {
@@ -64,7 +65,7 @@ module internal Async =
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
 
-    static let rec LoadDataTable' (triesCurrent, exns, triesMax, (retryWaitTime: int), cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
+    static let rec LoadDataTable' (triesCurrent, exns, triesMax, retryWaitTime: int, cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
         try result.Load cursor
         with exn when Async.FilterDb exn ->
             if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
