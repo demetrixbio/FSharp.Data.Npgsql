@@ -24,8 +24,8 @@ module internal LocalExtensions =
             else raise (InvalidOperationException ())
 
 [<RequireQualifiedAccess>]
-module internal Async =
-
+module internal Retry =
+    
     let ShouldRetry (triesCurrent, triesMax) =
         triesMax <= 0 || triesCurrent < triesMax
 
@@ -33,7 +33,7 @@ module internal Async =
         ShouldRetry (triesCurrent, triesMax) &&
         (connection.State &&& ConnectionState.Open = ConnectionState.Open)
 
-    let rec FilterDb (exn: Exception) =
+    let rec ShouldRetryException (exn: Exception) =
         match exn with
         | :? PostgresException as pgexn ->
             let sqlState = pgexn.SqlState
@@ -51,15 +51,18 @@ module internal Async =
         | :? NpgsqlException ->
             true
         | :? AggregateException as aggexn ->
-            Seq.forall FilterDb aggexn.InnerExceptions
+            Seq.forall ShouldRetryException aggexn.InnerExceptions
         | _ -> false
+
+[<RequireQualifiedAccess>]
+module internal Async =
 
     let CatchDb a =
         async {
             try
                 let! result = a
                 return Choice1Of2 result
-            with exn when FilterDb exn ->
+            with exn when Retry.ShouldRetryException exn ->
                 return Choice2Of2 exn }
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
@@ -67,8 +70,8 @@ type Utils () =
 
     static let rec LoadDataTable' (triesCurrent, exns, triesMax, retryWaitTime: int, cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
         try result.Load cursor
-        with exn when Async.FilterDb exn ->
-            if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+        with exn when Retry.ShouldRetryException exn ->
+            if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                 Thread.Sleep retryWaitTime
                 LoadDataTable' (triesCurrent + 1, exn :: exns, triesMax, retryWaitTime, cursor, cmd, result)
             else raise (AggregateException (Seq.rev exns))
@@ -82,7 +85,7 @@ type Utils () =
                 match choice with
                 | Choice1Of2 () -> ()
                 | Choice2Of2 exn ->
-                    if Async.ShouldRetry (triesCurrent, triesMax) then
+                    if Retry.ShouldRetry (triesCurrent, triesMax) then
                         do! Async.Sleep retryWaitTime
                         do! SetupConnectionAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd, connection)
                     else return raise (AggregateException (Seq.rev exns))
@@ -96,7 +99,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if Async.ShouldRetry (triesCurrent, triesMax) then
+                if Retry.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
                     return! ReadAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -107,7 +110,7 @@ type Utils () =
             match choice with
             | Choice1Of2 go -> return go
             | Choice2Of2 exn ->
-                if Async.ShouldRetry (triesCurrent, triesMax) then
+                if Retry.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
                     return! NextResultAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -118,7 +121,7 @@ type Utils () =
             match choice with
             | Choice1Of2 () -> return ()
             | Choice2Of2 exn ->
-                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! PrepareAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -129,7 +132,7 @@ type Utils () =
             match choice with
             | Choice1Of2 reader -> return reader
             | Choice2Of2 exn ->
-                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! ExecuteReaderAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, behavior, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
@@ -140,7 +143,7 @@ type Utils () =
             match choice with
             | Choice1Of2 rowsAffected -> return rowsAffected
             | Choice2Of2 exn ->
-                if Async.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
+                if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
                     return! ExecuteNonQueryAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
