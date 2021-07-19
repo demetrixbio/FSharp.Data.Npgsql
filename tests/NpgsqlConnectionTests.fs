@@ -2,8 +2,9 @@ module NpgsqlConnectionTests
 
 open System
 open Xunit
-open FSharp.Data.Npgsql
 open System.Reflection
+open System.Threading.Tasks
+open FSharp.Data.Npgsql
 open type Npgsql.NpgsqlNetTopologySuiteExtensions
 open NetTopologySuite.Geometries
 
@@ -153,14 +154,17 @@ let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
 
 [<Fact>]
 let retryWorks () =
-    seq {
-        for _ in 1 .. 20 do
-            let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 10>(connectionString)
-            yield async {
-                let! result = cmd.AsyncExecute ()
-                (cmd :> IDisposable).Dispose ()
-                return result } }
-    |> Async.Parallel
+    let op =
+        seq {
+            for _ in 1 .. 10 do
+                let connStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connStrWithIncorrectPort
+                yield async {
+                    let! result = cmd.AsyncExecute ()
+                    (cmd :> IDisposable).Dispose ()
+                    return result }}
+        |> Async.Parallel
+    Assert.ThrowsAsync<AggregateException> (new Func<_> (fun () -> op |> Async.Ignore |> Async.StartAsTask |> fun t -> t :> Task)) // is this enough conversion boiler-plate for ya?
 
 [<Fact>]
 let dateTableWithUpdate() =
