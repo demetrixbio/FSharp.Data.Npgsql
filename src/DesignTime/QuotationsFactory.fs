@@ -483,11 +483,17 @@ type internal QuotationsFactory () =
 
             addRedirectToISqlCommandMethods resultSetsType None
             cmdProvidedType.AddMember resultSetsType
+
+        let retryCallback =
+            ProvidedField ("retryCallback", typeof<Exception -> unit>)
+
+        cmdProvidedType.AddMember (
+            retryCallback)
         
         cmdProvidedType.AddMember (
             ProvidedProperty (
                 "RetryCallback",
-                typeof<(Exception -> unit) ref>,
-                getterCode = (fun args -> <@@ !(%%args.[0] : (Exception -> unit) ref) @@>),
-                setterCode = (fun args -> <@@ (%%args.[0] : (Exception -> unit) ref) := !(%%args.[1] : (Exception -> unit) ref) @@>),
+                typeof<Exception -> unit>,
+                getterCode = (fun args -> <@@ retryCallback.GetValue (%%args.[0] : ISqlCommandImplementation) :?> (Exception -> unit) @@>),
+                setterCode = (fun args -> <@@ retryCallback.SetValue ((%%args.[0] : ISqlCommandImplementation), (%%args.[1] : Exception -> unit)) @@>),
                 isStatic = false))
