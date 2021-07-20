@@ -483,5 +483,11 @@ type internal QuotationsFactory () =
 
             addRedirectToISqlCommandMethods resultSetsType None
             cmdProvidedType.AddMember resultSetsType
-
-
+        
+        cmdProvidedType.AddMember (
+            ProvidedProperty (
+                "RetryCallback",
+                typeof<(Exception -> unit) ref>,
+                getterCode = (fun args -> <@@ !(%%args.[0] : (Exception -> unit) ref) @@>),
+                setterCode = (fun args -> <@@ (%%args.[0] : (Exception -> unit) ref) := !(%%args.[1] : (Exception -> unit) ref) @@>),
+                isStatic = false))

@@ -72,7 +72,6 @@ let selectLiterals() =
         DvdRental.CreateCommand<"        
             SELECT 42 AS Answer, current_date as today 
         ">(connectionString)
-
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
     Assert.Equal(Some DateTime.Now.Date, x.today)
@@ -157,8 +156,9 @@ let retryWorks () =
     let op =
         seq {
             for _ in 1 .. 10 do
-                let connStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
-                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connStrWithIncorrectPort
+                let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                cmd.RetryCallback <- ref (fun (exn : Exception) -> printfn "%A" exn)
                 yield async {
                     let! result = cmd.AsyncExecute ()
                     (cmd :> IDisposable).Dispose ()
