@@ -494,6 +494,6 @@ type internal QuotationsFactory () =
             ProvidedProperty (
                 "RetryCallback",
                 typeof<Exception -> unit>,
-                getterCode = (fun args -> <@@ retryCallback.GetValue (%%args.[0] : ISqlCommandImplementation) :?> (Exception -> unit) @@>),
-                setterCode = (fun args -> <@@ retryCallback.SetValue ((%%args.[0] : ISqlCommandImplementation), (%%args.[1] : Exception -> unit)) @@>),
+                getterCode = (fun [self] -> Expr.Coerce (Expr.FieldGet (self, retryCallback), typeof<Exception -> unit>)),
+                setterCode = (fun [self; value] -> Expr.FieldSet (self, retryCallback, value)),
                 isStatic = false))
