@@ -12,6 +12,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <NoWarn>101</NoWarn>
     <LangVersion>preview</LangVersion>
+    <Version>1.0.0-retry</Version>
   </PropertyGroup>
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
   <ItemGroup>

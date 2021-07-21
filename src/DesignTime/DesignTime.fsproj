@@ -12,6 +12,7 @@
     <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <LangVersion>preview</LangVersion>
+    <Version>1.0.0-retry</Version>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\Runtime\DataTable.fs" />
