@@ -67,16 +67,17 @@ module internal Async =
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type Utils () =
 
-    static let rec LoadDataTable' (triesCurrent, exns, triesMax, retryWaitTime: int, cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
+    static let rec LoadDataTable' (triesCurrent, exns, triesMax, retryWaitTime: int, retryCallback, cursor, cmd: NpgsqlCommand, result: DataRow DataTable) =
         try result.Load cursor
         with exn when Retry.ShouldRetryException exn ->
             if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                 // NOTE: doing a Thread.Sleep here doesn't help.
                 // I am not convinced this code is meant to be run parallel.
-                LoadDataTable' (triesCurrent + 1, exn :: exns, triesMax, retryWaitTime, cursor, cmd, result)
+                retryCallback exn
+                LoadDataTable' (triesCurrent + 1, exn :: exns, triesMax, retryWaitTime, retryCallback, cursor, cmd, result)
             else raise (AggregateException (Seq.rev exns))
 
-    static let rec SetupConnectionAsync' (triesCurrent, exns, triesMax, retryWaitTime, cmd: NpgsqlCommand, connection) =
+    static let rec SetupConnectionAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, cmd: NpgsqlCommand, connection) =
         async {
             match connection with
             | Choice1Of2 connectionString ->
@@ -87,13 +88,14 @@ type Utils () =
                 | Choice2Of2 exn ->
                     if Retry.ShouldRetry (triesCurrent, triesMax) then
                         do! Async.Sleep retryWaitTime
-                        do! SetupConnectionAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd, connection)
+                        retryCallback exn
+                        do! SetupConnectionAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, cmd, connection)
                     else return raise (AggregateException (Seq.rev exns))
             | Choice2Of2 (conn, tx) ->
                 cmd.Connection <- conn
                 cmd.Transaction <- tx }
 
-    static let rec ReadAsync' (triesCurrent, exns, triesMax, retryWaitTime, cursor: DbDataReader) =
+    static let rec ReadAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, cursor: DbDataReader) =
         async {
             let! choice = cursor.ReadAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
@@ -101,10 +103,11 @@ type Utils () =
             | Choice2Of2 exn ->
                 if Retry.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
-                    return! ReadAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
+                    retryCallback exn
+                    return! ReadAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
 
-    static let rec NextResultAsync' (triesCurrent, exns, triesMax, retryWaitTime, cursor: DbDataReader) =
+    static let rec NextResultAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, cursor: DbDataReader) =
         async {
             let! choice = cursor.NextResultAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
@@ -112,10 +115,11 @@ type Utils () =
             | Choice2Of2 exn ->
                 if Retry.ShouldRetry (triesCurrent, triesMax) then
                     do! Async.Sleep retryWaitTime
-                    return! NextResultAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cursor)
+                    retryCallback exn
+                    return! NextResultAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, cursor)
                 else return raise (AggregateException (Seq.rev exns)) }
 
-    static let rec PrepareAsync' (triesCurrent, exns, triesMax, retryWaitTime, cmd: NpgsqlCommand) =
+    static let rec PrepareAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, cmd: NpgsqlCommand) =
         async {
             let! choice = cmd.PrepareAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
@@ -123,10 +127,11 @@ type Utils () =
             | Choice2Of2 exn ->
                 if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
-                    return! PrepareAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
+                    retryCallback exn
+                    return! PrepareAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
 
-    static let rec ExecuteReaderAsync' (triesCurrent, exns, triesMax, retryWaitTime, behavior: CommandBehavior, cmd: NpgsqlCommand) =
+    static let rec ExecuteReaderAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, behavior: CommandBehavior, cmd: NpgsqlCommand) =
         async {
             let! choice = cmd.ExecuteReaderAsync behavior |> Async.AwaitTask |> Async.CatchDb
             match choice with
@@ -134,10 +139,11 @@ type Utils () =
             | Choice2Of2 exn ->
                 if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
-                    return! ExecuteReaderAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, behavior, cmd)
+                    retryCallback exn
+                    return! ExecuteReaderAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, behavior, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
 
-    static let rec ExecuteNonQueryAsync' (triesCurrent, exns, triesMax, retryWaitTime, cmd: NpgsqlCommand) =
+    static let rec ExecuteNonQueryAsync' (triesCurrent, exns, triesMax, retryWaitTime, retryCallback, cmd: NpgsqlCommand) =
         async {
             let! choice = cmd.ExecuteNonQueryAsync () |> Async.AwaitTask |> Async.CatchDb
             match choice with
@@ -145,7 +151,8 @@ type Utils () =
             | Choice2Of2 exn ->
                 if Retry.ShouldRetryWithConnection (triesCurrent, triesMax, cmd.Connection) then
                     do! Async.Sleep retryWaitTime
-                    return! ExecuteNonQueryAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, cmd)
+                    retryCallback exn
+                    return! ExecuteNonQueryAsync' (triesCurrent+1, exn :: exns, triesMax, retryWaitTime, retryCallback, cmd)
                 else return raise (AggregateException (Seq.rev exns)) }
 
     static let getColumnMapping =
@@ -212,32 +219,32 @@ type Utils () =
                 cache.[resultSet.ExpectedColumns.GetHashCode ()] <- func
                 func
 
-    static member LoadDataTable (tries, retryWaitTime, cursor, cmd, result) =
-        LoadDataTable' (0, [], tries, retryWaitTime, cursor, cmd, result)
+    static member LoadDataTable (tries, retryWaitTime, retryCallback, cursor, cmd, result) =
+        LoadDataTable' (0, [], tries, retryWaitTime, retryCallback, cursor, cmd, result)
 
-    static member SetupConnectionAsync (tries, retryWaitTime, cmd, connection) =
+    static member SetupConnectionAsync (tries, retryWaitTime, retryCallback, cmd, connection) =
         async {
-            do! SetupConnectionAsync' (0, [], tries, retryWaitTime, cmd, connection) }
+            do! SetupConnectionAsync' (0, [], tries, retryWaitTime, retryCallback, cmd, connection) }
 
-    static member ReadAsync (tries, retryWaitTime, cursor) =
+    static member ReadAsync (tries, retryWaitTime, retryCallback, cursor) =
         async {
-            return! ReadAsync' (0, [], tries, retryWaitTime, cursor) }
+            return! ReadAsync' (0, [], tries, retryWaitTime, retryCallback, cursor) }
 
-    static member NextResultAsync (tries, retryWaitTime, cursor) =
+    static member NextResultAsync (tries, retryWaitTime, retryCallback, cursor) =
         async {
-            return! NextResultAsync' (0, [], tries, retryWaitTime, cursor) }
+            return! NextResultAsync' (0, [], tries, retryWaitTime, retryCallback, cursor) }
 
-    static member PrepareAsync (tries, retryWaitTime, cmd) =
+    static member PrepareAsync (tries, retryWaitTime, retryCallback, cmd) =
         async {
-            return! PrepareAsync' (0, [], tries, retryWaitTime, cmd) }
+            return! PrepareAsync' (0, [], tries, retryWaitTime, retryCallback, cmd) }
 
-    static member ExecuteReaderAsync (tries, retryWaitTime, behavior, cmd) =
+    static member ExecuteReaderAsync (tries, retryWaitTime, retryCallback, behavior, cmd) =
         async {
-            return! ExecuteReaderAsync' (0, [], tries, retryWaitTime, behavior, cmd) }
+            return! ExecuteReaderAsync' (0, [], tries, retryWaitTime, retryCallback, behavior, cmd) }
 
-    static member ExecuteNonQueryAsync (tries, retryWaitTime, cmd) =
+    static member ExecuteNonQueryAsync (tries, retryWaitTime, retryCallback, cmd) =
         async {
-            return! ExecuteNonQueryAsync' (0, [], tries, retryWaitTime, cmd) }
+            return! ExecuteNonQueryAsync' (0, [], tries, retryWaitTime, retryCallback, cmd) }
 
     static member ResizeArrayToList ra =
         let rec inner (ra: ResizeArray<'a>, index, acc) = 
@@ -347,11 +354,11 @@ type Utils () =
         let [| columnName; typeName; nullable |] = stringValues.Split '|'
         new DataColumn (columnName, Utils.GetType typeName, AllowDBNull = (nullable = "1"))
 
-    static member MapRowValuesOntoTuple<'TItem> (tries, retryWaitTime, cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
+    static member MapRowValuesOntoTuple<'TItem> (tries, retryWaitTime, retryCallback, cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
         let results = ResizeArray<'TItem> ()
         let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
         
-        let! go = Utils.ReadAsync (tries, retryWaitTime, cursor)
+        let! go = Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor)
         let mutable go = go
 
         while go do
@@ -359,27 +366,27 @@ type Utils () =
             |> unbox
             |> results.Add
 
-            let! cont = Utils.ReadAsync (tries, retryWaitTime, cursor)
+            let! cont = Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor)
             go <- cont
 
         return results }
 
-    static member MapRowValuesOntoTupleLazy<'TItem> (tries, retryWaitTime, cursor: DbDataReader, resultType, resultSet) =
+    static member MapRowValuesOntoTupleLazy<'TItem> (tries, retryWaitTime, retryCallback, cursor: DbDataReader, resultType, resultSet) =
         seq {
             let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
 
-            while Utils.ReadAsync (tries, retryWaitTime, cursor) |> Async.RunSynchronously do
+            while Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor) |> Async.RunSynchronously do
                 rowReader.Invoke cursor |> unbox<'TItem>
         }
 
-    static member MapRowValues<'TItem> (tries, retryWaitTime, cursor: DbDataReader, resultType, resultSet: ResultSetDefinition) =
+    static member MapRowValues<'TItem> (tries, retryWaitTime, retryCallback, cursor: DbDataReader, resultType, resultSet: ResultSetDefinition) =
         if resultSet.ExpectedColumns.Length > 1 then
-            Utils.MapRowValuesOntoTuple<'TItem> (tries, retryWaitTime, cursor, resultType, resultSet)
+            Utils.MapRowValuesOntoTuple<'TItem> (tries, retryWaitTime, retryCallback, cursor, resultType, resultSet)
         else Unsafe.uply {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
             let results = ResizeArray<'TItem> ()
             
-            let! go = Utils.ReadAsync (tries, retryWaitTime, cursor)
+            let! go = Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor)
             let mutable go = go
 
             while go do
@@ -388,16 +395,16 @@ type Utils () =
                 |> unbox
                 |> results.Add
 
-                let! cont = Utils.ReadAsync (tries, retryWaitTime, cursor)
+                let! cont = Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor)
                 go <- cont
 
             return results }
 
-    static member MapRowValuesLazy<'TItem> (tries, retryWaitTime, cursor: DbDataReader, resultSet) =
+    static member MapRowValuesLazy<'TItem> (tries, retryWaitTime, retryCallback, cursor: DbDataReader, resultSet) =
         seq {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
 
-            while Utils.ReadAsync (tries, retryWaitTime, cursor) |> Async.RunSynchronously do
+            while Utils.ReadAsync (tries, retryWaitTime, retryCallback, cursor) |> Async.RunSynchronously do
                 cursor.GetValue 0
                 |> columnMapping
                 |> unbox<'TItem>
