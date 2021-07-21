@@ -20,6 +20,7 @@ type ISqlCommand =
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
     abstract TaskAsyncExecute: parameters: (string * obj)[] -> obj
     abstract GetRetryCallback: unit -> (Exception -> unit)
+    abstract SetRetryCallback: (Exception -> unit) -> unit
 
 [<EditorBrowsable(EditorBrowsableState.Never); NoEquality; NoComparison>]
 type DesignTimeConfig = {
@@ -127,6 +128,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
     interface ISqlCommand with
         member _.GetRetryCallback () = retryCallback
+        member _.SetRetryCallback retryCallback' = retryCallback <- retryCallback'
         member _.Execute parameters = execute (retryCallback, cfg, cmd, connection, parameters, Sync)
         member _.AsyncExecute parameters = execute (retryCallback, cfg, cmd, connection, parameters, Async)
         member _.TaskAsyncExecute parameters = execute (retryCallback, cfg, cmd, connection, parameters, TaskAsync)
