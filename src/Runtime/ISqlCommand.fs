@@ -16,12 +16,10 @@ type internal ExecutionType =
 
 [<EditorBrowsable(EditorBrowsableState.Never)>]
 type ISqlCommand = 
+    [<CLIEvent>] abstract RetryEvent: IEvent<Exception>
     abstract Execute: parameters: (string * obj)[] -> obj
     abstract AsyncExecute: parameters: (string * obj)[] -> obj
     abstract TaskAsyncExecute: parameters: (string * obj)[] -> obj
-    [<CLIEvent>] abstract RetryEvent: IEvent<Exception>
-    abstract GetRetryCallback: unit -> (Exception -> unit)
-    abstract SetRetryCallback: (Exception -> unit) -> unit
 
 [<EditorBrowsable(EditorBrowsableState.Never); NoEquality; NoComparison>]
 type DesignTimeConfig = {
@@ -131,12 +129,10 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         | TaskAsync -> box t
 
     interface ISqlCommand with
+        [<CLIEvent>] member _.RetryEvent = retryEvent.Publish
         member _.Execute parameters = execute (retryEvent, cfg, cmd, connection, parameters, Sync)
         member _.AsyncExecute parameters = execute (retryEvent, cfg, cmd, connection, parameters, Async)
         member _.TaskAsyncExecute parameters = execute (retryEvent, cfg, cmd, connection, parameters, TaskAsync)
-        [<CLIEvent>] member _.RetryEvent = retryEvent.Publish
-        member _.GetRetryCallback () = retryCallback
-        member _.SetRetryCallback retryCallback' = retryCallback <- retryCallback'
 
     interface IDisposable with
         member _.Dispose () =

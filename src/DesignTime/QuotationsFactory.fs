@@ -455,40 +455,18 @@ type internal QuotationsFactory () =
                 add (typedefof<Async<_>>.MakeGenericType outputType) "AsyncExecute" xmlDoc
             if methodTypes.HasFlag MethodTypes.Task then
                 add (typedefof<Task<_>>.MakeGenericType outputType) "TaskAsyncExecute" xmlDoc
-
+            
+        let evt =
             let evtName = "RetryEvent"
             let evtType = typeof<Handler<Exception>>
             let erasedType = cmdProvidedType.BaseType
-            let evt =
-                ProvidedEvent (
-                    evtName,
-                    evtType,
-                    (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("add_" + evtName), [Expr.Coerce (args.[1], evtType)])),
-                    (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("remove_" + evtName), [Expr.Coerce (args.[1], evtType)])),
-                    false)
-            cmdProvidedType.AddMember evt
-            let evtGetter =
-                ProvidedProperty (
-                    evtName,
-                    evtType,
-                    (fun args -> Expr.Call (Expr.Coerce (args.Head, erasedType), typeof<ISqlCommand>.GetMethod ("get_" + evtName), args.Tail)))
-            cmdProvidedType.AddMember evtGetter
-
-            let name = "GetRetryCallback"
-            let erasedType = cmdProvidedType.BaseType
-            let outputType = typeof<Exception -> unit>
-            let invokeCode (exprArgs : Expr list) = Expr.Call (Expr.Coerce (exprArgs.[0], erasedType), typeof<ISqlCommand>.GetMethod name, [])
-            let m = ProvidedMethod(name, [], outputType, invokeCode)
-            Option.iter m.AddXmlDoc xmlDoc
-            cmdProvidedType.AddMember m
-
-            let name = "SetRetryCallback"
-            let erasedType = cmdProvidedType.BaseType
-            let outputType = typeof<unit>
-            let invokeCode (exprArgs : Expr list) = Expr.Call (Expr.Coerce (exprArgs.[0], erasedType), typeof<ISqlCommand>.GetMethod name, [Expr.Coerce (exprArgs.[1], typeof<Exception -> unit>)])
-            let m = ProvidedMethod(name, [ProvidedParameter ("retryCallback", typeof<Exception -> unit>)], outputType, invokeCode)
-            Option.iter m.AddXmlDoc xmlDoc
-            cmdProvidedType.AddMember m
+            ProvidedEvent (
+                evtName,
+                evtType,
+                (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("add_" + evtName), [Expr.Coerce (args.[1], evtType)])),
+                (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("remove_" + evtName), [Expr.Coerce (args.[1], evtType)])),
+                false)
+        cmdProvidedType.AddMember evt
 
         match statements with
         | _ when resultType = ResultType.DataReader ->
