@@ -456,6 +456,24 @@ type internal QuotationsFactory () =
             if methodTypes.HasFlag MethodTypes.Task then
                 add (typedefof<Task<_>>.MakeGenericType outputType) "TaskAsyncExecute" xmlDoc
 
+            let evtName = "RetryEvent"
+            let evtType = typeof<Handler<Exception>>
+            let erasedType = cmdProvidedType.BaseType
+            let evt =
+                ProvidedEvent (
+                    evtName,
+                    evtType,
+                    (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("add_" + evtName), [Expr.Coerce (args.[1], evtType)])),
+                    (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("remove_" + evtName), [Expr.Coerce (args.[1], evtType)])),
+                    false)
+            cmdProvidedType.AddMember evt
+            let evtGetter =
+                ProvidedProperty (
+                    evtName,
+                    evtType,
+                    (fun args -> Expr.Call (Expr.Coerce (args.Head, erasedType), typeof<ISqlCommand>.GetMethod ("get_" + evtName), args.Tail)))
+            cmdProvidedType.AddMember evtGetter
+
             let name = "GetRetryCallback"
             let erasedType = cmdProvidedType.BaseType
             let outputType = typeof<Exception -> unit>

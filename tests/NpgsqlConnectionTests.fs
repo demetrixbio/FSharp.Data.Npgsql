@@ -158,7 +158,7 @@ let retryWorks () =
             for _ in 1 .. 10 do
                 let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
                 let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
-                cmd.SetRetryCallback (fun (exn : Exception) -> printfn "%A" exn)
+                cmd.add_RetryEvent (fun _ (exn : Exception) -> printfn "%A" exn)
                 yield async {
                     let! result = cmd.AsyncExecute ()
                     (cmd :> IDisposable).Dispose ()
