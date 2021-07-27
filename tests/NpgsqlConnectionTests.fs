@@ -151,20 +151,22 @@ let paramInLimit() =
 [<Literal>]
 let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
 
+type DvdRental' = NpgsqlConnection<connectionString, MethodTypes = methodTypes, AsyncChoice = true>
+
 [<Fact>]
 let retryWorks () =
     let op =
         seq {
             for _ in 1 .. 10 do
                 let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
-                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                let cmd = DvdRental'.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
                 cmd.add_RetryEvent (fun _ (exn : Exception) -> printfn "%A" exn)
                 yield async {
                     let! result = cmd.AsyncExecute ()
                     (cmd :> IDisposable).Dispose ()
-                    return result }}
+                    return match result with Choice1Of2 r -> r | Choice2Of2 _ -> raise (NotImplementedException ()) }}
         |> Async.Parallel
-    Assert.ThrowsAsync<AggregateException> (new Func<_> (fun () -> op |> Async.Ignore |> Async.StartAsTask |> fun t -> t :> Task)) // is this enough conversion boiler-plate for ya?
+    Assert.ThrowsAsync<NotImplementedException> (new Func<_> (fun () -> op |> Async.Ignore |> Async.StartAsTask |> fun t -> t :> Task)) // is this enough conversion boiler-plate for ya?
 
 [<Fact>]
 let dateTableWithUpdate() =
@@ -407,7 +409,7 @@ let selectEnumWithArray2() =
         DvdRental.``public``.Types.mpaa_rating.``PG-13``
         DvdRental.``public``.Types.mpaa_rating.R
     |]
-        
+    
     Assert.Equal( Some(  Some ratings), cmd.Execute(ratings))
 
 [<Fact>]

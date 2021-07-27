@@ -19,7 +19,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                            commands: ProvidedTypeDefinition, customTypes: Map<string, ProvidedTypeDefinition>,
                            dbSchemaLookups: DbSchemaLookups, globalXCtor, globalPrepare: bool,
                            providedTypeReuse, methodTypes, globalCollectionType: CollectionType, globalCommandTimeout: int,
-                           globalTries: int, globalRetryWaitTime: int) = 
+                           globalTries: int, globalRetryWaitTime: int, globalAsyncChoice: bool) = 
         
     let staticParams = 
         [
@@ -69,13 +69,15 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                             collectionType,
                             singleRow,
                             (if statements.Length > 1 then (i + 1).ToString () else ""),
-                            providedTypeReuse))
+                            providedTypeReuse,
+                            globalAsyncChoice))
 
                 let cmdProvidedType = ProvidedTypeDefinition (commandTypeName, Some typeof<ISqlCommandImplementation>, hideObjectMethods = true)
                 commands.AddMember cmdProvidedType
                 
                 QuotationsFactory.AddTopLevelTypes cmdProvidedType parameters resultType methodTypes customTypes statements
                     (if resultType <> ResultType.Records || providedTypeReuse = NoReuse then cmdProvidedType else rootType)
+                    globalAsyncChoice
 
                 let designTimeConfig = 
                     Expr.Lambda (Var ("x", typeof<unit>),
@@ -92,7 +94,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                             Expr.Value retryWaitTime
                         ]))
 
-                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName)
+                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName, globalAsyncChoice)
                 rootType.AddMember method
                 method)
     ))
@@ -165,7 +167,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 
     tables
 
-let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout, tries, retryWaitTime) =
+let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, choiceAsync) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition (assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
@@ -196,7 +198,7 @@ let createRootType (assembly, nameSpace: string, typeName, connectionString, xct
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
     let providedTypeReuse = if reuseProvidedTypes then WithCache typeCache else NoReuse
-    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout, tries, retryWaitTime)
+    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, choiceAsync)
 
     databaseRootType
 
@@ -215,8 +217,9 @@ let internal getProviderType (assembly, nameSpace) =
             ProvidedStaticParameter("CommandTimeout", typeof<int>, 0)
             ProvidedStaticParameter("Tries", typeof<int>, 1)
             ProvidedStaticParameter("RetryWaitTime", typeof<int>, 1000) // TODO: make sure this is a sensible default.
+            ProvidedStaticParameter("AsyncChoice", typeof<bool>, false)
         ],
-        fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8])))
+        fun typeName args -> typeCache.GetOrAdd (typeName, fun typeName -> createRootType (assembly, nameSpace, typeName, unbox args.[0], unbox args.[1], unbox args.[2], unbox args.[3], unbox args.[4], unbox args.[5], unbox args.[6], unbox args.[7], unbox args.[8], unbox args.[9])))
 
     providerType.AddXmlDoc """
 <summary>Typed access to PostgreSQL programmable objects, tables and functions.</summary> 
