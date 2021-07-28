@@ -11,7 +11,7 @@ open System.Collections.Concurrent
 open System.Reflection
 
 let mutable cacheInstanceCount = 0
-let methodsCache = ConcurrentDictionary<string, ProvidedMethod> ()
+let methodsCache = ConcurrentDictionary<string * bool, ProvidedMethod> ()
 let typeCache = ConcurrentDictionary<string, ProvidedTypeDefinition> ()
 let schemaCache = ConcurrentDictionary<string, DbSchemaLookups> ()
 
@@ -48,7 +48,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
         let commandTypeName = if typename <> "" then typename else methodName
         
         methodsCache.GetOrAdd(
-            commandTypeName,
+            (commandTypeName, globalAsyncChoice),
             fun _ ->    
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples) then
                     invalidArg "SingleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
@@ -94,7 +94,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                             Expr.Value retryWaitTime
                         ]))
 
-                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName, globalAsyncChoice)
+                let method = QuotationsFactory.GetCommandFactoryMethod (cmdProvidedType, designTimeConfig, xctor, commandTypeName)
                 rootType.AddMember method
                 method)
     ))
@@ -167,7 +167,7 @@ let createTableTypes(customTypes : Map<string, ProvidedTypeDefinition>, item: Db
 
     tables
 
-let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, choiceAsync) =
+let createRootType (assembly, nameSpace: string, typeName, connectionString, xctor, prepare, reuseProvidedTypes, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, asyncChoice) =
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition (assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
@@ -198,7 +198,7 @@ let createRootType (assembly, nameSpace: string, typeName, connectionString, xct
     let commands = ProvidedTypeDefinition("Commands", None)
     databaseRootType.AddMember commands
     let providedTypeReuse = if reuseProvidedTypes then WithCache typeCache else NoReuse
-    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, choiceAsync)
+    addCreateCommandMethod (connectionString, databaseRootType, commands, customTypes, schemaLookups, xctor, prepare, providedTypeReuse, methodTypes, collectionType, commandTimeout, tries, retryWaitTime, asyncChoice)
 
     databaseRootType
 
@@ -232,6 +232,7 @@ let internal getProviderType (assembly, nameSpace) =
 <param name='CommandTimeout'>The time to wait (in seconds) while trying to execute a command before terminating the attempt and generating an error. Set to zero for infinity.</param>
 <param name='Tries'>The number of attempts alotted for a database operation. Set to 0 for infinity.</param>
 <param name='RetryWaitTime'>The time to wait (in milliseconds) while waiting to retry a databased operation before terminating the attempt and generating an error. Set to zero for infinity.</param>
+<param name='AsyncChoice'>Whether Async functions perform Async.Catch implcity and return Choice<'a, Exception> rather than 'a.</param>
 """
     providerType
 

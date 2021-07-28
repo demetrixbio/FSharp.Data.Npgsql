@@ -151,10 +151,37 @@ let paramInLimit() =
 [<Literal>]
 let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
 
-type DvdRental' = NpgsqlConnection<connectionString, MethodTypes = methodTypes, AsyncChoice = true>
+[<Fact>]
+let retry () =
+    let chc =
+        seq {
+            for _ in 1 .. 10 do
+                let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                cmd.add_RetryEvent (fun _ (exn : Exception) -> printfn "%A" exn)
+                yield async {
+                    let! result = cmd.AsyncExecute ()
+                    (cmd :> IDisposable).Dispose ()
+                    return result }}
+        |> Async.Parallel
+        |> Async.Catch
+        |> Async.RunSynchronously
+    let isExpectedExceptionTree =
+        match chc with
+        | Choice2Of2 exn ->
+            match exn with
+            | :? AggregateException as aggexn ->
+                match aggexn.InnerException with
+                | :? AggregateException as aggexn2 -> true
+                | _ -> false
+            | _ -> false
+        | Choice1Of2 _ -> false
+    Assert.True isExpectedExceptionTree
+
+type DvdRental' = NpgsqlConnection<"Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=5432", MethodTypes = methodTypes, AsyncChoice = true>
 
 [<Fact>]
-let retryWorks () =
+let retryAsyncChoice () =
     let op =
         seq {
             for _ in 1 .. 10 do

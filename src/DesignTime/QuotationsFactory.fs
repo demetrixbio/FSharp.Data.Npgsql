@@ -85,7 +85,7 @@ type internal QuotationsFactory () =
     static member GetMapperFromOptionToObj (t: Type, value: Expr) =
         Expr.Call (typeof<Utils>.GetMethod(nameof Utils.OptionToObj).MakeGenericMethod t, [ Expr.Coerce (value, typeof<obj>) ])
 
-    static member AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType: Type, choiceAsync, name) =
+    static member AddGeneratedMethod (sqlParameters: Parameter list, executeArgs: ProvidedParameter list, erasedType, providedOutputType: Type, asyncChoice, name) =
 
         let mappedInputParamValues (exprArgs: Expr list) = 
             (exprArgs.Tail, sqlParameters)
@@ -110,13 +110,13 @@ type internal QuotationsFactory () =
             let vals = mappedInputParamValues exprArgs
             let paramValues = if vals.IsEmpty then QuotationsFactory.ParamArrayEmptyExpr else Expr.NewArray (typeof<string * obj>, vals)
             let callWithoutChoice = Expr.Call (Expr.Coerce (exprArgs.[0], erasedType), typeof<ISqlCommand>.GetMethod name, [ paramValues ])
-            if  choiceAsync &&
+            if  asyncChoice &&
                 providedOutputType.Name = (async { return () }).GetType().Name then
                 Expr.CallUnchecked (ProvidedTypeBuilder.MakeGenericMethod (typeof<Async>.GetMethod "Catch", [providedOutputType.GenericTypeArguments.[0]]), [callWithoutChoice])
             else callWithoutChoice
 
         let outputType =
-            if  choiceAsync &&
+            if  asyncChoice &&
                 providedOutputType.Name = (async { return () }).GetType().Name then
                 let choiceType = ProvidedTypeBuilder.MakeGenericType (typedefof<Choice<_, _>>, [providedOutputType.GenericTypeArguments.[0]; typeof<Exception>])
                 let asyncType = ProvidedTypeBuilder.MakeGenericType ((async { return () }).GetType().GetGenericTypeDefinition(), [choiceType])
@@ -337,14 +337,14 @@ type internal QuotationsFactory () =
 
         tableType
 
-    static member GetOutputTypes (rootTypeName, sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse, choiceAsync) =    
+    static member GetOutputTypes (rootTypeName, sql, statementType, customTypes: Map<string, ProvidedTypeDefinition>, resultType, collectionType, singleRow, typeNameSuffix, providedTypeReuse, asyncChoice) =    
         let returnType =
             match resultType, statementType with
             | ResultType.DataReader, _
             | _, Control ->
                 None
             | _, NonQuery ->
-                Some { Single = typeof<int>; RowProvidedType = None; ChoiceAsync = choiceAsync }
+                Some { Single = typeof<int>; RowProvidedType = None; ChoiceAsync = asyncChoice }
             | ResultType.DataTable, Query columns ->
                 let dataRowType = QuotationsFactory.GetDataRowType (customTypes, columns)
                 let dataTableType =
@@ -356,7 +356,7 @@ type internal QuotationsFactory () =
 
                 dataTableType.AddMember dataRowType
 
-                Some { Single = dataTableType; RowProvidedType = None; ChoiceAsync = choiceAsync }
+                Some { Single = dataTableType; RowProvidedType = None; ChoiceAsync = asyncChoice }
             | _, Query columns ->
                 let providedRowType =
                     if List.length columns = 1 then
@@ -381,7 +381,7 @@ type internal QuotationsFactory () =
                         else
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
                     RowProvidedType = Some providedRowType
-                    ChoiceAsync = choiceAsync }
+                    ChoiceAsync = asyncChoice }
 
         { Type = statementType; Sql = sql; ReturnType = returnType }
 
@@ -416,7 +416,7 @@ type internal QuotationsFactory () =
 
     static member val ConnectionUcis = Reflection.FSharpType.GetUnionCases typeof<Choice<string, NpgsqlConnection * NpgsqlTransaction>>
 
-    static member GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName, choiceAsync) = 
+    static member GetCommandFactoryMethod (cmdProvidedType: ProvidedTypeDefinition, designTimeConfig, isExtended, methodName) = 
         let ctorImpl = typeof<ISqlCommandImplementation>.GetConstructors() |> Array.exactlyOne
 
         if isExtended then
@@ -457,12 +457,12 @@ type internal QuotationsFactory () =
                 | _ ->
                     QuotationsFactory.DataColumnArrayEmptyExpr))
 
-    static member AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo choiceAsync =
+    static member AddTopLevelTypes (cmdProvidedType: ProvidedTypeDefinition) parameters resultType (methodTypes: MethodTypes) customTypes statements typeToAttachTo asyncChoice =
         let executeArgs = QuotationsFactory.GetExecuteArgs (parameters, customTypes)
         
         let addRedirectToISqlCommandMethods outputType xmlDoc =
             let add outputType name xmlDoc =
-                let m = QuotationsFactory.AddGeneratedMethod (parameters, executeArgs, cmdProvidedType.BaseType, outputType, choiceAsync, name) 
+                let m = QuotationsFactory.AddGeneratedMethod (parameters, executeArgs, cmdProvidedType.BaseType, outputType, asyncChoice, name) 
                 Option.iter m.AddXmlDoc xmlDoc
                 cmdProvidedType.AddMember m
 
