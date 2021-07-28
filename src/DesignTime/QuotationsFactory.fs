@@ -1,4 +1,4 @@
-﻿namespace FSharp.Data.Npgsql.DesignTime
+namespace FSharp.Data.Npgsql.DesignTime
 
 open System
 open System.Data
@@ -484,6 +484,8 @@ type internal QuotationsFactory () =
                 (fun args -> Expr.Call (Expr.Coerce (args.[0], erasedType), typeof<ISqlCommand>.GetMethod ("remove_" + evtName), [Expr.Coerce (args.[1], evtType)])),
                 false)
         cmdProvidedType.AddMember evt
+
+
 
         match statements with
         | _ when resultType = ResultType.DataReader ->

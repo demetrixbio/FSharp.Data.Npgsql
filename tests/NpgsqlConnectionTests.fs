@@ -72,6 +72,7 @@ let selectLiterals() =
         DvdRental.CreateCommand<"        
             SELECT 42 AS Answer, current_date as today 
         ">(connectionString)
+
     let x = cmd.Execute() |> Seq.exactlyOne
     Assert.Equal(Some 42, x.answer)
     Assert.Equal(Some DateTime.Now.Date, x.today)
