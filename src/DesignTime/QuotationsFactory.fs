@@ -16,7 +16,7 @@ open System.Threading.Tasks
 type internal ReturnType = {
     Single: Type
     RowProvidedType: Type option
-    ChoiceAsync: bool
+    AsyncChoice: bool
 }
 
 type internal Statement = {
@@ -344,7 +344,7 @@ type internal QuotationsFactory () =
             | _, Control ->
                 None
             | _, NonQuery ->
-                Some { Single = typeof<int>; RowProvidedType = None; ChoiceAsync = asyncChoice }
+                Some { Single = typeof<int>; RowProvidedType = None; AsyncChoice = asyncChoice }
             | ResultType.DataTable, Query columns ->
                 let dataRowType = QuotationsFactory.GetDataRowType (customTypes, columns)
                 let dataTableType =
@@ -356,7 +356,7 @@ type internal QuotationsFactory () =
 
                 dataTableType.AddMember dataRowType
 
-                Some { Single = dataTableType; RowProvidedType = None; ChoiceAsync = asyncChoice }
+                Some { Single = dataTableType; RowProvidedType = None; AsyncChoice = asyncChoice }
             | _, Query columns ->
                 let providedRowType =
                     if List.length columns = 1 then
@@ -381,7 +381,7 @@ type internal QuotationsFactory () =
                         else
                             ProvidedTypeBuilder.MakeGenericType (typedefof<_ list>, [ providedRowType ])
                     RowProvidedType = Some providedRowType
-                    ChoiceAsync = asyncChoice }
+                    AsyncChoice = asyncChoice }
 
         { Type = statementType; Sql = sql; ReturnType = returnType }
 
