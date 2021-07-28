@@ -2,8 +2,9 @@ module NpgsqlConnectionTests
 
 open System
 open Xunit
-open FSharp.Data.Npgsql
 open System.Reflection
+open System.Threading.Tasks
+open FSharp.Data.Npgsql
 open type Npgsql.NpgsqlNetTopologySuiteExtensions
 open NetTopologySuite.Geometries
 
@@ -150,6 +151,89 @@ let paramInLimit() =
 
 [<Literal>]
 let getRentalById = "SELECT return_date FROM rental WHERE rental_id = @id"
+
+[<Fact>]
+let retry () =
+    let chc =
+        seq {
+            for _ in 1 .. 10 do
+                let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                yield async {
+                    let! result = cmd.AsyncExecute ()
+                    (cmd :> IDisposable).Dispose ()
+                    return result }}
+        |> Async.Parallel
+        |> Async.Catch
+        |> Async.RunSynchronously
+    let isExpectedAggregateException =
+        match chc with
+        | Choice2Of2 exn ->
+            match exn with
+            | :? AggregateException as aggexn ->
+                match aggexn.InnerException with
+                | :? AggregateException as aggexn2 ->
+                    match aggexn2.InnerException with
+                    | :? AggregateException as aggexn3 ->
+                        match aggexn3.InnerException with
+                        | :? Npgsql.NpgsqlException -> true
+                        | _ -> false
+                    | _ -> false
+                | _ -> false
+            | _ -> false
+        | Choice1Of2 _ -> false
+    Assert.True isExpectedAggregateException
+
+exception ContrivedRetryException of unit
+
+[<Fact>]
+let retryEvent () =
+    let chc =
+        seq {
+            for _ in 1 .. 10 do
+                let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                cmd.add_RetryEvent (fun _ _ -> raise (ContrivedRetryException ()))
+                yield async {
+                    let! result = cmd.AsyncExecute ()
+                    (cmd :> IDisposable).Dispose ()
+                    return result }}
+        |> Async.Parallel
+        |> Async.Catch
+        |> Async.RunSynchronously
+    let isExpectedContrivedException =
+        match chc with
+        | Choice2Of2 exn ->
+            match exn with
+            | :? AggregateException as aggexn ->
+                match aggexn.InnerException with
+                | :? ContrivedRetryException  -> true
+                | _ -> false
+            | _ -> false
+        | Choice1Of2 _ -> false
+    Assert.True isExpectedContrivedException
+
+type DvdRental' = NpgsqlConnection<"Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=5432", MethodTypes = methodTypes, AsyncChoice = true>
+
+[<Fact>]
+let retryAsyncChoice () =
+    let chc =
+        seq {
+            for _ in 1 .. 10 do
+                let connectionStrWithIncorrectPort = "Host=localhost;Username=postgres;Password=postgres;Database=dvdrental;Port=1313"
+                let cmd = DvdRental'.CreateCommand<"SELECT * FROM rental", ResultType.DataTable, Tries = 5> connectionStrWithIncorrectPort
+                yield async {
+                    let! result = cmd.AsyncExecute ()
+                    (cmd :> IDisposable).Dispose ()
+                    return match result with Choice1Of2 r -> r | Choice2Of2 _ -> raise (ContrivedRetryException ()) }}
+        |> Async.Parallel
+        |> Async.Catch
+        |> Async.RunSynchronously
+    let isExpectedContrivedException =
+        match chc with
+        | Choice2Of2 exn -> match exn with :? ContrivedRetryException -> true | _ -> false
+        | Choice1Of2 _ -> false
+    Assert.True isExpectedContrivedException
 
 [<Fact>]
 let dateTableWithUpdate() =
