@@ -1,4 +1,4 @@
-namespace FSharp.Data.Npgsql.DesignTime
+﻿namespace FSharp.Data.Npgsql.DesignTime
 
 open System
 open System.Data
