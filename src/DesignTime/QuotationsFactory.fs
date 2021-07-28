@@ -485,8 +485,6 @@ type internal QuotationsFactory () =
                 false)
         cmdProvidedType.AddMember evt
 
-
-
         match statements with
         | _ when resultType = ResultType.DataReader ->
             addRedirectToISqlCommandMethods typeof<NpgsqlDataReader> None
@@ -514,3 +512,5 @@ type internal QuotationsFactory () =
 
             addRedirectToISqlCommandMethods resultSetsType None
             cmdProvidedType.AddMember resultSetsType
+
+
