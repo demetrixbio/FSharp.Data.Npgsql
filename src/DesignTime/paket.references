@@ -1,7 +1,6 @@
 FSharp.Core
 Npgsql
 Npgsql.NetTopologySuite
-Ply
 
 group tpsdk
 File:ProvidedTypes.fsi

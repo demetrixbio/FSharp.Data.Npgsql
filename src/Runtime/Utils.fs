@@ -7,7 +7,6 @@ open System.Collections.Concurrent
 open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
-open FSharp.Control.Tasks.NonAffine
 open System.Linq.Expressions
 
 #nowarn "0025"
@@ -186,22 +185,24 @@ type Utils () =
         let [| columnName; typeName; nullable |] = stringValues.Split '|'
         new DataColumn (columnName, Utils.GetType typeName, AllowDBNull = (nullable = "1"))
 
-    static member MapRowValuesOntoTuple<'TItem> (cursor: DbDataReader, resultType, resultSet) = Unsafe.uply {
-        let results = ResizeArray<'TItem> ()
-        let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
-        
-        let! go = cursor.ReadAsync ()
-        let mutable go = go
+    static member MapRowValuesOntoTuple<'TItem> (cursor: DbDataReader, resultType, resultSet) =
+        task {
+            let results = ResizeArray<'TItem> ()
+            let rowReader = getRowToTupleReader resultSet (resultType = ResultType.Records)
+            
+            let! go = cursor.ReadAsync ()
+            let mutable go = go
 
-        while go do
-            rowReader.Invoke cursor
-            |> unbox
-            |> results.Add
+            while go do
+                rowReader.Invoke cursor
+                |> unbox
+                |> results.Add
 
-            let! cont = cursor.ReadAsync ()
-            go <- cont
+                let! cont = cursor.ReadAsync ()
+                go <- cont
 
-        return results }
+            return results
+        }
 
     static member MapRowValuesOntoTupleLazy<'TItem> (cursor: DbDataReader, resultType, resultSet) =
         seq {
@@ -214,7 +215,7 @@ type Utils () =
     static member MapRowValues<'TItem> (cursor: DbDataReader, resultType, resultSet: ResultSetDefinition) =
         if resultSet.ExpectedColumns.Length > 1 then
             Utils.MapRowValuesOntoTuple<'TItem> (cursor, resultType, resultSet)
-        else Unsafe.uply {
+        else task {
             let columnMapping = getColumnMapping resultSet.ExpectedColumns.[0]
             let results = ResizeArray<'TItem> ()
             
@@ -230,7 +231,8 @@ type Utils () =
                 let! cont = cursor.ReadAsync ()
                 go <- cont
 
-            return results }
+            return results
+        }
 
     static member MapRowValuesLazy<'TItem> (cursor: DbDataReader, resultSet) =
         seq {

@@ -2,22 +2,21 @@ source https://api.nuget.org/v3/index.json
 framework: netstandard2.0
 storage: none
 
-nuget FSharp.Core >= 6.0.1
+nuget FSharp.Core >= 6.0.1 redirects: force
 nuget Npgsql = 6.0.2
 nuget Npgsql.NetTopologySuite = 6.0.2
-nuget Ply >= 0.3.0
 
 group tests
   frameworks net6.0
   storage: none
   source https://api.nuget.org/v3/index.json
-  nuget Microsoft.NET.Test.Sdk
-  nuget Ply
-  nuget xunit
-  nuget xunit.runner.visualstudio
-  nuget FSharp.Core >= 6.0.1
+  
+  nuget FSharp.Core >= 6.0.1 redirects: force
   nuget Npgsql = 6.0.2
   nuget Npgsql.NetTopologySuite = 6.0.2
+  nuget Microsoft.NET.Test.Sdk
+  nuget xunit
+  nuget xunit.runner.visualstudio
 
 group tpsdk
   frameworks netstandard2.0

@@ -1,6 +1,9 @@
 module NpgsqlConnectionTests
 
 open System
+open System.Collections.Generic
+open System.Transactions
+open Npgsql.Internal
 open Xunit
 open FSharp.Data.Npgsql
 open System.Reflection
@@ -10,18 +13,15 @@ open NetTopologySuite.Geometries
 Npgsql.NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite () |> ignore
 
 let isStatementPrepared (connection: Npgsql.NpgsqlConnection) =
-    let pool = typeof<Npgsql.NpgsqlConnection>.GetProperty("Pool", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connection)
-    let connectors = pool.GetType().GetField("_connectors", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(pool) :?> obj[]
+    let connector = typeof<Npgsql.NpgsqlConnection>.GetProperty("Connector", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connection) :?> NpgsqlConnector 
 
-    let mutable count = 0
-
-    for connector in connectors do
-        if isNull connector |> not then
-            let psManager = connector.GetType().GetField("PreparedStatementManager", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connector)
-            let preparedStatements = psManager.GetType().GetProperty("BySql", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(psManager)
-            count <- preparedStatements.GetType().GetProperty("Count", BindingFlags.Public ||| BindingFlags.Instance).GetMethod.Invoke(preparedStatements, [||]) :?> int + count
-
-    count > 0
+    if isNull connector |> not then
+        let psManager = connector.GetType().GetField("PreparedStatementManager", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(connector)
+        let preparedStatements = psManager.GetType().GetProperty("BySql", BindingFlags.NonPublic ||| BindingFlags.Instance).GetValue(psManager)
+        let count = preparedStatements.GetType().GetProperty("Count", BindingFlags.Public ||| BindingFlags.Instance).GetMethod.Invoke(preparedStatements, [||]) :?> int
+        count > 0
+    else
+        false
 
 [<Literal>]
 let selectFromPartitionedTable = "select * from logs where log_time between '2019-01-01' and '2019-12-31'"
@@ -1069,7 +1069,6 @@ let ``Manually mapped and cast composite type works`` () =
     Assert.Equal (42L, res.SomeNumber)
     Assert.Equal ("blah", res.SomeText)
     Assert.Equal<int> ([| 1; 2 |], res.SomeArray)
-(*
 
 [<Fact>]
 let ``NetTopology.Geometry roundtrip works`` () =
@@ -1103,4 +1102,3 @@ let ``NetTopology.Geometry roundtrip works tuple`` () =
     let res, _, _ = cmd.Execute(input).Head
     
     Assert.Equal (input.Coordinate.X, res.Value.Coordinate.X)
-*)
