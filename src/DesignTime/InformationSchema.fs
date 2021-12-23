@@ -249,9 +249,6 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         if resultType = ResultType.DataReader then
             []
         else
-            // hacky, but no other way to get separate statements from Npgsql public api since version 6.0.
-            // at least, postgres commands are always terminated by ';', so this will work
-            let sqlCommands = commandText.Split(';') |> Array.filter (String.IsNullOrWhiteSpace >> not)
             use cursor = cmd.ExecuteReader CommandBehavior.SchemaOnly
             let resultSetSchemasFromNpgsql = [
                 if cursor.FieldCount > 0 then
@@ -261,9 +258,9 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
                         Utils.GetStatementIndex.Invoke cursor, cursor.GetColumnSchema () |> Seq.toList
                 ]
 
-            [ 0 .. sqlCommands.Length - 1 ]
+            [ 0 .. cursor.Statements.Count - 1 ]
             |> List.map (fun i ->
-                let sql = sqlCommands.[i].Trim ()
+                let sql = cursor.Statements.[i].CommandText.Trim ()
                 match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
                 | Some (_, columns) ->
                     sql, columns |> List.map (fun column -> 

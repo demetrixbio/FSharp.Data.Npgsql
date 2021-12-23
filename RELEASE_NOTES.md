@@ -101,3 +101,6 @@
 
 ### 2.0.0 December 23rd, 2021
 * net6 support added. F# 6 with native task support
+* 
+### 2.0.1 December 23rd, 2021
+* Fix corner case with escaped ';' inside command

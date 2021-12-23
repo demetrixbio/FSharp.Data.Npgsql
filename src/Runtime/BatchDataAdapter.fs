@@ -60,9 +60,9 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
         batch.Parameters.Clear()
         cmdIndex <- -1
 
-    override __.TerminateBatching() = batch.Dispose()
+    override _.TerminateBatching() = batch.Dispose()
 
-    interface System.IDisposable with
+    interface IDisposable with
         member __.Dispose() = 
             batch.Dispose()
             base.Dispose()
