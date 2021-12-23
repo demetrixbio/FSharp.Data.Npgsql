@@ -98,3 +98,6 @@
 
 ### 1.3.0 December 23rd, 2021
 * Update to Npgsql 6.0, internal switch to new ADO batch command api
+
+### 2.0.0 December 23rd, 2021
+* net6 support added. F# 6 with native task support

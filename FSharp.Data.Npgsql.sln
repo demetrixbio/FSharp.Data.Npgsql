@@ -22,6 +22,7 @@ ProjectSection(SolutionItems) = preProject
 	paket.dependencies = paket.dependencies
 	RELEASE_NOTES.md = RELEASE_NOTES.md
 	README.md = README.md
+	paket.lock = paket.lock
 EndProjectSection
 EndProject
 Global
