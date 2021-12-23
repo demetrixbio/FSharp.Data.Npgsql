@@ -3,6 +3,7 @@
 open System.Data.Common
 open Npgsql
 open System
+open System.Data
 
 type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) = 
     inherit DbDataAdapter(SelectCommand = selectCommand) 
@@ -10,13 +11,13 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
     let rowUpdating = Event<_>()
     let rowUpdated = Event<_>()
 
-    let batch =
-        new NpgsqlBatch(
+    let batch = 
+        new NpgsqlCommand(
             Connection = selectCommand.Connection, 
-            Transaction = selectCommand.Transaction
+            Transaction = selectCommand.Transaction, 
+            CommandTimeout = batchTimeout,
+            UpdatedRowSource = UpdateRowSource.None
         )
-
-    do batch.Timeout <- batchTimeout
 
     let mutable cmdIndex = -1
 
@@ -27,11 +28,10 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
 
     override val UpdateBatchSize = 1 with get, set
     override _.InitializeBatching() = ()
-    
-    override _.AddToBatch( command) =
-        let cmd = NpgsqlBatchCommand()
-        cmd.CommandText <- command.CommandText
-        cmd.Parameters.AddRange [| 
+
+    override _.AddToBatch( command) = 
+        batch.CommandText <- sprintf "%s\n%s;" batch.CommandText command.CommandText
+        batch.Parameters.AddRange [| 
             for p in (command :?> NpgsqlCommand).Parameters do
                 let copy = p.Clone() 
                 copy.Value <- 
@@ -43,8 +43,6 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
 
                 yield copy
         |]
-
-        batch.BatchCommands.Add(cmd)
         cmdIndex <- cmdIndex + 1
         cmdIndex
 
@@ -53,17 +51,18 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
         res
 
     override _.GetBatchedRecordsAffected(commandIdentifier, recordsAffected, error) = 
-        recordsAffected <- int batch.BatchCommands.[commandIdentifier].Rows
+        recordsAffected <- int batch.Statements.[commandIdentifier].Rows
         error <- null
         true
 
     override _.ClearBatch() = 
-        batch.BatchCommands.Clear()
+        batch.CommandText <- ""
+        batch.Parameters.Clear()
         cmdIndex <- -1
 
-    override _.TerminateBatching() = batch.Dispose()
+    override __.TerminateBatching() = batch.Dispose()
 
-    interface IDisposable with
-        member _.Dispose() = 
+    interface System.IDisposable with
+        member __.Dispose() = 
             batch.Dispose()
             base.Dispose()

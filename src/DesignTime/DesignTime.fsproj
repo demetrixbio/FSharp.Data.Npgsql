@@ -10,16 +10,14 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsAsErrors>1182</WarningsAsErrors>
-    <LangVersion>preview</LangVersion>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="..\..\paket-files\tpsdk\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
+    <Compile Include="..\..\paket-files\tpsdk\demetrixbio\FSharp.TypeProviders.SDK\src\ProvidedTypes.fsi">
       <Paket>True</Paket>
       <Link>paket-files/ProvidedTypes.fsi</Link>
     </Compile>
-    <Compile Include="..\..\paket-files\tpsdk\fsprojects\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
+    <Compile Include="..\..\paket-files\tpsdk\demetrixbio\FSharp.TypeProviders.SDK\src\ProvidedTypes.fs">
       <Paket>True</Paket>
       <Link>paket-files/ProvidedTypes.fs</Link>
     </Compile>
