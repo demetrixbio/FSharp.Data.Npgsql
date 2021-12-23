@@ -95,3 +95,6 @@
 
 ### 1.2.3 May 24th, 2021
 * Command timeout defaults to infinity in NpgsqlConnection/NpgsqlCommand constructors
+
+### 1.3.0 December 23rd, 2021
+* Update to Npgsql 6.0, internal switch to new ADO batch command api

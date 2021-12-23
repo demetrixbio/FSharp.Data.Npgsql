@@ -3,7 +3,6 @@
 open System.Data.Common
 open Npgsql
 open System
-open System.Data
 
 type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) = 
     inherit DbDataAdapter(SelectCommand = selectCommand) 
@@ -11,27 +10,28 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
     let rowUpdating = Event<_>()
     let rowUpdated = Event<_>()
 
-    let batch = 
-        new NpgsqlCommand(
+    let batch =
+        new NpgsqlBatch(
             Connection = selectCommand.Connection, 
-            Transaction = selectCommand.Transaction, 
-            CommandTimeout = batchTimeout,
-            UpdatedRowSource = UpdateRowSource.None
+            Transaction = selectCommand.Transaction
         )
+
+    do batch.Timeout <- batchTimeout
 
     let mutable cmdIndex = -1
 
-    [<CLIEvent>] member __.RowUpdating = rowUpdating.Publish
-    [<CLIEvent>] member __.RowUpdated = rowUpdated.Publish
-    override __.OnRowUpdating( value) = rowUpdating.Trigger(value)
-    override __.OnRowUpdated( value) = rowUpdated.Trigger(value)
+    [<CLIEvent>] member _.RowUpdating = rowUpdating.Publish
+    [<CLIEvent>] member _.RowUpdated = rowUpdated.Publish
+    override _.OnRowUpdating( value) = rowUpdating.Trigger(value)
+    override _.OnRowUpdated( value) = rowUpdated.Trigger(value)
 
     override val UpdateBatchSize = 1 with get, set
-    override __.InitializeBatching() = ()
-
-    override __.AddToBatch( command) = 
-        batch.CommandText <- sprintf "%s\n%s;" batch.CommandText command.CommandText
-        batch.Parameters.AddRange [| 
+    override _.InitializeBatching() = ()
+    
+    override _.AddToBatch( command) =
+        let cmd = NpgsqlBatchCommand()
+        cmd.CommandText <- command.CommandText
+        cmd.Parameters.AddRange [| 
             for p in (command :?> NpgsqlCommand).Parameters do
                 let copy = p.Clone() 
                 copy.Value <- 
@@ -43,26 +43,27 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
 
                 yield copy
         |]
+
+        batch.BatchCommands.Add(cmd)
         cmdIndex <- cmdIndex + 1
         cmdIndex
 
-    override __.ExecuteBatch() = 
+    override _.ExecuteBatch() = 
         let res = batch.ExecuteNonQuery()
         res
 
-    override __.GetBatchedRecordsAffected(commandIdentifier, recordsAffected, error) = 
-        recordsAffected <- int batch.Statements.[commandIdentifier].Rows
+    override _.GetBatchedRecordsAffected(commandIdentifier, recordsAffected, error) = 
+        recordsAffected <- int batch.BatchCommands.[commandIdentifier].Rows
         error <- null
         true
 
-    override __.ClearBatch() = 
-        batch.CommandText <- ""
-        batch.Parameters.Clear()
+    override _.ClearBatch() = 
+        batch.BatchCommands.Clear()
         cmdIndex <- -1
 
-    override __.TerminateBatching() = batch.Dispose()
+    override _.TerminateBatching() = batch.Dispose()
 
-    interface System.IDisposable with
-        member __.Dispose() = 
+    interface IDisposable with
+        member _.Dispose() = 
             batch.Dispose()
             base.Dispose()

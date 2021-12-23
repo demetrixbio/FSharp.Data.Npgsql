@@ -39,7 +39,7 @@ type internal QuotationsFactory () =
         assert (List.length xs = 7)
         Arg7(xs.[0], xs.[1], xs.[2], xs.[3], xs.[4], xs.[5], xs.[6])
 
-    static member val GetValueAtIndexExpr: (Expr * int) -> Expr =
+    static member val GetValueAtIndexExpr: Expr * int -> Expr =
         let mi = typeof<Unit>.Assembly.GetType("Microsoft.FSharp.Core.LanguagePrimitives+IntrinsicFunctions").GetMethod("GetArray").MakeGenericMethod typeof<obj>
         fun (arrayExpr, index) -> Expr.Call (mi, [ arrayExpr; Expr.Value index ])
 

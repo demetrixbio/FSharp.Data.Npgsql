@@ -5,25 +5,26 @@ open System.Collections.Generic
 open System.ComponentModel
 open Npgsql
 
-///<summary>Enum describing output type</summary>
+///Enum describing output type
 type ResultType =
-    ///<summary>Sequence of custom records with properties matching column names and types</summary>
+    ///Sequence of custom records with properties matching column names and types
     | Records = 0
-    ///<summary>Sequence of tuples matching column types with the same order</summary>
+    ///Sequence of tuples matching column types with the same order
     | Tuples = 1
-    ///<summary>Typed DataTable <see cref='T:FSharp.Data.DataTable`1'/></summary>
+    ///Typed DataTable <see cref='T:FSharp.Data.DataTable`1'/>
     | DataTable = 2
     ///<summary>raw DataReader</summary>
     | DataReader = 3
 
+/// Specifies the combination of `Execute`, `AsyncExecute` and `TaskAsyncExecute` methods to provide on commands.
+/// Select only those that you need for the best design-time performance.
 [<System.Flags>]
-///<summary>Specifies the combination of `Execute`, `AsyncExecute` and `TaskAsyncExecute` methods to provide on commands. Select only those that you need for the best design-time performance.</summary>
 type MethodTypes =
     | Sync = 1
     | Async = 2
     | Task = 4
 
-///<summary>Specifies the type of collection commands will return.</summary>
+///Specifies the type of collection commands will return.
 type CollectionType =
     | List = 0
     | Array = 1

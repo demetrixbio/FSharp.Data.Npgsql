@@ -25,7 +25,7 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
 
         schema
 
-    override __.ApplyParameterInfo(p, row, _, _) =
+    override _.ApplyParameterInfo(p, row, _, _) =
         // First update command will be used by ADO CommandBuilder to auto generate all next update commands.
         // Upon statement generation db parameter data will get auto inferred based on parameter **ordinal**, not name!!!
         // Example: System.Data.Common.DbCommandBuilder.BuildUpdateCommand -> CreateParameterForValue
@@ -36,20 +36,20 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         // To remove possibility of this behavior, - we force parameter data to be always created from scratch, not reused.
         p.ResetDbType()
         match p, row.[SchemaTableColumn.ProviderType] with
-        | (:? NpgsqlParameter as param), (:? int as providerType) -> 
+        | :? NpgsqlParameter as param, (:? int as providerType) -> 
             param.NpgsqlDbType <- enum providerType
         | _ -> ()
 
-    override __.GetParameterName(parameterName: string): string = raise( NotImplementedException())
+    override _.GetParameterName(_parameterName: string): string = raise( NotImplementedException())
     override this.GetParameterName parameterOrdinal = 
         if updatingRowNumber > 0 
         then sprintf "@p%i_%i" parameterOrdinal updatingRowNumber
         else sprintf "@p%i" parameterOrdinal 
     override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName parameterOrdinal
-    override __.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
-    override __.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier
+    override _.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
+    override _.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier
                 
-    member private __.SqlRowUpdatingHandler eventArgs = 
+    member private _.SqlRowUpdatingHandler eventArgs = 
         updatingRowNumber <- updatingRowNumber + 1
         base.RowUpdatingHandler(eventArgs)
 
@@ -59,5 +59,5 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
         then rowUpdatingCleanUp <- (adapter :?> BatchDataAdapter).RowUpdating.Subscribe(this.SqlRowUpdatingHandler)
         else rowUpdatingCleanUp.Dispose()
 
-    override __.GetSchemaTable _ = schemaTable
+    override _.GetSchemaTable _ = schemaTable
 

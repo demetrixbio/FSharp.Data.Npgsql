@@ -32,7 +32,7 @@ type DesignTimeConfig = {
     CommandTimeout : int
 }
     with
-        static member Create (sql, ps, resultType, collection, singleRow, (columns: DataColumn[][]), prepare, commandTimeout) = {
+        static member Create (sql, ps, resultType, collection, singleRow, columns: DataColumn[][], prepare, commandTimeout) = {
             SqlStatement = sql
             Parameters = ps
             ResultType = resultType
@@ -195,17 +195,17 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
         let t = Unsafe.uply {
             use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters)
 
-            // No explicit NextResult calls, Load takes care of it
             let results =
                 cfg.ResultSets
                 |> Array.map (fun resultSet ->
+                    // No explicit NextResult calls, Load takes care of it
                     if Array.isEmpty resultSet.ExpectedColumns then
-                        null
+                        // If no output columns, set output result to rows affected
+                        cursor.RecordsAffected |> box
                     else
                         ISqlCommandImplementation.VerifyOutputColumns(cursor, resultSet.ExpectedColumns)
                         ISqlCommandImplementation.LoadDataTable cursor (cmd.Clone()) resultSet.ExpectedColumns |> box)
 
-            ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
             return results }
 
         mapTask (t, executionType)
@@ -293,7 +293,7 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
     static member internal AsyncExecuteMulti (cfg, cmd, connection, parameters, executionType) =
         let t = Unsafe.uply {
             use! cursor = ISqlCommandImplementation.AsyncExecuteDataReaderTask (cfg, cmd, connection, parameters)
-            let results = Array.zeroCreate cmd.Statements.Count
+            let results = Array.zeroCreate cfg.ResultSets.Length
 
             // Command contains at least one query
             if cfg.ResultSets |> Array.exists (fun x -> Array.isEmpty x.ExpectedColumns |> not) then
@@ -301,12 +301,16 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
 
                 while go do
                     let currentStatement = GetStatementIndex.Invoke cursor
-                    let! res = ISqlCommandImplementation.ReadResultSet (cursor, cfg.ResultSets.[currentStatement], cfg)
-                    results.[currentStatement] <- res
+                    if Array.isEmpty cfg.ResultSets.[currentStatement].ExpectedColumns then
+                        // If no output columns, set output result to rows affected
+                        results.[currentStatement] <- box cursor.RecordsAffected
+                    else
+                        let! res = ISqlCommandImplementation.ReadResultSet (cursor, cfg.ResultSets.[currentStatement], cfg)
+                        results.[currentStatement] <- res
+                    
+                    // Explicit NextResult call
                     let! more = cursor.NextResultAsync ()
                     go <- more
-
-            ISqlCommandImplementation.SetNumberOfAffectedRows (results, cmd.Statements)
             return results }
 
         mapTask (t, executionType)
@@ -324,8 +328,3 @@ type ISqlCommandImplementation (commandNameHash: int, cfgBuilder: unit -> Design
             return! cmd.ExecuteNonQueryAsync () }
 
         mapTask (t, executionType)
-
-    static member internal SetNumberOfAffectedRows (results: obj[], statements: System.Collections.Generic.IReadOnlyList<NpgsqlStatement>) =
-        for i in 0 .. statements.Count - 1 do
-            if isNull results.[i] then
-                results.[i] <- int statements.[i].Rows |> box

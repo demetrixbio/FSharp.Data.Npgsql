@@ -50,7 +50,7 @@ let addCreateCommandMethod(connectionString, rootType: ProvidedTypeDefinition,
                 if singleRow && not (resultType = ResultType.Records || resultType = ResultType.Tuples) then
                     invalidArg "SingleRow" "SingleRow can be set only for ResultType.Records or ResultType.Tuples."
 
-                let parameters, statements = InformationSchema.extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
+                let parameters, statements = extractParametersAndOutputColumns(connectionString, sqlStatement, resultType, allParametersOptional, dbSchemaLookups)
 
                 if collectionType = CollectionType.LazySeq && (resultType = ResultType.Records || resultType = ResultType.Tuples) && statements |> List.filter (fun (_, x) -> match x with Query _ -> true | _ -> false) |> List.length > 1 then
                     invalidArg "CollectionType" "LazySeq can only be used when the command returns a single result set. Use a different collection type or rewrite the command so that it returns just the result set that you want to load lazily."
@@ -164,7 +164,7 @@ let createRootType (assembly, nameSpace: string, typeName, connectionString, xct
     if String.IsNullOrWhiteSpace connectionString then invalidArg "Connection" "Value is empty!" 
         
     let databaseRootType = ProvidedTypeDefinition (assembly, nameSpace, typeName, baseType = Some typeof<obj>, hideObjectMethods = true)
-    let schemaLookups = schemaCache.GetOrAdd (connectionString, InformationSchema.getDbSchemaLookups)
+    let schemaLookups = schemaCache.GetOrAdd (connectionString, getDbSchemaLookups)
     
     let dbSchemas = schemaLookups.Schemas
                     |> Seq.map (fun s -> ProvidedTypeDefinition(s.Key, baseType = Some typeof<obj>, hideObjectMethods = true))
@@ -175,7 +175,7 @@ let createRootType (assembly, nameSpace: string, typeName, connectionString, xct
     let customTypes =
         [ for schemaType in dbSchemas do
             let es = ProvidedTypeDefinition("Types", Some typeof<obj>, hideObjectMethods = true)
-            for (KeyValue(_, enum)) in schemaLookups.Schemas.[schemaType.Name].Enums do
+            for KeyValue(_, enum) in schemaLookups.Schemas.[schemaType.Name].Enums do
                 let t = ProvidedTypeDefinition(enum.Name, Some typeof<string>, hideObjectMethods = true, nonNullable = true)
                 for value in enum.Values do t.AddMember(ProvidedField.Literal(value, t, value))
                 es.AddMember t
