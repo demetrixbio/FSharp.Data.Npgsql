@@ -1069,6 +1069,7 @@ let ``Manually mapped and cast composite type works`` () =
     Assert.Equal (42L, res.SomeNumber)
     Assert.Equal ("blah", res.SomeText)
     Assert.Equal<int> ([| 1; 2 |], res.SomeArray)
+(*
 
 [<Fact>]
 let ``NetTopology.Geometry roundtrip works`` () =
@@ -1102,3 +1103,4 @@ let ``NetTopology.Geometry roundtrip works tuple`` () =
     let res, _, _ = cmd.Execute(input).Head
     
     Assert.Equal (input.Coordinate.X, res.Value.Coordinate.X)
+*)

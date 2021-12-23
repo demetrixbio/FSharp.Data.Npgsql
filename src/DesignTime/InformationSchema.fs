@@ -251,53 +251,48 @@ let extractParametersAndOutputColumns(connectionString, commandText, resultType,
         else
             // hacky, but no other way to get separate statements from Npgsql public api since version 6.0.
             // at least, postgres commands are always terminated by ';', so this will work
-            let sqlCommands = commandText.Split(';')
+            let sqlCommands = commandText.Split(';') |> Array.filter (String.IsNullOrWhiteSpace >> not)
             use cursor = cmd.ExecuteReader CommandBehavior.SchemaOnly
-            [
-                let mutable go = true
-                let mutable index = 0
-                while go do
-                    let sql = sqlCommands.[index].Trim()
-                    
-                    let statement = 
-                        if cursor.FieldCount > 0 then
-                            cursor.GetColumnSchema ()
-                            |> Seq.map (fun column -> 
-                                let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
-                                
-                                let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
+            let resultSetSchemasFromNpgsql = [
+                if cursor.FieldCount > 0 then
+                    Utils.GetStatementIndex.Invoke cursor, cursor.GetColumnSchema () |> Seq.toList
 
-                                match dbSchemaLookups.Columns.TryGetValue lookupKey with
-                                | true, col -> { col with Name = column.ColumnName }
-                                | _ ->
-                                    {
-                                        ColumnAttributeNumber = columnAttributeNumber
-                                        Name = column.ColumnName
-                                        DataType = DataType.Create column.PostgresType
-                                        Nullable = column.AllowDBNull.GetValueOrDefault(true)
-                                        MaxLength = column.ColumnSize.GetValueOrDefault(-1)
-                                        ReadOnly = true
-                                        AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
-                                        DefaultConstraint = column.DefaultValue
-                                        Description = ""
-                                        PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
-                                        BaseSchemaName = column.BaseSchemaName
-                                        BaseTableName = column.BaseTableName
-                                    })
-                            |> Seq.toList
-                            |> Query
-                        else
-                            if controlCommandRegex.IsMatch sql then
-                                Control
-                            else
-                                NonQuery
-                    
-                    yield sql, statement
-                    
-                    // Explicit NextResult call
-                    go <- cursor.NextResult ()
-                    index <- index + 1
-            ]
+                    while cursor.NextResult () do
+                        Utils.GetStatementIndex.Invoke cursor, cursor.GetColumnSchema () |> Seq.toList
+                ]
+
+            [ 0 .. sqlCommands.Length - 1 ]
+            |> List.map (fun i ->
+                let sql = sqlCommands.[i].Trim ()
+                match List.tryFind (fun (index, _) -> index = i) resultSetSchemasFromNpgsql with
+                | Some (_, columns) ->
+                    sql, columns |> List.map (fun column -> 
+                        let columnAttributeNumber = column.ColumnAttributeNumber.GetValueOrDefault(-1s)
+                        
+                        let lookupKey = { TableOID = column.TableOID; ColumnAttributeNumber = columnAttributeNumber }
+
+                        match dbSchemaLookups.Columns.TryGetValue lookupKey with
+                        | true, col -> { col with Name = column.ColumnName }
+                        | _ ->
+                            {
+                                ColumnAttributeNumber = columnAttributeNumber
+                                Name = column.ColumnName
+                                DataType = DataType.Create column.PostgresType
+                                Nullable = column.AllowDBNull.GetValueOrDefault(true)
+                                MaxLength = column.ColumnSize.GetValueOrDefault(-1)
+                                ReadOnly = true
+                                AutoIncrement = column.IsIdentity.GetValueOrDefault(false)
+                                DefaultConstraint = column.DefaultValue
+                                Description = ""
+                                PartOfPrimaryKey = column.IsKey.GetValueOrDefault(false)
+                                BaseSchemaName = column.BaseSchemaName
+                                BaseTableName = column.BaseTableName
+                            }) |> Query
+                | _ ->
+                    if controlCommandRegex.IsMatch sql then
+                        sql, Control
+                    else
+                        sql, NonQuery)
             
     let parameters = 
         [ for p in cmd.Parameters ->

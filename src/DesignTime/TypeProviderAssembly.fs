@@ -10,20 +10,18 @@ open Npgsql
 
 [<TypeProvider>]
 type NpgsqlProviders(config) as this = 
-    inherit TypeProviderForNamespaces (config, assemblyReplacementMap = [("FSharp.Data.Npgsql.DesignTime", Path.GetFileNameWithoutExtension(config.RuntimeAssembly))], addDefaultProbingLocation = true)
+    inherit TypeProviderForNamespaces (
+        config,
+        assemblyReplacementMap = [
+            ("FSharp.Data.Npgsql.DesignTime", Path.GetFileNameWithoutExtension(config.RuntimeAssembly))
+        ],
+        addDefaultProbingLocation = true)
     
-    do 
+    do
         // register extension mappings
         NpgsqlConnection.GlobalTypeMapper.UseNetTopologySuite() |> ignore
         Interlocked.Increment(ref NpgsqlConnectionProvider.cacheInstanceCount) |> ignore
     
-        this.Disposing.Add (fun _ ->
-            if NpgsqlConnectionProvider.cacheInstanceCount = 1 then
-                NpgsqlConnectionProvider.methodsCache.Clear ()
-                NpgsqlConnectionProvider.typeCache.Clear ()
-                NpgsqlConnectionProvider.schemaCache.Clear ()
-            Interlocked.Decrement(ref NpgsqlConnectionProvider.cacheInstanceCount) |> ignore)
-
         let assembly = Assembly.GetExecutingAssembly()
         let assemblyName = assembly.GetName().Name
         let nameSpace = this.GetType().Namespace
@@ -31,3 +29,10 @@ type NpgsqlProviders(config) as this =
         assert (typeof<ISqlCommandImplementation>.Assembly.GetName().Name = assemblyName) 
 
         this.AddNamespace (nameSpace, [ NpgsqlConnectionProvider.getProviderType (assembly, nameSpace) ])
+        
+    override this.ResolveAssembly args =
+        config.ReferencedAssemblies 
+        |> Array.tryFind (fun x -> AssemblyName.ReferenceMatchesDefinition(AssemblyName.GetAssemblyName x, AssemblyName args.Name)) 
+        |> Option.map Assembly.LoadFrom
+        |> defaultArg 
+        <| base.ResolveAssembly args

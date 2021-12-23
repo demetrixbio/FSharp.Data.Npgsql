@@ -3,12 +3,12 @@ framework: netstandard2.0
 storage: none
 
 nuget FSharp.Core >= 4.7.0 lowest_matching: true
-nuget Npgsql ~> 6
-nuget Npgsql.NetTopologySuite ~> 6
+nuget Npgsql = 6.0.2
+nuget Npgsql.NetTopologySuite = 6.0.2
 nuget Ply >= 0.3.0
 
 group tests
-  frameworks net5.0
+  frameworks net6.0
   storage: none
   source https://api.nuget.org/v3/index.json
   nuget Microsoft.NET.Test.Sdk
@@ -16,13 +16,13 @@ group tests
   nuget xunit
   nuget xunit.runner.visualstudio
   nuget FSharp.Core ~> 5
-  nuget Npgsql ~> 5
-  nuget Npgsql.NetTopologySuite ~> 5
+  nuget Npgsql = 6.0.2
+  nuget Npgsql.NetTopologySuite = 6.0.2
 
 group tpsdk
   frameworks netstandard2.0
   storage: none
   source https://api.nuget.org/v3/index.json
 
-  github demetrixbio/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
-  github demetrixbio/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
+  github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fsi
+  github fsprojects/FSharp.TypeProviders.SDK src/ProvidedTypes.fs
