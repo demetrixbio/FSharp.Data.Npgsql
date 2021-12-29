@@ -55,28 +55,28 @@ type DataTable<'T when 'T :> DataRow>(selectCommand: NpgsqlCommand) =
         let rows = base.Rows 
         {
             new IList<'T> with
-                member __.GetEnumerator() = rows.GetEnumerator()
-                member __.GetEnumerator() : IEnumerator<'T> = (Seq.cast<'T> rows).GetEnumerator() 
+                member _.GetEnumerator() = rows.GetEnumerator()
+                member _.GetEnumerator() : IEnumerator<'T> = (Seq.cast<'T> rows).GetEnumerator() 
 
-                member __.Count = rows.Count
-                member __.IsReadOnly = rows.IsReadOnly
-                member __.Item 
+                member _.Count = rows.Count
+                member _.IsReadOnly = rows.IsReadOnly
+                member _.Item 
                     with get index = downcast rows.[index]
                     and set index row = 
                         rows.RemoveAt(index)
                         rows.InsertAt(row, index)
 
-                member __.Add row = rows.Add row
-                member __.Clear() = rows.Clear()
-                member __.Contains row = rows.Contains row
-                member __.CopyTo(dest, index) = rows.CopyTo(dest, index)
-                member __.IndexOf row = rows.IndexOf row
-                member __.Insert(index, row) = rows.InsertAt(row, index)
-                member __.Remove row = rows.Remove(row); true
-                member __.RemoveAt index = rows.RemoveAt(index)
+                member _.Add row = rows.Add row
+                member _.Clear() = rows.Clear()
+                member _.Contains row = rows.Contains row
+                member _.CopyTo(dest, index) = rows.CopyTo(dest, index)
+                member _.IndexOf row = rows.IndexOf row
+                member _.Insert(index, row) = rows.InsertAt(row, index)
+                member _.Remove row = rows.Remove(row); true
+                member _.RemoveAt index = rows.RemoveAt(index)
         }
 
-    member __.Rows: IList<'T> = typedRows
+    member _.Rows: IList<'T> = typedRows
 
-    member internal __.SelectCommand = selectCommand
+    member internal _.SelectCommand = selectCommand
 

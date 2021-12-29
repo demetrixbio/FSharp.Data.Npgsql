@@ -8,6 +8,7 @@ open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
 open System.Linq.Expressions
+open FSharp.Control.Tasks
 
 #nowarn "0025"
 
@@ -158,7 +159,7 @@ type Utils () =
         
         if pgTypeName = "timestamptz" then
             //https://github.com/npgsql/npgsql/issues/1076#issuecomment-355400785
-            x.DateTimeMode <- DataSetDateTime.Local
+            x.DateTimeMode <- DataSetDateTime.Utc
             //https://www.npgsql.org/doc/types/datetime.html#detailed-behavior-sending-values-to-the-database
             x.ExtendedProperties.Add (SchemaTableColumn.ProviderType, NpgsqlDbType.TimestampTz)
         elif pgTypeName = "timestamp" then

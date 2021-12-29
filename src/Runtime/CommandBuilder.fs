@@ -43,8 +43,8 @@ type internal CommandBuilder(source: DataTable<DataRow>) =
     override _.GetParameterName(_parameterName: string): string = raise( NotImplementedException())
     override this.GetParameterName parameterOrdinal = 
         if updatingRowNumber > 0 
-        then sprintf "@p%i_%i" parameterOrdinal updatingRowNumber
-        else sprintf "@p%i" parameterOrdinal 
+        then $"@p%i{parameterOrdinal}_%i{updatingRowNumber}"
+        else $"@p%i{parameterOrdinal}" 
     override this.GetParameterPlaceholder parameterOrdinal = this.GetParameterName parameterOrdinal
     override _.QuoteIdentifier unquotedIdentifier = npgsql.QuoteIdentifier unquotedIdentifier
     override _.UnquoteIdentifier quotedIdentifier = npgsql.UnquoteIdentifier quotedIdentifier

@@ -104,3 +104,7 @@
 * 
 ### 2.0.1 December 23rd, 2021
 * Fix corner case with escaped ';' inside command
+
+### 2.0.2 December 29th, 2021
+* Brought back Ply task CE due to transaction scope problem with native task CE - https://github.com/dotnet/fsharp/issues/12556
+* DataTable populated timestamptz columns with UTC DateTime to be compliant with Npgsql - bug with ADO.NET

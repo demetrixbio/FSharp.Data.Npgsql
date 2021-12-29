@@ -7,6 +7,8 @@ open Npgsql
 open System.ComponentModel
 open System.Reflection
 open System.Collections.Concurrent
+open FSharp.Control.Tasks
+
 open type Utils
 
 type internal ExecutionType =

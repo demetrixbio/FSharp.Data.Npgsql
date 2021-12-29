@@ -23,6 +23,7 @@ ProjectSection(SolutionItems) = preProject
 	RELEASE_NOTES.md = RELEASE_NOTES.md
 	README.md = README.md
 	paket.lock = paket.lock
+	.config\dotnet-tools.json = .config\dotnet-tools.json
 EndProjectSection
 EndProject
 Global

@@ -30,7 +30,7 @@ type internal BatchDataAdapter(selectCommand: NpgsqlCommand, batchTimeout) =
     override _.InitializeBatching() = ()
 
     override _.AddToBatch( command) = 
-        batch.CommandText <- sprintf "%s\n%s;" batch.CommandText command.CommandText
+        batch.CommandText <- $"%s{batch.CommandText}\n%s{command.CommandText};"
         batch.Parameters.AddRange [| 
             for p in (command :?> NpgsqlCommand).Parameters do
                 let copy = p.Clone() 
