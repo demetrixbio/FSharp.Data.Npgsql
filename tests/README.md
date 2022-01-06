@@ -2,6 +2,8 @@
 
 You need to build a postgres-gis image (need v12 for compatibility with restore)
 
+You need unix line endings on restore_dvdrental.sh or else you will get a cryptic ': No such file or directory' error building the image.  `dos2unix` will fix the endings.  git will go and break them again :(
+
 ## Running docker image 
 Run `docker-compose up` in the tests directory.
 
