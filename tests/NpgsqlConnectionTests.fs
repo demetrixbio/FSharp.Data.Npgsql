@@ -599,6 +599,31 @@ let ``column "p1_00" does not exist``() =
         Assert.Equal( Some title, cmd.Execute(id.Value))
 
 [<Fact>]
+let ``updating table using datetime with utc works``() =
+    use conn = openConnection()
+
+    // clear any existing entries
+    use cmd = DvdRental.CreateCommand<"delete from table_with_timestamp_tz", XCtor = true>(conn)
+    cmd.Execute() |> ignore
+
+    // Use tble api to add some rows
+    let tsTable = new DvdRental.``public``.Tables.table_with_timestamp_tz()
+    tsTable.AddRow(
+        id = Some 1,
+        issued = Some DateTime.Now,
+        label = "a label"
+    )
+    tsTable.AddRow(
+        id = Some 2,
+        issued = Some DateTime.UtcNow,
+        label = "b label"
+    )
+
+    let i = tsTable.Update(conn, batchSize=10)
+
+    ()
+
+[<Fact>]
 let selectBytea() =
     use cmd = DvdRental.CreateCommand<"SELECT picture FROM public.staff WHERE staff_id = 1", SingleRow = true>(connectionString)
     let actual = cmd.Execute().Value.Value
