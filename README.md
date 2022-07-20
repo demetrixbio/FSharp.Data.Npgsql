@@ -2,7 +2,7 @@
 FSharp.Data.Npgsql is an F# type provider library built on top of [Npgsql ADO.NET client library]( http://www.npgsql.org/doc/index.html).
 
 ## Nuget package
-FSharp.Data.Npgsql5 [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql5.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql5)
+FSharp.Data.Npgsql [![Nuget](https://img.shields.io/nuget/v/FSharp.Data.Npgsql.svg?colorB=green)](https://www.nuget.org/packages/FSharp.Data.Npgsql)
  
 ## Setup
 All examples are based on the [DVD rental sample database](http://www.postgresqltutorial.com/download/dvd-rental-sample-database/) and assume the following definitions exist:
