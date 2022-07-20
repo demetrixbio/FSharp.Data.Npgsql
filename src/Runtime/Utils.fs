@@ -8,7 +8,6 @@ open System.ComponentModel
 open Npgsql
 open NpgsqlTypes
 open System.Linq.Expressions
-open FSharp.Control.Tasks
 
 #nowarn "0025"
 
