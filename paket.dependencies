@@ -3,8 +3,8 @@ framework: netstandard2.0
 storage: none
 
 nuget FSharp.Core >= 6.0.0 lowest_matching: true
-nuget Npgsql >= 6.0.2
-nuget Npgsql.NetTopologySuite >= 6.0.2
+nuget Npgsql >= 6.0.5
+nuget Npgsql.NetTopologySuite >= 6.0.5
 
 group tests
   frameworks net6.0
@@ -12,8 +12,8 @@ group tests
   source https://api.nuget.org/v3/index.json
   
   nuget FSharp.Core >= 6.0.0 lowest_matching: true
-  nuget Npgsql >= 6.0.2
-  nuget Npgsql.NetTopologySuite >= 6.0.2
+  nuget Npgsql >= 6.0.5
+  nuget Npgsql.NetTopologySuite >= 6.0.5
   nuget Microsoft.NET.Test.Sdk
   nuget xunit
   nuget xunit.runner.visualstudio

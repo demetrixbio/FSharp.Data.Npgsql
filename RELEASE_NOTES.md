@@ -101,10 +101,14 @@
 
 ### 2.0.0 December 23rd, 2021
 * net6 support added. F# 6 with native task support
-* 
+ 
 ### 2.0.1 December 23rd, 2021
 * Fix corner case with escaped ';' inside command
 
 ### 2.0.2 December 29th, 2021
 * Brought back Ply task CE due to transaction scope problem with native task CE - https://github.com/dotnet/fsharp/issues/12556
 * DataTable populated timestamptz columns with UTC DateTime to be compliant with Npgsql - bug with ADO.NET
+
+### 2.1.0 July 20th, 2022
+* net6 with native F# task support
+* Npgsql > 6.0.5 to allow enums (and composite types) with same names in different schemas - https://github.com/npgsql/npgsql/issues/4557
